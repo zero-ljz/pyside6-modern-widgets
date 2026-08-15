@@ -1,0 +1,11 @@
+<RCC>
+  <qresource prefix="/pyside6_modern_widgets/icons">
+    <file alias="pin.png">resources/icons/icons8-pin-48.png</file>
+    <file alias="push-pin.png">resources/icons/icons8-push-pin-48.png</file>
+    <file alias="minimize.png">resources/icons/icons8-minimize-48.png</file>
+    <file alias="maximize.png">resources/icons/icons8-maximize-button-48.png</file>
+    <file alias="restore.png">resources/icons/icons8-restore-down-48.png</file>
+    <file alias="shutdown.png">resources/icons/icons8-shutdown-48.png</file>
+    <file alias="menu.png">resources/icons/icons8-menu-48.png</file>
+  </qresource>
+</RCC>
