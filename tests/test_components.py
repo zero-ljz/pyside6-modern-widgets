@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenuBar,
     QStatusBar,
+    QTabWidget,
     QWidget,
 )
 from PySide6.QtGui import QIcon
@@ -125,17 +126,41 @@ def test_navigation_view_manages_pages_and_selection() -> None:
     assert view.sidebar.count() == 1
 
 
-def test_tab_view_uses_qtabwidget_semantics() -> None:
+def test_tab_view_preserves_custom_ui_and_qtabwidget_compatible_api() -> None:
     _application()
     tabs = TabView()
+    assert isinstance(tabs, QWidget)
+    assert not isinstance(tabs, QTabWidget)
     first = QLabel("first")
     second = QLabel("second")
     assert tabs.addTab(first, "First") == 0
     assert tabs.insertTab(0, second, "Second") == 0
     assert tabs.widget(0) is second
     assert tabs.indexOf(first) == 1
+    assert not tabs.tabIcon(0).isNull()
+    assert tabs.tabBar().count() == 2
+    assert tabs.tabBar().addButton.text() == "+"
+
+    tabs.setTabText(0, "Updated")
+    tabs.setTabToolTip(0, "Updated tab")
+    assert tabs.tabText(0) == "Updated"
+    assert tabs.tabToolTip(0) == "Updated tab"
+
+    tabs.setCurrentIndex(0)
+    tabs.resize(600, 400)
+    tabs.show()
+    _application().processEvents()
+    assert tabs.tabBar()._tabs[0].width() > 80
+    assert tabs.tabBar()._tabs[0].closeButton.isVisible()
+    assert not tabs.tabBar()._tabs[1].closeButton.isVisible()
+
+    observed: list[int] = []
+    tabs.currentChanged.connect(observed.append)
+    tabs.setCurrentIndex(0)
+    assert tabs.currentWidget() is second
 
     tabs.removeTab(0)
     assert tabs.count() == 1
     assert tabs.indexOf(first) == 0
     assert second.parent() is not None
+    assert observed[-1] == 0

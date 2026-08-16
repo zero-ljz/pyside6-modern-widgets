@@ -41,6 +41,9 @@ app.exec()
 The native window effects target Windows. On unsupported Windows versions or
 when transparency is disabled, the window automatically uses a painted fallback.
 
+Runnable window/navigation and multi-tab examples are available in the
+[`examples`](examples) directory.
+
 `ModernWindow` intentionally remains based on `QWidget`, so it is suitable for both
 primary and auxiliary windows. Its compatibility surface is limited to the common
 `menuBar()`, `addToolBar()`, `statusBar()`, and `setCentralWidget()` methods; it does
