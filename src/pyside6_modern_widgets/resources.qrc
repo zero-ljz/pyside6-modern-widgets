@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/pyside6_modern_widgets/icons">
+    <file alias="application.png">resources/icons/icons8-application-48.png</file>
     <file alias="pin.png">resources/icons/icons8-pin-48.png</file>
     <file alias="push-pin.png">resources/icons/icons8-push-pin-48.png</file>
     <file alias="minimize.png">resources/icons/icons8-minimize-48.png</file>

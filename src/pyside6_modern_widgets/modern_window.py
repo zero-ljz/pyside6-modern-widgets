@@ -30,7 +30,6 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpacerItem,
     QStatusBar,
-    QStyle,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -133,10 +132,7 @@ class CustomTitleBar(QWidget):
         self.initUI()
 
     def initUI(self) -> None:
-        title_bar_height = QApplication.style().pixelMetric(
-            QStyle.PixelMetric.PM_TitleBarHeight
-        )
-        self.setFixedHeight(title_bar_height + 5)
+        self.setFixedHeight(32)
         palette = self.palette()
         palette.setColor(QPalette.ColorRole.Window, Qt.GlobalColor.transparent)
         self.setPalette(palette)

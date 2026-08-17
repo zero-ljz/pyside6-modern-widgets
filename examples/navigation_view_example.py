@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtGui import QAction, QIcon, QKeySequence
-from PySide6.QtWidgets import QApplication, QStyle, QToolBar, QWidget
+from PySide6.QtWidgets import QApplication, QStyle, QWidget
 
 from pyside6_modern_widgets import ModernWindow, NavigationPosition, NavigationView
 
@@ -18,7 +18,7 @@ class ExampleWindow(ModernWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Modern Widgets Example")
-        self.setWindowIcon(standard_icon(QStyle.StandardPixmap.SP_ComputerIcon))
+        self.setWindowIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
         self.resize(1000, 640)
         self.setMinimumSize(720, 460)
 
@@ -51,7 +51,6 @@ class ExampleWindow(ModernWindow):
 
         self._create_actions()
         self._create_menu_bar()
-        self._create_toolbar()
         self.navigation.currentChanged.connect(self._page_changed)
         self.statusBar().showMessage("Ready")
 
@@ -71,29 +70,6 @@ class ExampleWindow(ModernWindow):
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction(self.compact_action)
 
-    def _create_toolbar(self) -> None:
-        toolbar = QToolBar("Navigation", self)
-        toolbar.setMovable(False)
-        toolbar.addAction(
-            standard_icon(QStyle.StandardPixmap.SP_ArrowBack),
-            "Previous page",
-            self.previous_page,
-        )
-        toolbar.addAction(
-            standard_icon(QStyle.StandardPixmap.SP_ArrowForward),
-            "Next page",
-            self.next_page,
-        )
-        self.addToolBar(toolbar)
-
-    def previous_page(self) -> None:
-        index = (self.navigation.currentIndex() - 1) % self.navigation.count()
-        self.navigation.setCurrentIndex(index)
-
-    def next_page(self) -> None:
-        index = (self.navigation.currentIndex() + 1) % self.navigation.count()
-        self.navigation.setCurrentIndex(index)
-
     def _page_changed(self, index: int) -> None:
         if 0 <= index < len(self._page_names):
             self.statusBar().showMessage(self._page_names[index], 3000)
@@ -101,6 +77,7 @@ class ExampleWindow(ModernWindow):
 
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
     app.setApplicationName("Modern Widgets Example")
     window = ExampleWindow()
     window.show()
