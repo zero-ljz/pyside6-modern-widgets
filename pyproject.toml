@@ -7,11 +7,11 @@ name = "pyside6-modern-widgets"
 version = "0.1.1"
 description = "Modern frameless windows, navigation, and tabs for PySide6 on Windows"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 authors = [{ name = "pyside6-modern-widgets contributors" }]
-dependencies = ["PySide6>=6.8,<7"]
+dependencies = ["PySide6==6.8.3"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Win32 (MS Windows)",
@@ -20,7 +20,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: User Interfaces",
     "Typing :: Typed",
 ]
