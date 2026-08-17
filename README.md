@@ -1,6 +1,8 @@
 # pyside6-modern-widgets
 
-Modern Windows widgets for PySide6:
+Focused Windows desktop widgets for PySide6. The package provides frameless
+window chrome, navigation, tabs, and lightweight Windows visual effects while
+retaining familiar Qt widget APIs.
 
 - `ModernWindow`: a lightweight, frameless `QWidget` window with selected
   `QMainWindow`-compatible methods and Windows 11 effects.
@@ -8,6 +10,10 @@ Modern Windows widgets for PySide6:
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
 - `WindowEffect`: a small Windows DWM effect wrapper.
+
+## Supported environment
+
+Supports only Python 3.10-3.12 with PySide6 6.8.3 using the Fusion style in light mode.
 
 ## Installation
 
