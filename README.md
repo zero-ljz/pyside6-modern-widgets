@@ -41,6 +41,43 @@ app.exec()
 The native window effects target Windows. On unsupported Windows versions or
 when transparency is disabled, the window automatically uses a painted fallback.
 
+## Window effects
+
+`ModernWindow` enables an automatic Windows backdrop by default and reapplies it
+when the window is activated, maximized, restored, or moved between display
+configurations. Applications can select a material without managing the native
+window handle:
+
+```python
+from pyside6_modern_widgets import ModernWindow, ThemeMode, WindowMaterial
+
+window = ModernWindow(
+    material=WindowMaterial.ACRYLIC,
+    theme=ThemeMode.LIGHT,
+)
+window.setWindowMaterial(WindowMaterial.MICA)
+window.setWindowEffectsEnabled(False)
+window.toggleThemeMode()
+```
+
+`ThemeMode` controls both the native backdrop and the colors of `ModernWindow`,
+`NavigationSidebar`, `NavigationView`, and `TabView`. The title bar includes a
+sun/moon button for switching between light and dark modes. Use `ThemeMode.AUTO`
+to follow the Windows application theme.
+
+`WindowEffect` remains available as a low-level API for other top-level windows.
+Callers using it directly are responsible for the native handle and for
+reapplying the effect when that handle or the window state changes.
+
+## Qt style compatibility
+
+Fusion is the reference style used for visual consistency. The widgets also
+support the Qt styles commonly available on Windows (`windows11`,
+`windowsvista`, and `Windows`) for layout and interaction, although small native
+details such as standard icons can differ. The library does not change the
+application's global style; applications remain free to select one with
+`QApplication.setStyle()`.
+
 Runnable window/navigation and multi-tab examples are available in the
 [`examples`](examples) directory.
 

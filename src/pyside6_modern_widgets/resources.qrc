@@ -7,5 +7,12 @@
     <file alias="restore.png">resources/icons/icons8-restore-down-48.png</file>
     <file alias="shutdown.png">resources/icons/icons8-shutdown-48.png</file>
     <file alias="menu.png">resources/icons/icons8-menu-48.png</file>
+    <file alias="account.png">resources/icons/icons8-account-48.png</file>
+    <file alias="application.png">resources/icons/icons8-application-48.png</file>
+    <file alias="home.png">resources/icons/icons8-home-48.png</file>
+    <file alias="search.png">resources/icons/icons8-search-48.png</file>
+    <file alias="settings.png">resources/icons/icons8-settings-48.png</file>
+    <file alias="sun.png">resources/icons/icons8-sun-48.png</file>
+    <file alias="night.png">resources/icons/icons8-do-not-disturb-ios-48.png</file>
   </qresource>
 </RCC>

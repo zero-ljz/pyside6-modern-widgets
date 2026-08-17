@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -11,11 +12,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._theme import colors_for_theme, resolve_application_theme
 from .navigation_sidebar import (
     NavigationPosition,
     NavigationSidebar,
     NavigationStyle,
 )
+from .window_effect import ThemeMode
 
 
 class NavigationView(QWidget):
@@ -26,6 +29,8 @@ class NavigationView(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("ModernNavigationView")
+        self.setProperty("pyside6ModernThemeAware", True)
+        self._theme_mode = ThemeMode.LIGHT
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
             "QWidget#ModernNavigationView { background-color: transparent; }"
@@ -73,6 +78,7 @@ class NavigationView(QWidget):
             raise RuntimeError("Navigation item and page indexes are out of sync")
         if selected or self.count() == 1:
             self.setCurrentIndex(page_index)
+        self.setThemeMode(self._theme_mode)
         return page_index
 
     def removePage(self, index: int) -> QWidget | None:
@@ -104,6 +110,32 @@ class NavigationView(QWidget):
             return
         self.sidebar.setCurrentIndex(index)
         self.stackedWidget.setCurrentIndex(index)
+
+    def themeMode(self) -> ThemeMode:
+        return self._theme_mode
+
+    def resolvedThemeMode(self) -> ThemeMode:
+        return resolve_application_theme(self._theme_mode)
+
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        self._theme_mode = ThemeMode(theme)
+        resolved = self.resolvedThemeMode()
+        colors = colors_for_theme(resolved)
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(colors.page))
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(colors.text))
+        palette.setColor(QPalette.ColorRole.Base, QColor(colors.surface))
+        palette.setColor(QPalette.ColorRole.Text, QColor(colors.text))
+        self.setPalette(palette)
+        self.sidebar.setThemeMode(resolved)
+        self.contentContainer.setStyleSheet(
+            NavigationStyle.contentStyle(theme=resolved)
+        )
+        for index in range(self.count()):
+            page = self.widget(index)
+            if page is not None:
+                for widget in (page, *page.findChildren(QWidget)):
+                    widget.setPalette(palette)
 
     def _on_current_changed(self, index: int) -> None:
         if index >= 0 and self.sidebar.currentIndex() != index:

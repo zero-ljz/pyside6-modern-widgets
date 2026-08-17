@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from . import _resources  # noqa: F401
+from ._theme import colors_for_theme, resolve_application_theme, themed_icon
+from .window_effect import ThemeMode
 
 
 class NavigationStyle:
@@ -28,7 +30,8 @@ class NavigationStyle:
     BORDER = "#E5E5E5"
 
     @classmethod
-    def sidebarStyle(cls) -> str:
+    def sidebarStyle(cls, theme: ThemeMode | str = ThemeMode.LIGHT) -> str:
+        colors = colors_for_theme(theme)
         return f"""
             QWidget#ModernNavigationSidebar {{
                 background-color: {cls.BACKGROUND};
@@ -38,18 +41,18 @@ class NavigationStyle:
                 background-color: transparent;
                 border: none;
                 border-radius: 4px;
-                color: #000000;
+                color: {colors.text};
                 text-align: left;
                 padding-left: 10px;
                 font-size: 14px;
                 margin-bottom: 4px;
             }}
-            QPushButton[class="NavigationItem"]:hover {{ background-color: {cls.HOVER}; }}
+            QPushButton[class="NavigationItem"]:hover {{ background-color: {colors.hover}; }}
             QPushButton[class="NavigationItem"]:pressed {{
-                background-color: {cls.PRESSED};
+                background-color: {colors.pressed};
                 padding-left: 12px;
             }}
-            QPushButton[class="NavigationItem"]:checked {{ background-color: {cls.PRESSED}; }}
+            QPushButton[class="NavigationItem"]:checked {{ background-color: {colors.pressed}; }}
             QPushButton#NavigationToggleButton {{
                 background-color: transparent;
                 border: none;
@@ -59,25 +62,30 @@ class NavigationStyle:
                 padding-left: 9px;
                 font-size: 20px;
             }}
-            QPushButton#NavigationToggleButton:hover {{ background-color: {cls.HOVER}; }}
+            QPushButton#NavigationToggleButton:hover {{ background-color: {colors.hover}; }}
             QScrollArea {{ border: none; background-color: transparent; }}
             QWidget#NavigationScrollContent {{ background-color: transparent; }}
             QScrollBar:vertical {{ width: 4px; background: transparent; }}
             QScrollBar::handle:vertical {{
-                background: #CCCCCC;
+                background: {colors.divider};
                 min-height: 20px;
                 border-radius: 2px;
             }}
-            QScrollBar::handle:vertical:hover {{ background: #999999; }}
+            QScrollBar::handle:vertical:hover {{ background: {colors.muted_text}; }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """
 
     @classmethod
-    def contentStyle(cls, radius: int = 8) -> str:
+    def contentStyle(
+        cls,
+        radius: int = 8,
+        theme: ThemeMode | str = ThemeMode.LIGHT,
+    ) -> str:
+        colors = colors_for_theme(theme)
         return f"""
             QFrame#NavigationContent {{
-                background-color: {cls.PAGE_BACKGROUND};
-                border: 1px solid {cls.BORDER};
+                background-color: {colors.page};
+                border: 1px solid {colors.border};
                 border-bottom: none;
                 border-top-left-radius: {max(0, radius)}px;
             }}
@@ -97,13 +105,20 @@ class _NavigationItem(QPushButton):
         self.setCheckable(True)
         self.setFixedHeight(36)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setIcon(_coerce_icon(icon))
+        self._source_icon = _coerce_icon(icon)
+        self._theme_mode = ThemeMode.LIGHT
+        self.setIcon(self._source_icon)
         self.setIconSize(QSize(18, 18))
         self.setCollapsed(False)
 
     def setCollapsed(self, collapsed: bool) -> None:
         self.setText("" if collapsed else f"   {self.fullText}")
         self.setToolTip(self.fullText if collapsed else "")
+
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        self._theme_mode = ThemeMode(theme)
+        colors = colors_for_theme(self._theme_mode)
+        self.setIcon(themed_icon(self._source_icon, colors.text))
 
 
 def _coerce_icon(icon) -> QIcon:
@@ -124,11 +139,13 @@ class NavigationSidebar(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("ModernNavigationSidebar")
+        self.setProperty("pyside6ModernThemeAware", True)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(NavigationStyle.sidebarStyle())
         self._collapsed_width = 48
         self._expanded_width = 240
         self._collapsed = False
+        self._theme_mode = ThemeMode.LIGHT
         self._items: list[_NavigationItem] = []
         self._current_index = -1
         self._button_group = QButtonGroup(self)
@@ -183,6 +200,7 @@ class NavigationSidebar(QWidget):
         position: NavigationPosition = NavigationPosition.TOP,
     ) -> int:
         button = _NavigationItem(text, icon, self)
+        button.setThemeMode(self.resolvedThemeMode())
         button.setCollapsed(self._collapsed)
         index = len(self._items)
         self._items.append(button)
@@ -233,6 +251,27 @@ class NavigationSidebar(QWidget):
         self.itemActivated.emit(index)
         if changed:
             self.currentChanged.emit(index)
+
+    def themeMode(self) -> ThemeMode:
+        return self._theme_mode
+
+    def resolvedThemeMode(self) -> ThemeMode:
+        return resolve_application_theme(self._theme_mode)
+
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        theme = ThemeMode(theme)
+        self._theme_mode = theme
+        resolved = self.resolvedThemeMode()
+        self.setStyleSheet(NavigationStyle.sidebarStyle(resolved))
+        colors = colors_for_theme(resolved)
+        self.toggleButton.setIcon(
+            themed_icon(
+                QIcon(":/pyside6_modern_widgets/icons/menu.png"),
+                colors.text,
+            )
+        )
+        for item in self._items:
+            item.setThemeMode(resolved)
 
     def isCollapsed(self) -> bool:
         return self._collapsed

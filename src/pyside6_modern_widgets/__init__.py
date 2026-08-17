@@ -4,7 +4,7 @@ from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar, NavigationStyle
 from .navigation_view import NavigationView
 from .tab_view import TabView
-from .window_effect import WindowEffect, WindowStyleState
+from .window_effect import ThemeMode, WindowEffect, WindowMaterial, WindowStyleState
 
 __all__ = [
     "ModernWindow",
@@ -13,8 +13,10 @@ __all__ = [
     "NavigationStyle",
     "NavigationView",
     "TabView",
+    "ThemeMode",
     "WindowEffect",
+    "WindowMaterial",
     "WindowStyleState",
 ]
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"

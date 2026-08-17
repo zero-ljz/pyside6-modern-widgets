@@ -5,9 +5,14 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QLabel
 
 from pyside6_modern_widgets import ModernWindow, TabView
+
+
+def resource_icon(name: str) -> QIcon:
+    return QIcon(f":/pyside6_modern_widgets/icons/{name}")
 
 
 class TabViewWindow(ModernWindow):
@@ -16,6 +21,7 @@ class TabViewWindow(ModernWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("TabView Example")
+        self.setWindowIcon(resource_icon("application.png"))
         self.resize(800, 600)
         self.setMinimumSize(480, 320)
 
@@ -61,6 +67,7 @@ class TabViewWindow(ModernWindow):
 
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
     app.setApplicationName("TabView Example")
     window = TabViewWindow()
     window.show()

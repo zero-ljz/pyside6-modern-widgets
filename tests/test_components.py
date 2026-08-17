@@ -4,16 +4,18 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtGui import QIcon, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
     QMainWindow,
     QMenuBar,
     QStatusBar,
+    QStyleFactory,
     QTabWidget,
+    QVBoxLayout,
     QWidget,
 )
-from PySide6.QtGui import QIcon
 
 from pyside6_modern_widgets import (
     ModernWindow,
@@ -21,9 +23,12 @@ from pyside6_modern_widgets import (
     NavigationSidebar,
     NavigationView,
     TabView,
+    ThemeMode,
+    WindowMaterial,
 )
 
 _APP = QApplication.instance() or QApplication([])
+
 
 def _application() -> QApplication:
     return _APP
@@ -42,6 +47,13 @@ def test_modern_window_preserves_base_window_api() -> None:
         "restore.png",
         "shutdown.png",
         "menu.png",
+        "account.png",
+        "application.png",
+        "home.png",
+        "search.png",
+        "settings.png",
+        "sun.png",
+        "night.png",
     ):
         icon = QIcon(f":/pyside6_modern_widgets/icons/{icon_name}")
         assert not icon.isNull()
@@ -57,7 +69,6 @@ def test_modern_window_preserves_base_window_api() -> None:
         assert hasattr(window, attribute)
     for method in (
         "initWindow",
-        "apply_window_effect",
         "addTitleBarButton",
         "menuBar",
         "addToolBar",
@@ -66,8 +77,21 @@ def test_modern_window_preserves_base_window_api() -> None:
         "setCornerRadius",
         "on_screen_changed",
         "hideTitleBar",
+        "setWindowEffectsEnabled",
+        "setWindowMaterial",
+        "setThemeMode",
+        "windowEffectsEnabled",
+        "windowMaterial",
+        "themeMode",
+        "resolvedThemeMode",
+        "toggleThemeMode",
     ):
         assert callable(getattr(window, method))
+
+    assert window.windowEffectsEnabled()
+    assert window.windowMaterial() is WindowMaterial.AUTO
+    assert window.themeMode() is ThemeMode.LIGHT
+    assert not window.titleBar.themeButton.icon().isNull()
 
     central = QLabel("content")
     window.setCentralWidget(central)
@@ -79,6 +103,114 @@ def test_modern_window_preserves_base_window_api() -> None:
     assert "border: none" in status_bar.styleSheet()
     toolbar = window.addToolBar("Tools")
     assert window.toolbarLayout.indexOf(toolbar) >= 0
+
+
+def test_supported_qt_styles_preserve_component_layout() -> None:
+    app = _application()
+    original_style = app.style().objectName()
+    supported_styles = {"fusion", "windows11", "windowsvista", "windows"}
+    qt_styles = QStyleFactory.keys()
+    available_styles = [
+        name for name in qt_styles if name.casefold() in supported_styles
+    ]
+
+    try:
+        for style_name in available_styles:
+            app.setStyle(style_name)
+            window = ModernWindow()
+            navigation = NavigationView(window)
+            tabs = TabView(window)
+            tabs.addTab(QLabel("content"), "Tab")
+            window.setCentralWidget(navigation)
+            window.resize(640, 480)
+            window.show()
+            app.processEvents()
+
+            title_buttons = (
+                window.titleBar.pinButton,
+                window.titleBar.minimizeButton,
+                window.titleBar.maximizeButton,
+                window.titleBar.closeButton,
+            )
+            assert window.titleBar.height() >= max(
+                button.height() for button in title_buttons
+            ), style_name
+            assert navigation.sidebar.width() == 240, style_name
+            assert tabs.tabBar().height() > 0, style_name
+
+            window.close()
+            window.deleteLater()
+            app.processEvents()
+    finally:
+        app.setStyle(original_style)
+
+
+def test_window_effect_configuration_persists_across_reapplication() -> None:
+    window = ModernWindow(effects_enabled=False)
+    calls: list[tuple[WindowMaterial, ThemeMode]] = []
+    window.effect_manager.apply = (
+        lambda _hwnd, material, theme: calls.append((material, theme)) or True
+    )
+
+    window.setWindowMaterial(WindowMaterial.ACRYLIC)
+    window.setThemeMode(ThemeMode.DARK)
+    window.setWindowEffectsEnabled(True)
+    window.setCornerRadius(window.cornerRadius)
+
+    assert window.windowEffectsEnabled()
+    assert window.windowMaterial() is WindowMaterial.ACRYLIC
+    assert window.themeMode() is ThemeMode.DARK
+    assert calls == [
+        (WindowMaterial.NONE, ThemeMode.LIGHT),
+        (WindowMaterial.NONE, ThemeMode.DARK),
+        (WindowMaterial.ACRYLIC, ThemeMode.DARK),
+        (WindowMaterial.ACRYLIC, ThemeMode.DARK),
+    ]
+
+
+def test_modern_window_theme_updates_nested_components() -> None:
+    window = ModernWindow(effects_enabled=False)
+    navigation = NavigationView()
+    page = QWidget()
+    page_layout = QVBoxLayout(page)
+    page_label = QLabel("Page")
+    tabs = TabView()
+    tab_label = QLabel("Tab")
+    tabs.addTab(tab_label, "Tab")
+    page_layout.addWidget(page_label)
+    page_layout.addWidget(tabs)
+    navigation.addPage(page, "Home")
+    window.setCentralWidget(navigation)
+    window.setStyleSheet("QWidget { selection-color: red; }")
+    observed: list[ThemeMode] = []
+    window.themeChanged.connect(observed.append)
+
+    window.toggleThemeMode()
+
+    assert window.themeMode() is ThemeMode.DARK
+    assert window.resolvedThemeMode() is ThemeMode.DARK
+    assert window.frame.use_watercolor
+    assert window.frame.themeMode() is ThemeMode.DARK
+    assert navigation.themeMode() is ThemeMode.DARK
+    assert navigation.sidebar.themeMode() is ThemeMode.DARK
+    assert tabs.themeMode() is ThemeMode.DARK
+    assert observed == [ThemeMode.DARK]
+    assert window.styleSheet() == "QWidget { selection-color: red; }"
+    assert "rgb(32, 32, 32)" in window.frame.styleSheet()
+    assert "#F5F5F5" in window.titleBar.titleLabel.styleSheet()
+    assert window.titleBar.themeButton.toolTip() == "切换到浅色模式"
+    assert (
+        page_label.palette().color(QPalette.ColorRole.WindowText).name().upper()
+        == "#F5F5F5"
+    )
+    assert (
+        tab_label.palette().color(QPalette.ColorRole.WindowText).name().upper()
+        == "#F5F5F5"
+    )
+    _application().processEvents()
+    window.close()
+    window.deleteLater()
+    _application().processEvents()
 
 
 def test_navigation_sidebar_selection_and_collapse() -> None:

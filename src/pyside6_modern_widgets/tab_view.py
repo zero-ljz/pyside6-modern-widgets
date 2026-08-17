@@ -41,6 +41,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._theme import (
+    ThemeColors,
+    colors_for_theme,
+    resolve_application_theme,
+    themed_icon,
+)
+from .window_effect import ThemeMode
 
 THEME = {
     "tab_height": 38,
@@ -58,35 +65,54 @@ THEME = {
 }
 
 
+def _tool_button_style(colors: ThemeColors) -> str:
+    return (
+        "QToolButton { background: transparent; border: none; "
+        f"color: {colors.text}; }}"
+        f"QToolButton:hover {{ background: {colors.tab_hover}; "
+        "border-radius: 4px; }"
+    )
+
+
 class _CloseButton(QAbstractButton):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedSize(24, 24)
         self._hovered = False
+        self._theme_mode = ThemeMode.LIGHT
 
-    def enterEvent(self, event) -> None:  # noqa: N802
+    def enterEvent(self, event) -> None:
         self._hovered = True
         self.update()
         super().enterEvent(event)
 
-    def leaveEvent(self, event) -> None:  # noqa: N802
+    def leaveEvent(self, event) -> None:
         self._hovered = False
         self.update()
         super().leaveEvent(event)
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect())
         background_rect = rect.adjusted(3, 3, -3, -3)
 
         if self._hovered:
-            color = QColor("#D0D0D0" if self.isDown() else "#E0E0E0")
+            is_dark = self._theme_mode is ThemeMode.DARK
+            color = QColor(
+                "#555555"
+                if is_dark and self.isDown()
+                else "#454545"
+                if is_dark
+                else "#D0D0D0"
+                if self.isDown()
+                else "#E0E0E0"
+            )
             painter.setBrush(QBrush(color))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRoundedRect(background_rect, 3, 3)
 
-        pen = QPen(QColor("#111111"), 1.2)
+        pen = QPen(QColor(colors_for_theme(self._theme_mode).text), 1.2)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         center = rect.center()
@@ -99,6 +125,10 @@ class _CloseButton(QAbstractButton):
             QPointF(center.x() + radius, center.y() - radius),
             QPointF(center.x() - radius, center.y() + radius),
         )
+
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        self._theme_mode = ThemeMode(theme)
+        self.update()
 
 
 class _Tab(QWidget):
@@ -122,6 +152,7 @@ class _Tab(QWidget):
         self._last_tab = False
         self._closable = True
         self._dragging = False
+        self._theme_mode = ThemeMode.LIGHT
         self._text = text
         self._icon = icon or QApplication.style().standardIcon(
             QStyle.StandardPixmap.SP_FileIcon
@@ -155,7 +186,7 @@ class _Tab(QWidget):
     def text(self) -> str:
         return self._text
 
-    def setText(self, text: str) -> None:  # noqa: N802
+    def setText(self, text: str) -> None:
         self._text = text
         self.setToolTip(text)
         self.textLabel.setText(text)
@@ -163,22 +194,27 @@ class _Tab(QWidget):
     def icon(self) -> QIcon:
         return self._icon
 
-    def setIcon(self, icon: QIcon | None) -> None:  # noqa: N802
+    def setIcon(self, icon: QIcon | None) -> None:
         self._icon = icon or QApplication.style().standardIcon(
             QStyle.StandardPixmap.SP_FileIcon
         )
-        self.iconLabel.setPixmap(self._icon.pixmap(QSize(16, 16)))
+        self._update_icon()
 
-    def setSelected(self, selected: bool) -> None:  # noqa: N802
+    def _update_icon(self) -> None:
+        colors = colors_for_theme(self._theme_mode)
+        icon = themed_icon(self._icon, colors.text, 16)
+        self.iconLabel.setPixmap(icon.pixmap(QSize(16, 16)))
+
+    def setSelected(self, selected: bool) -> None:
         self._selected = selected
         self._update_ui_state()
         self.update()
 
-    def setLastTab(self, last: bool) -> None:  # noqa: N802
+    def setLastTab(self, last: bool) -> None:
         self._last_tab = last
         self.update()
 
-    def setClosable(self, closable: bool) -> None:  # noqa: N802
+    def setClosable(self, closable: bool) -> None:
         self._closable = closable
         self._update_ui_state()
 
@@ -186,28 +222,34 @@ class _Tab(QWidget):
         self.closeButton.setVisible(
             self._closable and (self._selected or self._hovered)
         )
-        color = (
-            THEME["text_selected"] if self._selected else THEME["text_normal"]
-        )
+        colors = colors_for_theme(self._theme_mode)
+        color = colors.text if self._selected else colors.muted_text
         weight = 600 if self._selected else 400
         self.textLabel.setStyleSheet(
             f"color: {color}; font-family: '{THEME['font_family']}'; "
             f"font-size: 12px; font-weight: {weight};"
         )
 
-    def enterEvent(self, event) -> None:  # noqa: N802
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        self._theme_mode = ThemeMode(theme)
+        self.closeButton.setThemeMode(theme)
+        self._update_icon()
+        self._update_ui_state()
+        self.update()
+
+    def enterEvent(self, event) -> None:
         self._hovered = True
         self._update_ui_state()
         self.update()
         super().enterEvent(event)
 
-    def leaveEvent(self, event) -> None:  # noqa: N802
+    def leaveEvent(self, event) -> None:
         self._hovered = False
         self._update_ui_state()
         self.update()
         super().leaveEvent(event)
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802
+    def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self._dragging = True
             self.clicked.emit()
@@ -215,16 +257,16 @@ class _Tab(QWidget):
             self.closeRequested.emit()
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event) -> None:
         if self._dragging and event.buttons() & Qt.MouseButton.LeftButton:
             self.dragMoved.emit(event.globalPosition().toPoint())
         super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event) -> None:
         self._dragging = False
         super().mouseReleaseEvent(event)
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
@@ -247,20 +289,25 @@ class _Tab(QWidget):
             path.lineTo(draw_rect.bottomRight())
             path.closeSubpath()
 
-            painter.setBrush(QBrush(QColor(THEME["tab_selected"])))
-            painter.setPen(QPen(QColor(THEME["border_selected"]), 1))
+            colors = colors_for_theme(self._theme_mode)
+            painter.setBrush(QBrush(QColor(colors.tab_selected)))
+            painter.setPen(QPen(QColor(colors.border), 1))
             painter.drawPath(path)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(THEME["tab_selected"])))
+            painter.setBrush(QBrush(QColor(colors.tab_selected)))
             painter.drawRect(0, self.height() - 2, self.width(), 2)
         elif self._hovered:
             hover_rect = rect.adjusted(3, 3, -3, -3)
-            painter.setBrush(QBrush(QColor(THEME["tab_hover"])))
+            painter.setBrush(
+                QBrush(QColor(colors_for_theme(self._theme_mode).tab_hover))
+            )
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRoundedRect(hover_rect, THEME["radius"], THEME["radius"])
 
         if not self._selected and not self._hovered and not self._last_tab:
-            painter.setPen(QPen(QColor(THEME["divider"]), 1))
+            painter.setPen(
+                QPen(QColor(colors_for_theme(self._theme_mode).divider), 1)
+            )
             painter.drawLine(
                 self.width() - 1,
                 10,
@@ -273,19 +320,18 @@ class _ScrollButton(QToolButton):
     def __init__(self, direction: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._direction = direction
+        self._theme_mode = ThemeMode.LIGHT
         self.setFixedSize(24, THEME["tab_height"])
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setStyleSheet(
-            "QToolButton { background: transparent; border: none; }"
-            f"QToolButton:hover {{ background: {THEME['tab_hover']}; "
-            "border-radius: 4px; }"
-        )
+        self.setStyleSheet(_tool_button_style(colors_for_theme(self._theme_mode)))
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(QColor("#444444"), 1.2))
+        painter.setPen(
+            QPen(QColor(colors_for_theme(self._theme_mode).muted_text), 1.2)
+        )
         center = QRectF(self.rect()).center()
         offset = 2
         if self._direction == "left":
@@ -307,6 +353,11 @@ class _ScrollButton(QToolButton):
                 QPointF(center.x() - offset, center.y() + 4),
             )
 
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        self._theme_mode = ThemeMode(theme)
+        self.setStyleSheet(_tool_button_style(colors_for_theme(theme)))
+        self.update()
+
 
 class _TabBar(QWidget):
     tabClicked = Signal(int)
@@ -326,6 +377,7 @@ class _TabBar(QWidget):
         self._current_index = -1
         self._tabs_closable = True
         self._movable = True
+        self._theme_mode = ThemeMode.LIGHT
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 0, 4, 0)
@@ -396,53 +448,71 @@ class _TabBar(QWidget):
         self.leftButton.hide()
         self.rightButton.hide()
 
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        self._theme_mode = ThemeMode(theme)
+        colors = colors_for_theme(theme)
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(colors.window))
+        self.setPalette(palette)
+        self.leftButton.setThemeMode(theme)
+        self.rightButton.setThemeMode(theme)
+        self.addButton.setStyleSheet(
+            "QToolButton { border: none; border-radius: 4px; "
+            f"color: {colors.text}; background: transparent; font-size: 18px; "
+            "margin-left: 2px; margin-top: 1px; }"
+            f"QToolButton:hover {{ background: {colors.tab_hover}; }}"
+        )
+        for tab in self._tabs:
+            tab.setThemeMode(theme)
+        self.update()
+
     def count(self) -> int:
         return len(self._tabs)
 
-    def tabAt(self, position: QPoint) -> int:  # noqa: N802
+    def tabAt(self, position: QPoint) -> int:
         for index, tab in enumerate(self._tabs):
             top_left = tab.mapTo(self, QPoint(0, 0))
             if QRect(top_left, tab.size()).contains(position):
                 return index
         return -1
 
-    def tabText(self, index: int) -> str:  # noqa: N802
+    def tabText(self, index: int) -> str:
         tab = self._tab(index)
         return tab.text() if tab is not None else ""
 
-    def setTabText(self, index: int, text: str) -> None:  # noqa: N802
+    def setTabText(self, index: int, text: str) -> None:
         tab = self._tab(index)
         if tab is not None:
             tab.setText(text)
 
-    def tabIcon(self, index: int) -> QIcon:  # noqa: N802
+    def tabIcon(self, index: int) -> QIcon:
         tab = self._tab(index)
         return tab.icon() if tab is not None else QIcon()
 
-    def setTabIcon(self, index: int, icon: QIcon) -> None:  # noqa: N802
+    def setTabIcon(self, index: int, icon: QIcon) -> None:
         tab = self._tab(index)
         if tab is not None:
             tab.setIcon(icon)
 
-    def tabToolTip(self, index: int) -> str:  # noqa: N802
+    def tabToolTip(self, index: int) -> str:
         tab = self._tab(index)
         return tab.toolTip() if tab is not None else ""
 
-    def setTabToolTip(self, index: int, tooltip: str) -> None:  # noqa: N802
+    def setTabToolTip(self, index: int, tooltip: str) -> None:
         tab = self._tab(index)
         if tab is not None:
             tab.setToolTip(tooltip)
 
-    def isTabEnabled(self, index: int) -> bool:  # noqa: N802
+    def isTabEnabled(self, index: int) -> bool:
         tab = self._tab(index)
         return tab.isEnabled() if tab is not None else False
 
-    def setTabEnabled(self, index: int, enabled: bool) -> None:  # noqa: N802
+    def setTabEnabled(self, index: int, enabled: bool) -> None:
         tab = self._tab(index)
         if tab is not None:
             tab.setEnabled(enabled)
 
-    def insertTab(  # noqa: N802
+    def insertTab(
         self,
         index: int,
         text: str,
@@ -450,6 +520,7 @@ class _TabBar(QWidget):
     ) -> int:
         index = max(0, min(index, self.count()))
         tab = _Tab(text, icon, self.tabsContainer)
+        tab.setThemeMode(self._theme_mode)
         tab.setClosable(self._tabs_closable)
         self._tabs.insert(index, tab)
         self.tabsLayout.insertWidget(index, tab)
@@ -461,7 +532,7 @@ class _TabBar(QWidget):
         QTimer.singleShot(0, self._update_scroll_buttons)
         return index
 
-    def removeTab(self, index: int) -> None:  # noqa: N802
+    def removeTab(self, index: int) -> None:
         tab = self._tab(index)
         if tab is None:
             return
@@ -478,10 +549,10 @@ class _TabBar(QWidget):
         self.setCurrentIndex(self._current_index)
         QTimer.singleShot(0, self._update_scroll_buttons)
 
-    def currentIndex(self) -> int:  # noqa: N802
+    def currentIndex(self) -> int:
         return self._current_index
 
-    def setCurrentIndex(self, index: int) -> None:  # noqa: N802
+    def setCurrentIndex(self, index: int) -> None:
         self._current_index = index if 0 <= index < self.count() else -1
         for tab_index, tab in enumerate(self._tabs):
             tab.setSelected(tab_index == self._current_index)
@@ -493,21 +564,21 @@ class _TabBar(QWidget):
                 else None,
             )
 
-    def setTabsClosable(self, closable: bool) -> None:  # noqa: N802
+    def setTabsClosable(self, closable: bool) -> None:
         self._tabs_closable = closable
         for tab in self._tabs:
             tab.setClosable(closable)
 
-    def tabsClosable(self) -> bool:  # noqa: N802
+    def tabsClosable(self) -> bool:
         return self._tabs_closable
 
-    def setMovable(self, movable: bool) -> None:  # noqa: N802
+    def setMovable(self, movable: bool) -> None:
         self._movable = movable
 
-    def isMovable(self) -> bool:  # noqa: N802
+    def isMovable(self) -> bool:
         return self._movable
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._recalculate_tab_widths()
         QTimer.singleShot(0, self._recalculate_tab_widths)
@@ -517,7 +588,7 @@ class _TabBar(QWidget):
                 lambda: self._ensure_visible(self._tabs[self._current_index]),
             )
 
-    def wheelEvent(self, event) -> None:  # noqa: N802
+    def wheelEvent(self, event) -> None:
         delta = event.angleDelta().y() or event.angleDelta().x()
         if delta:
             self._scroll_smooth(-delta)
@@ -609,8 +680,10 @@ class TabView(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setProperty("pyside6ModernThemeAware", True)
         self._document_mode = True
         self._syncing = False
+        self._theme_mode = ThemeMode.LIGHT
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -637,19 +710,21 @@ class TabView(QWidget):
         self._tab_bar.addClicked.connect(self.addTabClicked.emit)
         self._stack.currentChanged.connect(self._stack_current_changed)
         self._setup_shortcuts()
+        self.setThemeMode(self._theme_mode)
 
-    def addTab(self, widget: QWidget, *args) -> int:  # noqa: N802
+    def addTab(self, widget: QWidget, *args) -> int:
         return self.insertTab(self.count(), widget, *args)
 
-    def insertTab(self, index: int, widget: QWidget, *args) -> int:  # noqa: N802
+    def insertTab(self, index: int, widget: QWidget, *args) -> int:
         icon, text = self._parse_tab_arguments(args)
         index = max(0, min(index, self.count()))
         self._tab_bar.insertTab(index, text, icon)
         inserted_index = self._stack.insertWidget(index, widget)
         self._sync_current_state()
+        self.setThemeMode(self._theme_mode)
         return inserted_index
 
-    def removeTab(self, index: int) -> None:  # noqa: N802
+    def removeTab(self, index: int) -> None:
         page = self.widget(index)
         if page is None:
             return
@@ -681,69 +756,98 @@ class TabView(QWidget):
     def widget(self, index: int) -> QWidget | None:
         return self._stack.widget(index)
 
-    def indexOf(self, widget: QWidget) -> int:  # noqa: N802
+    def indexOf(self, widget: QWidget) -> int:
         return self._stack.indexOf(widget)
 
-    def currentWidget(self) -> QWidget | None:  # noqa: N802
+    def currentWidget(self) -> QWidget | None:
         return self._stack.currentWidget()
 
-    def currentIndex(self) -> int:  # noqa: N802
+    def currentIndex(self) -> int:
         return self._stack.currentIndex()
 
-    def setCurrentWidget(self, widget: QWidget) -> None:  # noqa: N802
+    def setCurrentWidget(self, widget: QWidget) -> None:
         index = self.indexOf(widget)
         if index >= 0:
             self.setCurrentIndex(index)
 
-    def setCurrentIndex(self, index: int) -> None:  # noqa: N802
+    def setCurrentIndex(self, index: int) -> None:
         if not 0 <= index < self.count() or not self.isTabEnabled(index):
             return
         self._stack.setCurrentIndex(index)
         self._sync_current_state()
 
-    def tabBar(self) -> _TabBar:  # noqa: N802
+    def tabBar(self) -> _TabBar:
         return self._tab_bar
 
-    def tabText(self, index: int) -> str:  # noqa: N802
+    def tabText(self, index: int) -> str:
         return self._tab_bar.tabText(index)
 
-    def setTabText(self, index: int, text: str) -> None:  # noqa: N802
+    def setTabText(self, index: int, text: str) -> None:
         self._tab_bar.setTabText(index, text)
 
-    def tabIcon(self, index: int) -> QIcon:  # noqa: N802
+    def tabIcon(self, index: int) -> QIcon:
         return self._tab_bar.tabIcon(index)
 
-    def setTabIcon(self, index: int, icon: QIcon) -> None:  # noqa: N802
+    def setTabIcon(self, index: int, icon: QIcon) -> None:
         self._tab_bar.setTabIcon(index, icon)
 
-    def tabToolTip(self, index: int) -> str:  # noqa: N802
+    def tabToolTip(self, index: int) -> str:
         return self._tab_bar.tabToolTip(index)
 
-    def setTabToolTip(self, index: int, tooltip: str) -> None:  # noqa: N802
+    def setTabToolTip(self, index: int, tooltip: str) -> None:
         self._tab_bar.setTabToolTip(index, tooltip)
 
-    def isTabEnabled(self, index: int) -> bool:  # noqa: N802
+    def isTabEnabled(self, index: int) -> bool:
         return self._tab_bar.isTabEnabled(index)
 
-    def setTabEnabled(self, index: int, enabled: bool) -> None:  # noqa: N802
+    def setTabEnabled(self, index: int, enabled: bool) -> None:
         self._tab_bar.setTabEnabled(index, enabled)
 
-    def setTabsClosable(self, closable: bool) -> None:  # noqa: N802
+    def themeMode(self) -> ThemeMode:
+        return self._theme_mode
+
+    def resolvedThemeMode(self) -> ThemeMode:
+        return resolve_application_theme(self._theme_mode)
+
+    def setThemeMode(self, theme: ThemeMode | str) -> None:
+        self._theme_mode = ThemeMode(theme)
+        resolved = self.resolvedThemeMode()
+        colors = colors_for_theme(resolved)
+        palette = self.palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(colors.window))
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(colors.text))
+        palette.setColor(QPalette.ColorRole.Base, QColor(colors.surface))
+        palette.setColor(QPalette.ColorRole.Text, QColor(colors.text))
+        self.setPalette(palette)
+        self._tab_bar.setThemeMode(resolved)
+        self._divider.setStyleSheet(
+            f"QFrame {{ background-color: {colors.border}; border: none; }}"
+        )
+        self._stack.setStyleSheet(
+            f"QStackedWidget {{ background: {colors.surface}; color: {colors.text}; }}"
+        )
+        for index in range(self.count()):
+            page = self.widget(index)
+            if page is not None:
+                for widget in (page, *page.findChildren(QWidget)):
+                    widget.setPalette(palette)
+
+    def setTabsClosable(self, closable: bool) -> None:
         self._tab_bar.setTabsClosable(closable)
 
-    def tabsClosable(self) -> bool:  # noqa: N802
+    def tabsClosable(self) -> bool:
         return self._tab_bar.tabsClosable()
 
-    def setMovable(self, movable: bool) -> None:  # noqa: N802
+    def setMovable(self, movable: bool) -> None:
         self._tab_bar.setMovable(movable)
 
-    def isMovable(self) -> bool:  # noqa: N802
+    def isMovable(self) -> bool:
         return self._tab_bar.isMovable()
 
-    def setDocumentMode(self, enabled: bool) -> None:  # noqa: N802
+    def setDocumentMode(self, enabled: bool) -> None:
         self._document_mode = enabled
 
-    def documentMode(self) -> bool:  # noqa: N802
+    def documentMode(self) -> bool:
         return self._document_mode
 
     def nextTab(self) -> None:

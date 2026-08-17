@@ -5,53 +5,57 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtGui import QAction, QIcon, QKeySequence
-from PySide6.QtWidgets import QApplication, QStyle, QToolBar, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
-from pyside6_modern_widgets import ModernWindow, NavigationPosition, NavigationView
+from pyside6_modern_widgets import (
+    ModernWindow,
+    NavigationPosition,
+    NavigationView,
+)
 
 
-def standard_icon(name: QStyle.StandardPixmap) -> QIcon:
-    return QApplication.style().standardIcon(name)
+def resource_icon(name: str) -> QIcon:
+    return QIcon(f":/pyside6_modern_widgets/icons/{name}")
 
 
 class ExampleWindow(ModernWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Modern Widgets Example")
-        self.setWindowIcon(standard_icon(QStyle.StandardPixmap.SP_ComputerIcon))
+        self.setWindowIcon(resource_icon("application.png"))
         self.resize(1000, 640)
         self.setMinimumSize(720, 460)
 
         self.navigation = NavigationView()
         self.setCentralWidget(self.navigation)
-        self._page_names = ("Home", "Documents", "Activity", "Settings")
+        self._page_names = ("Home", "Search", "Account", "Settings")
 
         self.navigation.addPage(
             QWidget(),
             "Home",
-            standard_icon(QStyle.StandardPixmap.SP_DesktopIcon),
+            resource_icon("home.png"),
             selected=True,
         )
         self.navigation.addPage(
             QWidget(),
-            "Documents",
-            standard_icon(QStyle.StandardPixmap.SP_FileIcon),
+            "Search",
+            resource_icon("search.png"),
         )
         self.navigation.addPage(
             QWidget(),
-            "Activity",
-            standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
+            "Account",
+            resource_icon("account.png"),
+            position=NavigationPosition.BOTTOM,
         )
         self.navigation.addPage(
             QWidget(),
             "Settings",
-            standard_icon(QStyle.StandardPixmap.SP_FileDialogContentsView),
+            resource_icon("settings.png"),
             position=NavigationPosition.BOTTOM,
         )
 
         self._create_actions()
         self._create_menu_bar()
-        self._create_toolbar()
         self.navigation.currentChanged.connect(self._page_changed)
         self.statusBar().showMessage("Ready")
 
@@ -71,29 +75,6 @@ class ExampleWindow(ModernWindow):
         view_menu = self.menuBar().addMenu("&View")
         view_menu.addAction(self.compact_action)
 
-    def _create_toolbar(self) -> None:
-        toolbar = QToolBar("Navigation", self)
-        toolbar.setMovable(False)
-        toolbar.addAction(
-            standard_icon(QStyle.StandardPixmap.SP_ArrowBack),
-            "Previous page",
-            self.previous_page,
-        )
-        toolbar.addAction(
-            standard_icon(QStyle.StandardPixmap.SP_ArrowForward),
-            "Next page",
-            self.next_page,
-        )
-        self.addToolBar(toolbar)
-
-    def previous_page(self) -> None:
-        index = (self.navigation.currentIndex() - 1) % self.navigation.count()
-        self.navigation.setCurrentIndex(index)
-
-    def next_page(self) -> None:
-        index = (self.navigation.currentIndex() + 1) % self.navigation.count()
-        self.navigation.setCurrentIndex(index)
-
     def _page_changed(self, index: int) -> None:
         if 0 <= index < len(self._page_names):
             self.statusBar().showMessage(self._page_names[index], 3000)
@@ -101,6 +82,7 @@ class ExampleWindow(ModernWindow):
 
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
     app.setApplicationName("Modern Widgets Example")
     window = ExampleWindow()
     window.show()
