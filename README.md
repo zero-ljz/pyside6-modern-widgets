@@ -13,7 +13,7 @@ retaining familiar Qt widget APIs.
 
 ## Supported environment
 
-Supports only Python 3.10-3.12 with PySide6 6.8.3 using the Fusion style in light mode.
+Supports only Windows 10 and 11, Python 3.10-3.12, PySide6 6.8.3, and the Fusion style in light mode.
 
 ## Installation
 
