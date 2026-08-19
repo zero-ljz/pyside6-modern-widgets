@@ -21,6 +21,16 @@ Supports only Windows 10 and 11, Python 3.10-3.12, PySide6 6.8.3, and the Fusion
 pip install pyside6-modern-widgets
 ```
 
+## PyInstaller
+
+The installed package automatically registers its PyInstaller hook. Applications
+using these widgets can be frozen normally without package-specific
+`--hidden-import` or `--add-data` options:
+
+```shell
+pyinstaller your_app.py
+```
+
 ## Example
 
 ```python
