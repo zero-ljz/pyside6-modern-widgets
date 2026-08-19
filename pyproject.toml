@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyside6-modern-widgets"
-version = "0.1.2"
+version = "0.2.0"
 description = "Modern frameless windows, navigation, and tabs for PySide6 on Windows"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
@@ -31,6 +31,7 @@ dev = [
     "pyinstaller>=6.11",
     "pytest>=8.3",
     "ruff>=0.9",
+    "types-pyinstaller>=6.11",
 ]
 
 [project.entry-points.pyinstaller40]
@@ -59,3 +60,6 @@ target-version = "py310"
 
 [tool.ruff.lint.per-file-ignores]
 "src/pyside6_modern_widgets/_pyinstaller/hook-*.py" = ["N999"]
+
+[tool.ruff.format]
+exclude = ["src/pyside6_modern_widgets/_resources.py"]

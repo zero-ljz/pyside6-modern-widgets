@@ -8,6 +8,8 @@ import sys
 from ctypes import Structure, byref, c_int, sizeof
 from dataclasses import dataclass
 
+from .theme import ModernTheme
+
 if sys.platform == "win32":
     import winreg
 else:  # pragma: no cover - exercised by non-Windows consumers
@@ -28,7 +30,6 @@ class WindowStyleState:
     """Visual state computed for a modern window."""
 
     bg_color: str
-    text_color: str
     corner_radius: int
     use_watercolor: bool
 
@@ -92,14 +93,9 @@ class WindowEffect:
         margins = _Margins(-1, -1, -1, -1)
         try:
             self._dwmapi.DwmExtendFrameIntoClientArea(handle, byref(margins))
-            is_dark = (
-                theme_mode == "dark"
-                or (theme_mode == "auto" and self.is_system_dark_mode())
-            )
+            is_dark = theme_mode == "dark" or (theme_mode == "auto" and self.is_system_dark_mode())
             dark_value = c_int(int(is_dark))
-            self._dwmapi.DwmSetWindowAttribute(
-                handle, 20, byref(dark_value), sizeof(dark_value)
-            )
+            self._dwmapi.DwmSetWindowAttribute(handle, 20, byref(dark_value), sizeof(dark_value))
             material_value = c_int(material_type)
             self._dwmapi.DwmSetWindowAttribute(
                 handle, 38, byref(material_value), sizeof(material_value)
@@ -115,8 +111,8 @@ class WindowEffect:
         is_active: bool,
         hwnd: int,
         corner_radius: int,
+        theme: ModernTheme,
         bg_color: str | None = None,
-        text_color: str | None = None,
     ) -> WindowStyleState:
         radius = 0 if is_maximized else max(0, corner_radius)
         mica_enabled = self.is_supported and self.is_transparency_enabled()
@@ -124,19 +120,14 @@ class WindowEffect:
 
         if bg_color is None:
             if mica_enabled:
-                self.set_effect(hwnd, self.MATERIAL_MICA, "light")
+                self.set_effect(hwnd, self.MATERIAL_MICA, theme.appearance)
                 self._set_rounded_corners(hwnd)
-                bg_color = (
-                    "rgba(255, 255, 255, 0.01)"
-                    if is_active
-                    else "rgb(243, 243, 243)"
-                )
+                bg_color = theme.surface_translucent if is_active else theme.surface_inactive
             else:
-                bg_color = "transparent" if is_active else "rgb(243, 243, 243)"
+                bg_color = theme.surface_fallback if is_active else theme.surface_inactive
 
         return WindowStyleState(
             bg_color=bg_color,
-            text_color=text_color or "black",
             corner_radius=radius,
             use_watercolor=use_watercolor,
         )

@@ -14,7 +14,14 @@ from PySide6.QtWidgets import (
 from .navigation_sidebar import (
     NavigationPosition,
     NavigationSidebar,
-    NavigationStyle,
+    navigation_content_style,
+)
+from .theme import (
+    DEFAULT_METRICS,
+    ModernMetrics,
+    ModernTheme,
+    palette_for_theme,
+    theme_manager,
 )
 
 
@@ -23,26 +30,39 @@ class NavigationView(QWidget):
 
     currentChanged = Signal(int)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        theme: ModernTheme | None = None,
+        metrics: ModernMetrics = DEFAULT_METRICS,
+    ) -> None:
         super().__init__(parent)
+        self._uses_global_theme = theme is None
+        self._theme = theme or theme_manager().theme()
+        self._metrics = metrics
+        theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self.setObjectName("ModernNavigationView")
+        self.setPalette(palette_for_theme(self._theme, self.palette()))
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet(
-            "QWidget#ModernNavigationView { background-color: transparent; }"
-        )
+        self.setStyleSheet("QWidget#ModernNavigationView { background-color: transparent; }")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self.sidebar = NavigationSidebar(self)
+        self.sidebar = NavigationSidebar(
+            self,
+            theme=self._theme,
+            metrics=self._metrics,
+        )
         self.contentContainer = QFrame(self)
         self.contentContainer.setObjectName("NavigationContent")
         self.contentContainer.setAttribute(
             Qt.WidgetAttribute.WA_StyledBackground,
             True,
         )
-        self.contentContainer.setStyleSheet(NavigationStyle.contentStyle())
+        self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
 
         content_layout = QVBoxLayout(self.contentContainer)
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -104,6 +124,23 @@ class NavigationView(QWidget):
             return
         self.sidebar.setCurrentIndex(index)
         self.stackedWidget.setCurrentIndex(index)
+
+    def theme(self) -> ModernTheme:
+        return self._theme
+
+    def setTheme(self, theme: ModernTheme | None) -> None:
+        self._uses_global_theme = theme is None
+        self._theme = theme or theme_manager().theme()
+        self.setPalette(palette_for_theme(self._theme, self.palette()))
+        self.sidebar.setTheme(self._theme)
+        self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
+
+    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
+        if self._uses_global_theme:
+            self._theme = theme
+            self.setPalette(palette_for_theme(theme, self.palette()))
+            self.sidebar.setTheme(theme)
+            self.contentContainer.setStyleSheet(navigation_content_style(theme))
 
     def _on_current_changed(self, index: int) -> None:
         if index >= 0 and self.sidebar.currentIndex() != index:

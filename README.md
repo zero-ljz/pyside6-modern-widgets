@@ -13,7 +13,9 @@ retaining familiar Qt widget APIs.
 
 ## Supported environment
 
-Supports only Windows 10 and 11, Python 3.10-3.12, PySide6 6.8.3, and the Fusion style in light mode.
+Supports Windows 10 and 11, Python 3.10-3.12, PySide6 6.8.3, and the Fusion
+style. Built-in light and dark themes share the same layout and interaction
+model.
 
 ## Installation
 
@@ -53,6 +55,26 @@ window.resize(800, 500)
 window.show()
 app.exec()
 ```
+
+## Themes
+
+Widgets follow the process-wide theme manager by default. A theme change also
+updates the application palette so regular Qt content remains readable:
+
+```python
+from pyside6_modern_widgets import DARK_THEME, theme_manager
+
+theme_manager().setTheme(DARK_THEME)
+```
+
+Use `theme_manager().setFollowsSystemTheme(True)` to select a built-in theme
+from application palette changes. Pass `theme=LIGHT_THEME` or
+`theme=DARK_THEME` to an individual widget for a local override. Layout metrics
+can be customized with `ModernMetrics` without modifying component internals.
+
+`TabView` uses the standard Qt argument order: `addTab(widget, text)` or
+`addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is
+not supported.
 
 The native window effects target Windows. On unsupported Windows versions or
 when transparency is disabled, the window automatically uses a painted fallback.
