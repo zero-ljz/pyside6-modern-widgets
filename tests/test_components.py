@@ -8,7 +8,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt
-from PySide6.QtGui import QColor, QContextMenuEvent, QFont, QIcon, QPalette
+from PySide6.QtGui import QColor, QContextMenuEvent, QFont, QIcon, QPalette, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -351,6 +351,116 @@ def test_navigation_sidebar_selection_and_collapse() -> None:
     sidebar.setCollapsed(True, animated=False)
     assert sidebar.isCollapsed()
     assert sidebar.width() == 48
+
+
+def test_navigation_icons_stay_fixed_when_collapse_changes() -> None:
+    icon_color = QColor("#0088CC")
+    pixmap = QPixmap(18, 18)
+    pixmap.fill(icon_color)
+    toggle_color = QColor("#CC4400")
+    toggle_pixmap = QPixmap(20, 20)
+    toggle_pixmap.fill(toggle_color)
+
+    sidebar = NavigationSidebar()
+    sidebar.addItem("Item", QIcon(pixmap))
+    sidebar.toggleButton.setIcon(QIcon(toggle_pixmap))
+    sidebar.setCurrentIndex(0)
+    sidebar.setCollapsed(True, animated=False)
+    sidebar.resize(48, 240)
+    sidebar.show()
+    _application().processEvents()
+
+    button = sidebar.button(0)
+    assert button is not None
+
+    def icon_bounds(widget: QWidget, color: QColor) -> tuple[int, int]:
+        image = widget.grab().toImage()
+        x_positions = [
+            x
+            for y in range(image.height())
+            for x in range(image.width())
+            if image.pixelColor(x, y) == color
+        ]
+        assert x_positions
+        return min(x_positions), max(x_positions)
+
+    collapsed_item_bounds = icon_bounds(button, icon_color)
+    collapsed_toggle_bounds = icon_bounds(sidebar.toggleButton, toggle_color)
+    assert sum(collapsed_item_bounds) / 2 == (button.width() - 1) / 2
+    assert sum(collapsed_toggle_bounds) / 2 == (sidebar.toggleButton.width() - 1) / 2
+
+    sidebar.setCollapsed(False, animated=False)
+    _application().processEvents()
+
+    assert icon_bounds(button, icon_color) == collapsed_item_bounds
+    assert icon_bounds(sidebar.toggleButton, toggle_color) == collapsed_toggle_bounds
+
+
+def test_navigation_focus_is_borderless_and_keeps_toggle_icon_centered() -> None:
+    focus_background = "#FF4FA3"
+    focus_color = QColor("#00FF00")
+    theme = replace(
+        LIGHT_THEME,
+        control_hover=focus_background,
+        focus=focus_color.name(),
+    )
+    sidebar = NavigationSidebar(theme=theme)
+    sidebar.addItem("Item")
+    toggle_color = QColor("#CC4400")
+    toggle_pixmap = QPixmap(20, 20)
+    toggle_pixmap.fill(toggle_color)
+    sidebar.toggleButton.setIcon(QIcon(toggle_pixmap))
+    sidebar.resize(240, 240)
+    sidebar.show()
+    _application().processEvents()
+
+    button = sidebar.button(0)
+    assert button is not None
+    assert button.focusPolicy() == Qt.FocusPolicy.StrongFocus
+
+    button.setFocus(Qt.FocusReason.TabFocusReason)
+    _application().processEvents()
+    focused_image = button.grab().toImage()
+    assert focused_image.pixelColor(button.width() // 2, 0) == QColor(focus_background)
+    assert all(
+        focused_image.pixelColor(x, y) != focus_color
+        for y in range(focused_image.height())
+        for x in range(focused_image.width())
+    )
+
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+    _application().processEvents()
+    assert button.hasFocus()
+    selected_image = button.grab().toImage()
+    assert selected_image.pixelColor(button.width() // 2, 0) == QColor(theme.control_pressed)
+    assert all(
+        selected_image.pixelColor(x, y) != focus_color
+        for y in range(selected_image.height())
+        for x in range(selected_image.width())
+    )
+
+    button.clearFocus()
+    sidebar.toggleButton.setFocus(Qt.FocusReason.BacktabFocusReason)
+    _application().processEvents()
+    assert sidebar.toggleButton.width() == DEFAULT_METRICS.navigation_collapsed_width - 12
+    assert sidebar.toggleButton.grab().toImage().pixelColor(
+        sidebar.toggleButton.width() // 2, 0
+    ) == QColor(focus_background)
+
+    QTest.mouseClick(sidebar.toggleButton, Qt.MouseButton.LeftButton)
+    QTest.qWait(DEFAULT_METRICS.animation_duration + 20)
+    image = sidebar.toggleButton.grab().toImage()
+    assert image.pixelColor(sidebar.toggleButton.width() // 2, 0) == QColor(focus_background)
+    icon_x_positions = [
+        x
+        for y in range(image.height())
+        for x in range(image.width())
+        if image.pixelColor(x, y) == toggle_color
+    ]
+    assert icon_x_positions
+    assert (min(icon_x_positions) + max(icon_x_positions)) / 2 == (
+        sidebar.toggleButton.width() - 1
+    ) / 2
 
 
 def test_navigation_view_manages_pages_and_selection() -> None:

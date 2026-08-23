@@ -11,6 +11,9 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QPushButton,
     QScrollArea,
+    QStyle,
+    QStyleOptionButton,
+    QStylePainter,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +30,9 @@ from .theme import (
 
 
 def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
+    compact_content_width = max(0, metrics.navigation_collapsed_width - 12)
+    item_icon_padding = max(0, (compact_content_width - 18) // 2)
+    toggle_icon_padding = max(0, (compact_content_width - 20) // 2)
     return f"""
             QWidget#ModernNavigationSidebar {{
                 background-color: {theme.navigation_background};
@@ -38,7 +44,7 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 border-radius: {metrics.control_radius}px;
                 color: {theme.text};
                 text-align: left;
-                padding-left: 10px;
+                padding-left: {item_icon_padding}px;
                 margin-bottom: 4px;
             }}
             QPushButton[class="NavigationItem"]:hover {{
@@ -54,22 +60,16 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
             QPushButton[class="NavigationItem"]:disabled {{
                 color: {theme.text_disabled};
             }}
-            QPushButton[class="NavigationItem"]:focus {{
-                border: 1px solid {theme.focus};
-            }}
             QPushButton#NavigationToggleButton {{
                 background-color: transparent;
                 border: none;
                 border-radius: {metrics.control_radius}px;
                 margin-bottom: 10px;
                 text-align: left;
-                padding-left: 9px;
+                padding-left: {toggle_icon_padding}px;
             }}
             QPushButton#NavigationToggleButton:hover {{
                 background-color: {theme.control_hover};
-            }}
-            QPushButton#NavigationToggleButton:focus {{
-                border: 1px solid {theme.focus};
             }}
             QScrollArea {{ border: none; background-color: transparent; }}
             QWidget#NavigationScrollContent {{ background-color: transparent; }}
@@ -100,7 +100,20 @@ class NavigationPosition(Enum):
     BOTTOM = 1
 
 
-class _NavigationItem(QPushButton):
+class _NavigationButton(QPushButton):
+    def paintEvent(self, _event) -> None:
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        state = option.state  # type: ignore[attr-defined]
+        if state & QStyle.StateFlag.State_HasFocus:
+            state &= ~QStyle.StateFlag.State_HasFocus
+            state |= QStyle.StateFlag.State_MouseOver
+            option.state = state  # type: ignore[attr-defined]
+        painter = QStylePainter(self)
+        painter.drawControl(QStyle.ControlElement.CE_PushButton, option)
+
+
+class _NavigationItem(_NavigationButton):
     def __init__(
         self,
         text: str,
@@ -112,6 +125,7 @@ class _NavigationItem(QPushButton):
         self.fullText = text
         self.setProperty("class", "NavigationItem")
         self.setCheckable(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumHeight(metrics.navigation_item_height)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setIcon(_coerce_icon(icon))
@@ -170,8 +184,9 @@ class NavigationSidebar(QWidget):
         layout.setContentsMargins(6, 10, 6, 10)
         layout.setSpacing(2)
 
-        self.toggleButton = QPushButton(self)
+        self.toggleButton = _NavigationButton(self)
         self.toggleButton.setObjectName("NavigationToggleButton")
+        self.toggleButton.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.toggleButton.setIcon(
             tinted_icon(
                 QIcon(":/pyside6_modern_widgets/icons/menu.png"),
@@ -179,10 +194,18 @@ class NavigationSidebar(QWidget):
             )
         )
         self.toggleButton.setIconSize(QSize(20, 20))
+        self.toggleButton.setFixedWidth(
+            max(
+                1,
+                self._collapsed_width
+                - layout.contentsMargins().left()
+                - layout.contentsMargins().right(),
+            )
+        )
         self.toggleButton.setMinimumHeight(self._metrics.navigation_item_height)
         self.toggleButton.setToolTip("Toggle navigation")
         self.toggleButton.clicked.connect(self.toggle)
-        layout.addWidget(self.toggleButton)
+        layout.addWidget(self.toggleButton, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.scrollArea = QScrollArea(self)
         self.scrollArea.setWidgetResizable(True)
