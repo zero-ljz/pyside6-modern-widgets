@@ -198,10 +198,15 @@ class CustomTitleBar(QWidget):
         self.initUI()
 
     def initUI(self) -> None:
-        self.setMinimumHeight(self._metrics.title_bar_height)
+        vertical_padding = 2
+        title_bar_height = max(
+            self._metrics.title_bar_height,
+            self._metrics.title_button_size + vertical_padding * 2,
+        )
+        self.setFixedHeight(title_bar_height)
 
         self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(5, 2, 5, 0)
+        self.main_layout.setContentsMargins(5, vertical_padding, 5, vertical_padding)
         self.main_layout.setSpacing(5)
 
         self.left_layout = QHBoxLayout()

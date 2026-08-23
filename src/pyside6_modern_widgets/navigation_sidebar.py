@@ -44,8 +44,14 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 border-radius: {metrics.control_radius}px;
                 color: {theme.text};
                 text-align: left;
+                padding-top: 0px;
+                padding-right: 0px;
+                padding-bottom: 0px;
                 padding-left: {item_icon_padding}px;
+                margin-top: 0px;
+                margin-right: 0px;
                 margin-bottom: 4px;
+                margin-left: 0px;
             }}
             QPushButton[class="NavigationItem"]:hover {{
                 background-color: {theme.control_hover};
@@ -64,7 +70,13 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 background-color: transparent;
                 border: none;
                 border-radius: {metrics.control_radius}px;
+                padding-top: 0px;
+                padding-right: 0px;
+                padding-bottom: 0px;
+                margin-top: 0px;
+                margin-right: 0px;
                 margin-bottom: 10px;
+                margin-left: 0px;
                 text-align: left;
                 padding-left: {toggle_icon_padding}px;
             }}
@@ -130,11 +142,20 @@ class _NavigationItem(_NavigationButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setIcon(_coerce_icon(icon))
         self.setIconSize(QSize(18, 18))
+        self._unconstrained_minimum_width = self.minimumWidth()
+        self._unconstrained_maximum_width = self.maximumWidth()
         self.setCollapsed(False)
 
     def setCollapsed(self, collapsed: bool) -> None:
         self.setText("" if collapsed else self.fullText)
         self.setToolTip(self.fullText if collapsed else "")
+
+    def _set_compact_width(self, width: int | None) -> None:
+        if width is None:
+            self.setMinimumWidth(self._unconstrained_minimum_width)
+            self.setMaximumWidth(self._unconstrained_maximum_width)
+        else:
+            self.setFixedWidth(width)
 
 
 def _coerce_icon(icon) -> QIcon:
@@ -170,6 +191,7 @@ class NavigationSidebar(QWidget):
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self._collapsed_width = metrics.navigation_collapsed_width
         self._expanded_width = metrics.navigation_expanded_width
+        self._compact_item_width = max(1, self._collapsed_width - 12)
         self._collapsed = False
         self._items: list[_NavigationItem] = []
         self._current_index = -1
@@ -246,6 +268,7 @@ class NavigationSidebar(QWidget):
     ) -> int:
         button = _NavigationItem(text, icon, self._metrics, self)
         button.setCollapsed(self._collapsed)
+        button._set_compact_width(self._compact_item_width if self._collapsed else None)
         index = len(self._items)
         self._items.append(button)
         self._button_group.addButton(button, index)
@@ -303,6 +326,7 @@ class NavigationSidebar(QWidget):
         self._collapsed = collapsed
         for item in self._items:
             item.setCollapsed(collapsed)
+            item._set_compact_width(self._compact_item_width if collapsed else None)
         self.scrollArea.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
             if collapsed

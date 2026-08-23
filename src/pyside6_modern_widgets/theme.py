@@ -41,7 +41,7 @@ class ModernMetrics:
 
     corner_radius: int = 10
     control_radius: int = 4
-    title_bar_height: int = 32
+    title_bar_height: int = 34
     title_button_size: int = 30
     navigation_item_height: int = 36
     navigation_collapsed_width: int = 48

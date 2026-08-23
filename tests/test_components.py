@@ -134,6 +134,26 @@ def test_title_bar_menu_button_and_native_context_menu(monkeypatch) -> None:
     assert observed == [global_position]
 
 
+def test_title_bar_reserves_vertical_space_around_window_buttons() -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    assert window.titleBar is not None
+    title_bar = window.titleBar
+    assert title_bar.height() == DEFAULT_METRICS.title_bar_height
+    for button in (
+        title_bar.menuButton,
+        title_bar.pinButton,
+        title_bar.minimizeButton,
+        title_bar.maximizeButton,
+        title_bar.closeButton,
+    ):
+        assert button.geometry().top() >= 2
+        assert button.geometry().bottom() <= title_bar.rect().bottom() - 2
+
+
 def test_system_menu_has_cross_platform_qt_fallback(monkeypatch) -> None:
     from pyside6_modern_widgets import _system_menu
 
@@ -351,6 +371,40 @@ def test_navigation_sidebar_selection_and_collapse() -> None:
     sidebar.setCollapsed(True, animated=False)
     assert sidebar.isCollapsed()
     assert sidebar.width() == 48
+
+
+def test_collapsed_navigation_ignores_application_button_padding() -> None:
+    app = _application()
+    previous_style = app.styleSheet()
+    try:
+        app.setStyleSheet("QPushButton { padding: 7px 16px; }")
+        icon_color = QColor("#0088CC")
+        pixmap = QPixmap(18, 18)
+        pixmap.fill(icon_color)
+        sidebar = NavigationSidebar()
+        sidebar.addItem("Item", QIcon(pixmap))
+        sidebar.setCurrentIndex(0)
+        sidebar.setCollapsed(True, animated=False)
+        sidebar.resize(DEFAULT_METRICS.navigation_collapsed_width, 240)
+        sidebar.show()
+        app.processEvents()
+
+        button = sidebar.button(0)
+        assert button is not None
+        viewport_width = sidebar.scrollArea.viewport().width()
+        assert sidebar.scrollContent.width() <= viewport_width
+        assert button.width() <= viewport_width
+        image = button.grab().toImage()
+        icon_x_positions = [
+            x
+            for y in range(image.height())
+            for x in range(image.width())
+            if image.pixelColor(x, y) == icon_color
+        ]
+        assert min(icon_x_positions) == 9
+        assert max(icon_x_positions) == 26
+    finally:
+        app.setStyleSheet(previous_style)
 
 
 def test_navigation_icons_stay_fixed_when_collapse_changes() -> None:
