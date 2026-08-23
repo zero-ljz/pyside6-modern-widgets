@@ -197,7 +197,7 @@ class CustomTitleBar(QWidget):
         self.setMinimumHeight(self._metrics.title_bar_height)
 
         self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(5, 0, 5, 0)
+        self.main_layout.setContentsMargins(5, 2, 5, 0)
         self.main_layout.setSpacing(5)
 
         self.left_layout = QHBoxLayout()
