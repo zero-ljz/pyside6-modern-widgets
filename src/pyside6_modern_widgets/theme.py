@@ -14,14 +14,10 @@ class ModernTheme:
     """Colors and typography used by all modern widgets."""
 
     name: str
-    appearance: str
     text: str
     text_muted: str
     text_disabled: str
     surface: str
-    surface_inactive: str
-    surface_translucent: str
-    surface_fallback: str
     border: str
     control_hover: str
     control_pressed: str
@@ -58,14 +54,10 @@ class ModernMetrics:
 
 LIGHT_THEME = ModernTheme(
     name="light",
-    appearance="light",
     text="#000000",
     text_muted="#454545",
     text_disabled="#8A8A8A",
     surface="#FFFFFF",
-    surface_inactive="#F3F3F3",
-    surface_translucent="#03FFFFFF",
-    surface_fallback="transparent",
     border="#E5E5E5",
     control_hover="#0D000000",
     control_pressed="#26000000",
@@ -89,14 +81,10 @@ LIGHT_THEME = ModernTheme(
 
 DARK_THEME = ModernTheme(
     name="dark",
-    appearance="dark",
     text="#FFFFFF",
     text_muted="#D6D6D6",
     text_disabled="#777777",
     surface="#2B2B2B",
-    surface_inactive="#252525",
-    surface_translucent="#03000000",
-    surface_fallback="transparent",
     border="#454545",
     control_hover="#14FFFFFF",
     control_pressed="#29FFFFFF",

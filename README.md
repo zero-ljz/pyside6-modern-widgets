@@ -1,21 +1,23 @@
 # pyside6-modern-widgets
 
-Focused Windows desktop widgets for PySide6. The package provides frameless
-window chrome, navigation, tabs, and lightweight Windows visual effects while
-retaining familiar Qt widget APIs.
+Cross-platform desktop widgets for PySide6. The package provides frameless
+window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 
 - `ModernWindow`: a lightweight, frameless `QWidget` window with selected
-  `QMainWindow`-compatible methods and Windows 11 effects.
+  `QMainWindow`-compatible methods.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
-- `WindowEffect`: a small Windows DWM effect wrapper.
 
 ## Supported environment
 
-Supports Windows 10 and 11, Python 3.10-3.12, PySide6 6.8.3, and the Fusion
-style. Built-in light and dark themes share the same layout and interaction
-model.
+Supports Windows, macOS, and Linux with Python 3.10-3.12, PySide6 6.8.3, and
+the Fusion style. Window backgrounds, including the custom title bar, use the
+same Qt-painted watercolor themes and behavior on every platform.
+
+Right-clicking the custom title bar opens the native Windows system menu. On
+platforms without an equivalent frameless-window API, a Qt menu provides the
+available restore, minimize, maximize, and close commands.
 
 ## Installation
 
@@ -75,9 +77,6 @@ can be customized with `ModernMetrics` without modifying component internals.
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is
 not supported.
-
-The native window effects target Windows. On unsupported Windows versions or
-when transparency is disabled, the window automatically uses a painted fallback.
 
 Runnable window/navigation and multi-tab examples are available in the
 [`examples`](examples) directory.

@@ -8,5 +8,6 @@
     <file alias="restore.png">resources/icons/icons8-restore-down-48.png</file>
     <file alias="shutdown.png">resources/icons/icons8-shutdown-48.png</file>
     <file alias="menu.png">resources/icons/icons8-menu-48.png</file>
+    <file alias="expand-arrow.png">resources/icons/icons8-expand-arrow-48.png</file>
   </qresource>
 </RCC>

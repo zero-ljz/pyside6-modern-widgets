@@ -13,7 +13,6 @@ from .theme import (
     ThemeManager,
     theme_manager,
 )
-from .window_effect import WindowEffect, WindowStyleState
 
 __all__ = [
     "DARK_THEME",
@@ -27,8 +26,6 @@ __all__ = [
     "NavigationView",
     "TabView",
     "ThemeManager",
-    "WindowEffect",
-    "WindowStyleState",
     "theme_manager",
 ]
 

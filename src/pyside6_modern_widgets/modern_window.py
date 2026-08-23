@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import ctypes
-import sys
-from ctypes import byref
-from ctypes.wintypes import HWND, MSG, RECT
-
 from PySide6.QtCore import QEvent, QPoint, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QBrush,
@@ -14,7 +9,6 @@ from PySide6.QtGui import (
     QIcon,
     QPainter,
     QPainterPath,
-    QPalette,
     QPen,
     QPixmap,
     QRadialGradient,
@@ -36,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import _resources  # noqa: F401
+from . import _resources, _system_menu  # noqa: F401
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -45,12 +39,6 @@ from .theme import (
     theme_manager,
     tinted_icon,
 )
-from .window_effect import WindowEffect, WindowStyleState
-
-WM_NCHITTEST = 0x0084
-WM_SETTINGCHANGE = 0x001A
-HTLEFT, HTRIGHT, HTTOP, HTBOTTOM = 10, 11, 12, 15
-HTTOPLEFT, HTTOPRIGHT, HTBOTTOMLEFT, HTBOTTOMRIGHT = 13, 14, 16, 17
 
 
 def _button_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
@@ -75,15 +63,6 @@ def _menu_bar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
     """
 
 
-def _user32():
-    if sys.platform != "win32":
-        return None
-    try:
-        return ctypes.windll.user32
-    except (AttributeError, OSError):
-        return None
-
-
 def _resource_icon(name: str, theme: ModernTheme) -> QIcon:
     return tinted_icon(
         QIcon(f":/pyside6_modern_widgets/icons/{name}"),
@@ -91,57 +70,42 @@ def _resource_icon(name: str, theme: ModernTheme) -> QIcon:
     )
 
 
-def _native_resize_border_width(hwnd: int) -> int:
-    user32 = _user32()
-    if user32 is None:
-        return 8
-    try:
-        dpi = user32.GetDpiForWindow(HWND(hwnd))
-        frame = user32.GetSystemMetricsForDpi(32, dpi)
-        padding = user32.GetSystemMetricsForDpi(92, dpi)
-        return max(8, int(frame + padding))
-    except (AttributeError, OSError):
-        return 8
-
-
 class BackgroundFrame(QFrame):
-    """Painting surface used by the frameless window."""
+    """Cross-platform watercolor surface used by the frameless window."""
 
     def __init__(
         self,
         parent: QWidget | None = None,
         *,
         theme: ModernTheme,
-        metrics: ModernMetrics,
+        corner_radius: int,
     ) -> None:
         super().__init__(parent)
-        self.parent_window = parent
         self._theme = theme
-        self._metrics = metrics
-        self.setObjectName("backgroundFrame")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.corner_radius = metrics.corner_radius
-        self.use_watercolor = False
+        self._corner_radius = corner_radius
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
         self.update()
 
     def setCornerRadius(self, radius: int) -> None:
-        self.corner_radius = radius
+        self._corner_radius = radius
         self.update()
 
-    def paintEvent(self, event) -> None:
-        if not (self.use_watercolor and self.parent_window and self.parent_window.isActiveWindow()):
-            super().paintEvent(event)
-            return
-
+    def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+
+        border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), self.corner_radius, self.corner_radius)
+        path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
         painter.setClipPath(path)
-        painter.fillRect(self.rect(), QColor(self._theme.watercolor_base))
+        painter.fillPath(path, QColor(self._theme.watercolor_base))
 
         for color, x, y, radius in self._theme.watercolor_spots:
             gradient = QRadialGradient(
@@ -156,10 +120,55 @@ class BackgroundFrame(QFrame):
             painter.drawRect(self.rect())
 
         painter.setClipping(False)
+
+
+class WindowChromeOverlay(QWidget):
+    """Anti-aliased corner clipping and border rendered above window content."""
+
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        theme: ModernTheme,
+        corner_radius: int,
+    ) -> None:
+        super().__init__(parent)
+        self._theme = theme
+        self._corner_radius = corner_radius
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+    def setTheme(self, theme: ModernTheme) -> None:
+        self._theme = theme
+        self.update()
+
+    def setCornerRadius(self, radius: int) -> None:
+        self._corner_radius = radius
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        border_path = QPainterPath()
+        border_path.addRoundedRect(
+            border_rect,
+            self._corner_radius,
+            self._corner_radius,
+        )
+
+        if self._corner_radius > 0:
+            outside_path = QPainterPath()
+            outside_path.addRect(QRectF(self.rect()))
+            outside_path = outside_path.subtracted(border_path)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.fillPath(outside_path, Qt.GlobalColor.transparent)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+
         painter.setPen(QPen(QColor(self._theme.border), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(border_rect, self.corner_radius, self.corner_radius)
+        painter.drawPath(border_path)
 
 
 class CustomTitleBar(QWidget):
@@ -177,7 +186,7 @@ class CustomTitleBar(QWidget):
         self._theme = theme
         self._metrics = metrics
         self.setObjectName("CustomTitleBar")
-        self.setAutoFillBackground(True)
+        self.setAutoFillBackground(False)
         self.drag_start_pos: QPoint | None = None
         self.m_is_pressed = False
         self.m_start_pos: QPoint | None = None
@@ -186,9 +195,6 @@ class CustomTitleBar(QWidget):
 
     def initUI(self) -> None:
         self.setMinimumHeight(self._metrics.title_bar_height)
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Window, Qt.GlobalColor.transparent)
-        self.setPalette(palette)
 
         self.main_layout = QHBoxLayout(self)
         self.main_layout.setContentsMargins(5, 0, 5, 0)
@@ -224,6 +230,12 @@ class CustomTitleBar(QWidget):
         self.right_layout.setSpacing(1)
         self.main_layout.addLayout(self.right_layout)
 
+        self.windowMenu = self._create_window_menu()
+        self.menuButton = self._create_button(
+            _resource_icon("expand-arrow.png", self._theme),
+            "窗口菜单",
+            self.showWindowMenu,
+        )
         self.pinButton = self._create_button(
             _resource_icon("pin.png", self._theme),
             "置顶",
@@ -249,6 +261,7 @@ class CustomTitleBar(QWidget):
         self.closeButton.clicked.connect(self.parent_window.close)
         self.setTheme(self._theme)
         for button in (
+            self.menuButton,
             self.pinButton,
             self.minimizeButton,
             self.maximizeButton,
@@ -269,31 +282,9 @@ class CustomTitleBar(QWidget):
         button.clicked.connect(callback)
         return button
 
-    def setTheme(self, theme: ModernTheme) -> None:
-        self._theme = theme
-        self.setPalette(palette_for_theme(theme, self.palette()))
-        title_font = self.titleLabel.font()
-        title_font.setPointSizeF(max(title_font.pointSizeF(), 10.5))
-        self.titleLabel.setFont(title_font)
-        self.pinButton.setIcon(
-            _resource_icon(
-                "push-pin.png" if self.pinButton.isChecked() else "pin.png",
-                theme,
-            )
-        )
-        self.minimizeButton.setIcon(_resource_icon("minimize.png", theme))
-        self.updateMaximizeIcon(self.parent_window.isMaximized())
-        for button in (self.pinButton, self.minimizeButton, self.maximizeButton):
-            button.setStyleSheet(_button_style(theme, self._metrics))
-        self.closeButton.setStyleSheet(
-            _button_style(theme, self._metrics)
-            + f"QPushButton {{ color: {theme.text}; font-size: 18px; }}"
-            + f"QPushButton:hover {{ color: {theme.danger}; }}"
-        )
-
-    def contextMenuEvent(self, event) -> None:
+    def _create_window_menu(self) -> QMenu:
         menu = QMenu(self)
-        quit_action = menu.addAction(
+        self.quitAction = menu.addAction(
             _resource_icon("shutdown.png", self._theme),
             "退出程序",
         )
@@ -308,8 +299,45 @@ class CustomTitleBar(QWidget):
             if answer == QMessageBox.StandardButton.Yes:
                 QApplication.quit()
 
-        quit_action.triggered.connect(confirm_exit)
-        menu.exec(event.globalPos())
+        self.quitAction.triggered.connect(confirm_exit)
+        return menu
+
+    def showWindowMenu(self) -> None:
+        position = self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height()))
+        self.windowMenu.popup(position)
+
+    def contextMenuEvent(self, event) -> None:
+        self.parent_window.showSystemWindowMenu(event.globalPos())
+        event.accept()
+
+    def setTheme(self, theme: ModernTheme) -> None:
+        self._theme = theme
+        self.setPalette(palette_for_theme(theme, self.palette()))
+        title_font = self.titleLabel.font()
+        title_font.setPointSizeF(max(title_font.pointSizeF(), 10.5))
+        self.titleLabel.setFont(title_font)
+        self.pinButton.setIcon(
+            _resource_icon(
+                "push-pin.png" if self.pinButton.isChecked() else "pin.png",
+                theme,
+            )
+        )
+        self.menuButton.setIcon(_resource_icon("expand-arrow.png", theme))
+        self.quitAction.setIcon(_resource_icon("shutdown.png", theme))
+        self.minimizeButton.setIcon(_resource_icon("minimize.png", theme))
+        self.updateMaximizeIcon(self.parent_window.isMaximized())
+        for button in (
+            self.menuButton,
+            self.pinButton,
+            self.minimizeButton,
+            self.maximizeButton,
+        ):
+            button.setStyleSheet(_button_style(theme, self._metrics))
+        self.closeButton.setStyleSheet(
+            _button_style(theme, self._metrics)
+            + f"QPushButton {{ color: {theme.text}; font-size: 18px; }}"
+            + f"QPushButton:hover {{ color: {theme.danger}; }}"
+        )
 
     def setIcon(self, icon: QIcon) -> None:
         self.iconLabel.setVisible(not icon.isNull())
@@ -338,7 +366,7 @@ class CustomTitleBar(QWidget):
             self.parent_window.showMaximized()
         else:
             self.parent_window.showNormal()
-        self.parent_window.apply_window_effect()
+        self.parent_window.apply_window_style()
 
     def updateMaximizeIcon(self, isMaximized: bool) -> None:
         self.maximizeButton.setIcon(
@@ -414,7 +442,7 @@ class CustomTitleBar(QWidget):
 
 
 class ModernWindow(QWidget):
-    """Frameless Windows shell with themeable modern chrome."""
+    """Cross-platform frameless shell with themeable modern chrome."""
 
     def __init__(
         self,
@@ -428,21 +456,23 @@ class ModernWindow(QWidget):
         self._theme = theme or theme_manager().theme()
         self._metrics = metrics
         theme_manager().themeChanged.connect(self._on_global_theme_changed)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinMaxButtonsHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.effect_manager = WindowEffect()
         self.setMouseTracking(True)
         self.setWindowTitle("基础窗体")
-        self.winId()
-        if self.windowHandle():
-            self.windowHandle().screenChanged.connect(self.on_screen_changed)
+        self._resize_cursor_active = False
 
         self.cornerRadius = metrics.corner_radius
         self._menu_bar: QMenuBar | None = None
         self._status_bar: QStatusBar | None = None
         self.titleBar: CustomTitleBar | None = None
         self.initWindow()
-        self.apply_window_effect()
+        self.apply_window_style()
 
     def initWindow(self) -> None:
         self.root_layout = QVBoxLayout(self)
@@ -451,10 +481,10 @@ class ModernWindow(QWidget):
         self.frame = BackgroundFrame(
             self,
             theme=self._theme,
-            metrics=self._metrics,
+            corner_radius=self.cornerRadius,
         )
         self.frame.setObjectName("backgroundFrame")
-        self.apply_window_effect()
+        self.apply_window_style()
         self.root_layout.addWidget(self.frame)
 
         self.frameLayout = QVBoxLayout(self.frame)
@@ -475,37 +505,56 @@ class ModernWindow(QWidget):
 
         self.content = QWidget(self)
         self.frameLayout.addWidget(self.content)
-
-    def apply_window_effect(self) -> None:
-        state = self.effect_manager.compute_style(
-            is_maximized=self.isMaximized(),
-            is_active=self.isActiveWindow(),
-            hwnd=int(self.winId()),
-            corner_radius=self.cornerRadius,
+        self.chromeOverlay = WindowChromeOverlay(
+            self,
             theme=self._theme,
+            corner_radius=self.cornerRadius,
         )
-        self._apply_style_state(state)
-        self.update()
+        self.chromeOverlay.setGeometry(self.rect())
+        self.chromeOverlay.show()
+        self.chromeOverlay.raise_()
+        self._install_resize_filters(self)
 
-    def _apply_style_state(self, state: WindowStyleState) -> None:
+    def apply_window_style(self) -> None:
+        """Apply the same Qt-painted watercolor style on every platform."""
+        corner_radius = 0 if self.isMaximized() else max(0, self.cornerRadius)
         self.setPalette(palette_for_theme(self._theme, self.palette()))
-        if hasattr(self, "frame") and self.frame:
-            self.frame.use_watercolor = state.use_watercolor
-            self.frame.setCornerRadius(state.corner_radius)
-            self.frame.setTheme(self._theme)
+        self.frame.setTheme(self._theme)
+        self.frame.setCornerRadius(corner_radius)
+        if hasattr(self, "chromeOverlay"):
+            self.chromeOverlay.setTheme(self._theme)
+            self.chromeOverlay.setCornerRadius(corner_radius)
+            self.chromeOverlay.raise_()
         if hasattr(self, "titleBar") and self.titleBar:
             self.titleBar.setTheme(self._theme)
         if self._menu_bar is not None:
             self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
-        self.frame.setStyleSheet(
-            f"""
-            QFrame#backgroundFrame {{
-                border: 1px solid {self._theme.border};
-                border-radius: {state.corner_radius}px;
-                background-color: {state.bg_color};
-            }}
-            """
-        )
+        self.frame.update()
+        self.update()
+
+    def showSystemWindowMenu(self, position: QPoint) -> None:
+        if _system_menu.show_native_system_menu(
+            int(self.winId()),
+            self.mapFromGlobal(position),
+            is_minimized=self.isMinimized(),
+            is_maximized=self.isMaximized(),
+        ):
+            return
+
+        menu = QMenu(self)
+        menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        restore_action = menu.addAction("还原", self.showNormal)
+        minimize_action = menu.addAction("最小化", self.showMinimized)
+        maximize_action = menu.addAction("最大化", self.showMaximized)
+        menu.addSeparator()
+        menu.addAction("关闭", self.close)
+
+        is_normal = not self.isMinimized() and not self.isMaximized()
+        restore_action.setEnabled(not is_normal)
+        minimize_action.setEnabled(not self.isMinimized())
+        maximize_action.setEnabled(not self.isMaximized())
+        self._portable_system_menu = menu
+        menu.popup(position)
 
     def theme(self) -> ModernTheme:
         return self._theme
@@ -513,12 +562,12 @@ class ModernWindow(QWidget):
     def setTheme(self, theme: ModernTheme | None) -> None:
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
-        self.apply_window_effect()
+        self.apply_window_style()
 
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
         if self._uses_global_theme:
             self._theme = theme
-            self.apply_window_effect()
+            self.apply_window_style()
 
     def addTitleBarButton(
         self,
@@ -544,6 +593,7 @@ class ModernWindow(QWidget):
         if callback:
             button.clicked.connect(callback)
         self.titleBar.addCustomWidget(button, align=align)
+        self._install_resize_filters(button)
         return button
 
     def setWindowIcon(self, icon: QIcon | QPixmap) -> None:
@@ -559,13 +609,14 @@ class ModernWindow(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if not event.spontaneous():
-            self.apply_window_effect()
+            self.apply_window_style()
 
     def menuBar(self) -> QMenuBar:
         if self._menu_bar is None:
             self._menu_bar = QMenuBar(self)
             self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
             self.frameLayout.insertWidget(1, self._menu_bar)
+            self._install_resize_filters(self._menu_bar)
         return self._menu_bar
 
     def addToolBar(self, *args) -> QToolBar:
@@ -575,6 +626,7 @@ class ModernWindow(QWidget):
             toolbar = QToolBar(title, self) if title else QToolBar(self)
         toolbar.setStyleSheet("QToolBar { background: transparent; border: none; }")
         self.toolbarLayout.addWidget(toolbar)
+        self._install_resize_filters(toolbar)
         return toolbar
 
     def statusBar(self) -> QStatusBar:
@@ -583,25 +635,23 @@ class ModernWindow(QWidget):
             self._status_bar.setStyleSheet("QStatusBar { background: transparent; border: none; }")
             self._status_bar.setSizeGripEnabled(False)
             self.frameLayout.addWidget(self._status_bar)
+            self._install_resize_filters(self._status_bar)
         return self._status_bar
 
     def setCentralWidget(self, widget: QWidget) -> None:
         self.frameLayout.removeWidget(self.content)
         self.content.deleteLater()
         self.content = widget
-        self.content.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         if self._status_bar:
             index = self.frameLayout.indexOf(self._status_bar)
             self.frameLayout.insertWidget(index, self.content)
         else:
             self.frameLayout.addWidget(self.content)
+        self._install_resize_filters(self.content)
 
     def setCornerRadius(self, radius: int) -> None:
         self.cornerRadius = radius
-        self.apply_window_effect()
-
-    def on_screen_changed(self, _screen) -> None:
-        QTimer.singleShot(0, self.apply_window_effect)
+        self.apply_window_style()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.WindowStateChange:
@@ -609,10 +659,77 @@ class ModernWindow(QWidget):
             if hasattr(self, "titleBar") and self.titleBar:
                 self.titleBar.updateMaximizeIcon(is_maximized)
             if not self.isMinimized():
-                self.apply_window_effect()
-        elif event.type() == QEvent.Type.ActivationChange and not self.isMinimized():
-            self.apply_window_effect()
+                self.apply_window_style()
         super().changeEvent(event)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "chromeOverlay"):
+            self.chromeOverlay.setGeometry(self.rect())
+            self.chromeOverlay.raise_()
+
+    def eventFilter(self, watched, event) -> bool:
+        if isinstance(watched, QWidget) and watched.window() is self:
+            event_type = event.type()
+            if event_type == QEvent.Type.MouseMove:
+                position = watched.mapTo(self, event.position().toPoint())
+                edges = self._resize_edges_at(position)
+                self._set_resize_cursor(edges)
+            elif event_type == QEvent.Type.MouseButtonPress:
+                position = watched.mapTo(self, event.position().toPoint())
+                edges = self._resize_edges_at(position)
+                if event.button() == Qt.MouseButton.LeftButton and edges:
+                    handle = self.windowHandle()
+                    if handle is not None and handle.startSystemResize(edges):
+                        return True
+        return super().eventFilter(watched, event)
+
+    def _install_resize_filters(self, widget: QWidget) -> None:
+        widget.setMouseTracking(True)
+        widget.installEventFilter(self)
+        for child in widget.children():
+            if isinstance(child, QWidget):
+                self._install_resize_filters(child)
+
+    def _resize_edges_at(self, position: QPoint) -> Qt.Edge:
+        if self.isMaximized():
+            return Qt.Edge(0)
+
+        border_width = 8
+        edges = Qt.Edge(0)
+        if position.x() < border_width:
+            edges |= Qt.Edge.LeftEdge
+        elif position.x() >= self.width() - border_width:
+            edges |= Qt.Edge.RightEdge
+        if position.y() < border_width:
+            edges |= Qt.Edge.TopEdge
+        elif position.y() >= self.height() - border_width:
+            edges |= Qt.Edge.BottomEdge
+        return edges
+
+    def _set_resize_cursor(self, edges: Qt.Edge) -> None:
+        if not edges:
+            if self._resize_cursor_active:
+                self.unsetCursor()
+                self._resize_cursor_active = False
+            return
+
+        if edges in (
+            Qt.Edge.TopEdge | Qt.Edge.LeftEdge,
+            Qt.Edge.BottomEdge | Qt.Edge.RightEdge,
+        ):
+            cursor = Qt.CursorShape.SizeFDiagCursor
+        elif edges in (
+            Qt.Edge.TopEdge | Qt.Edge.RightEdge,
+            Qt.Edge.BottomEdge | Qt.Edge.LeftEdge,
+        ):
+            cursor = Qt.CursorShape.SizeBDiagCursor
+        elif edges & (Qt.Edge.LeftEdge | Qt.Edge.RightEdge):
+            cursor = Qt.CursorShape.SizeHorCursor
+        else:
+            cursor = Qt.CursorShape.SizeVerCursor
+        self.setCursor(cursor)
+        self._resize_cursor_active = True
 
     def hideTitleBar(self) -> None:
         if hasattr(self, "titleBar") and self.titleBar:
@@ -620,47 +737,3 @@ class ModernWindow(QWidget):
             self.frameLayout.removeWidget(self.titleBar)
             self.titleBar.deleteLater()
             self.titleBar = None
-
-    def nativeEvent(self, eventType, message):
-        user32 = _user32()
-        if eventType != "windows_generic_MSG" or user32 is None:
-            return super().nativeEvent(eventType, message)
-
-        msg = MSG.from_address(int(message))
-        if msg.message == WM_SETTINGCHANGE:
-            self.apply_window_effect()
-        elif msg.message == WM_NCHITTEST and not self.isMaximized():
-            x_screen = msg.lParam & 0xFFFF
-            y_screen = (msg.lParam >> 16) & 0xFFFF
-            x_screen = x_screen - 0x10000 if x_screen > 0x7FFF else x_screen
-            y_screen = y_screen - 0x10000 if y_screen > 0x7FFF else y_screen
-
-            win_rect = RECT()
-            user32.GetWindowRect(HWND(int(self.winId())), byref(win_rect))
-            local_x = x_screen - win_rect.left
-            local_y = y_screen - win_rect.top
-            width = win_rect.right - win_rect.left
-            height = win_rect.bottom - win_rect.top
-            border_width = _native_resize_border_width(int(self.winId()))
-            left = local_x < border_width
-            right = local_x > width - border_width
-            top = local_y < border_width
-            bottom = local_y > height - border_width
-
-            if top and left:
-                return True, HTTOPLEFT
-            if top and right:
-                return True, HTTOPRIGHT
-            if bottom and left:
-                return True, HTBOTTOMLEFT
-            if bottom and right:
-                return True, HTBOTTOMRIGHT
-            if left:
-                return True, HTLEFT
-            if right:
-                return True, HTRIGHT
-            if top:
-                return True, HTTOP
-            if bottom:
-                return True, HTBOTTOM
-        return super().nativeEvent(eventType, message)

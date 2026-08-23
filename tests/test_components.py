@@ -7,8 +7,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPalette
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QColor, QContextMenuEvent, QFont, QIcon, QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -57,12 +57,13 @@ def test_modern_window_preserves_base_window_api() -> None:
         "restore.png",
         "shutdown.png",
         "menu.png",
+        "expand-arrow.png",
     ):
         icon = QIcon(f":/pyside6_modern_widgets/icons/{icon_name}")
         assert not icon.isNull()
     for attribute in (
-        "effect_manager",
         "frame",
+        "chromeOverlay",
         "frameLayout",
         "toolbarLayout",
         "content",
@@ -72,14 +73,14 @@ def test_modern_window_preserves_base_window_api() -> None:
         assert hasattr(window, attribute)
     for method in (
         "initWindow",
-        "apply_window_effect",
+        "apply_window_style",
         "addTitleBarButton",
         "menuBar",
         "addToolBar",
         "statusBar",
         "setCentralWidget",
         "setCornerRadius",
-        "on_screen_changed",
+        "showSystemWindowMenu",
         "hideTitleBar",
     ):
         assert callable(getattr(window, method))
@@ -96,6 +97,130 @@ def test_modern_window_preserves_base_window_api() -> None:
     assert window.toolbarLayout.indexOf(toolbar) >= 0
 
 
+def test_title_bar_menu_button_and_native_context_menu(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    assert window.titleBar is not None
+    title_bar = window.titleBar
+    assert not title_bar.menuButton.icon().isNull()
+    assert title_bar.main_layout.indexOf(title_bar.menuButton) < title_bar.main_layout.indexOf(
+        title_bar.pinButton
+    )
+    assert "contextMenuEvent" in type(title_bar).__dict__
+    assert [action.text() for action in title_bar.windowMenu.actions()] == ["退出程序"]
+
+    QTest.mouseClick(title_bar.menuButton, Qt.MouseButton.LeftButton)
+    _application().processEvents()
+    assert title_bar.windowMenu.isVisible()
+    title_bar.windowMenu.hide()
+
+    observed: list[QPoint] = []
+    monkeypatch.setattr(
+        ModernWindow,
+        "showSystemWindowMenu",
+        lambda _window, position: observed.append(position),
+    )
+    local_position = QPoint(20, 10)
+    global_position = title_bar.mapToGlobal(local_position)
+    context_event = QContextMenuEvent(
+        QContextMenuEvent.Reason.Mouse,
+        local_position,
+        global_position,
+    )
+    QApplication.sendEvent(title_bar, context_event)
+    assert observed == [global_position]
+
+
+def test_system_menu_has_cross_platform_qt_fallback(monkeypatch) -> None:
+    from pyside6_modern_widgets import _system_menu
+
+    monkeypatch.setattr(_system_menu, "show_native_system_menu", lambda *args, **kwargs: False)
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    window.showSystemWindowMenu(window.mapToGlobal(QPoint(20, 20)))
+    _application().processEvents()
+
+    menu = window._portable_system_menu
+    assert menu.isVisible()
+    assert [action.text() for action in menu.actions() if not action.isSeparator()] == [
+        "还原",
+        "最小化",
+        "最大化",
+        "关闭",
+    ]
+    menu.hide()
+
+
+def test_native_system_menu_rebuilds_stale_windows_menu(monkeypatch) -> None:
+    import ctypes
+
+    from pyside6_modern_widgets import _system_menu
+
+    class StubFunction:
+        def __init__(self, callback):
+            self.callback = callback
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self, *args):
+            return self.callback(*args)
+
+    class StubUser32:
+        def __init__(self) -> None:
+            self.get_system_menu_calls: list[bool] = []
+            self.track_error = 0
+            self.GetSystemMenu = StubFunction(self._get_system_menu)
+            self.EnableMenuItem = StubFunction(lambda *_args: True)
+            self.TrackPopupMenu = StubFunction(self._track_popup_menu)
+            self.SetForegroundWindow = StubFunction(lambda *_args: True)
+            self.GetDpiForWindow = StubFunction(lambda *_args: 144)
+            self.ClientToScreen = StubFunction(self._client_to_screen)
+            self.PostMessageW = StubFunction(lambda *_args: True)
+            self.track_position: tuple[int, int] | None = None
+
+        def _get_system_menu(self, _hwnd, revert) -> int:
+            self.get_system_menu_calls.append(bool(revert))
+            return 0 if revert else 123
+
+        def _track_popup_menu(self, *_args) -> int:
+            self.track_position = (_args[2], _args[3])
+            ctypes.set_last_error(self.track_error)
+            return 0
+
+        @staticmethod
+        def _client_to_screen(_hwnd, point_pointer) -> bool:
+            point_pointer._obj.x += 1000
+            point_pointer._obj.y += 500
+            return True
+
+    user32 = StubUser32()
+    monkeypatch.setattr(_system_menu.sys, "platform", "win32")
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: user32)
+
+    assert _system_menu.show_native_system_menu(
+        100,
+        QPoint(20, 20),
+        is_minimized=False,
+        is_maximized=False,
+    )
+    assert user32.get_system_menu_calls == [True, False]
+    assert user32.track_position == (1030, 530)
+
+    user32.track_error = 1401
+    assert not _system_menu.show_native_system_menu(
+        100,
+        QPoint(20, 20),
+        is_minimized=False,
+        is_maximized=False,
+    )
+
+
 def test_modern_window_does_not_overwrite_consumer_styles() -> None:
     window = ModernWindow()
     content = QLabel("content")
@@ -103,7 +228,7 @@ def test_modern_window_does_not_overwrite_consumer_styles() -> None:
     window.setCentralWidget(content)
     window.setStyleSheet("ModernWindow { background: #ABCDEF; }")
 
-    window.apply_window_effect()
+    window.apply_window_style()
 
     assert window.styleSheet() == "ModernWindow { background: #ABCDEF; }"
     assert content.styleSheet() == "QLabel { color: #123456; }"
@@ -307,12 +432,75 @@ def test_theme_painter_colors_are_valid(theme) -> None:
     for color in (
         theme.text,
         theme.text_disabled,
+        theme.surface,
         theme.control_hover,
         theme.control_pressed,
-        theme.surface_translucent,
+        theme.watercolor_base,
         *(spot[0] for spot in theme.watercolor_spots),
     ):
         assert QColor(color).isValid(), color
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_modern_window_uses_cross_platform_watercolor(theme) -> None:
+    window = ModernWindow(theme=theme)
+    window.resize(640, 480)
+    window.apply_window_style()
+
+    assert window.frame._theme is theme
+    assert QColor(theme.watercolor_base).alpha() == 255
+    assert window.titleBar is not None
+    assert not window.titleBar.autoFillBackground()
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_modern_window_watercolor_covers_title_bar_and_preserves_round_corners(theme) -> None:
+    window = ModernWindow(theme=theme)
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    image = window.grab().toImage()
+    assert image.pixelColor(1, 1).alpha() < 128
+    assert image.pixelColor(window.width() - 2, 1).alpha() < 128
+    assert window.titleBar is not None
+    title_center = window.titleBar.geometry().center()
+    assert image.pixelColor(title_center) != QColor(theme.surface)
+
+
+def test_opaque_tab_view_preserves_window_bottom_corners_and_border() -> None:
+    window = ModernWindow(theme=LIGHT_THEME)
+    tabs = TabView(theme=LIGHT_THEME)
+    tabs.addTab(QLabel("page"), "Tab")
+    window.setCentralWidget(tabs)
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    image = window.grab().toImage()
+    assert image.pixelColor(0, window.height() - 1).alpha() == 0
+    assert image.pixelColor(window.width() - 1, window.height() - 1).alpha() == 0
+    assert image.pixelColor(window.width() // 2, window.height() - 1) == QColor(LIGHT_THEME.border)
+    assert image.pixelColor(0, window.height() // 2) == QColor(LIGHT_THEME.border)
+
+    assert window.frame.mask().isEmpty()
+    corner_alphas = {
+        image.pixelColor(x, window.height() - y - 1).alpha()
+        for x in range(window.cornerRadius + 2)
+        for y in range(window.cornerRadius + 2)
+    }
+    assert any(0 < alpha < 255 for alpha in corner_alphas)
+
+
+def test_modern_window_resize_edges_are_platform_independent() -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+
+    assert window._resize_edges_at(window.rect().topLeft()) == (Qt.Edge.TopEdge | Qt.Edge.LeftEdge)
+    assert window._resize_edges_at(window.rect().center()) == Qt.Edge(0)
+    assert window._resize_edges_at(window.rect().bottomRight()) == (
+        Qt.Edge.BottomEdge | Qt.Edge.RightEdge
+    )
 
 
 def test_tab_view_default_visual_colors() -> None:
