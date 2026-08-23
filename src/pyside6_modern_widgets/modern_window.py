@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QBrush,
@@ -13,6 +15,7 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QRadialGradient,
+    QWindow,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -470,6 +473,13 @@ class ModernWindow(QWidget):
         self._system_menu_operation: str | None = None
         self._system_menu_start_cursor = QPoint()
         self._system_menu_start_geometry = QRect()
+        self._screen_change_window: QWindow | None = None
+        self._surface_refresh_timer = QTimer(self)
+        self._surface_refresh_timer.setSingleShot(True)
+        self._surface_refresh_timer.timeout.connect(self._refresh_window_surface)
+        self._surface_settle_timer = QTimer(self)
+        self._surface_settle_timer.setSingleShot(True)
+        self._surface_settle_timer.timeout.connect(self._refresh_window_surface)
 
         self.cornerRadius = metrics.corner_radius
         self._menu_bar: QMenuBar | None = None
@@ -672,8 +682,48 @@ class ModernWindow(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        self._connect_screen_change_signal()
         if not event.spontaneous():
             self.apply_window_style()
+        self._schedule_surface_refresh()
+
+    def event(self, event) -> bool:
+        handled = super().event(event)
+        if event.type() == QEvent.Type.DevicePixelRatioChange:
+            self._schedule_surface_refresh()
+        return handled
+
+    def _connect_screen_change_signal(self) -> None:
+        window_handle = self.windowHandle()
+        if window_handle is None or window_handle is self._screen_change_window:
+            return
+        self._screen_change_window = window_handle
+        window_handle.screenChanged.connect(self._handle_screen_changed)
+
+    def _handle_screen_changed(self, _screen) -> None:
+        self._schedule_surface_refresh()
+
+    def _schedule_surface_refresh(self) -> None:
+        if not hasattr(self, "_surface_refresh_timer"):
+            return
+        self._surface_refresh_timer.start(0)
+        self._surface_settle_timer.start(100)
+
+    def _refresh_window_surface(self) -> None:
+        if not self.isVisible() or self.isMinimized():
+            return
+        if hasattr(self, "chromeOverlay"):
+            self.chromeOverlay.setGeometry(self.rect())
+            self.chromeOverlay.raise_()
+        self.update()
+        widgets = cast(list[QWidget], self.findChildren(QWidget))
+        for widget in widgets:
+            if widget.isVisible():
+                widget.update()
+        self.repaint()
+        window_handle = self.windowHandle()
+        if window_handle is not None:
+            window_handle.requestUpdate()
 
     def menuBar(self) -> QMenuBar:
         if self._menu_bar is None:
@@ -731,6 +781,11 @@ class ModernWindow(QWidget):
         if hasattr(self, "chromeOverlay"):
             self.chromeOverlay.setGeometry(self.rect())
             self.chromeOverlay.raise_()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        if hasattr(self, "_surface_settle_timer"):
+            self._surface_settle_timer.start(100)
 
     def eventFilter(self, watched, event) -> bool:
         if (

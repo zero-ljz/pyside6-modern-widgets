@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtCore import QEvent, QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QFont, QIcon, QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -603,6 +603,53 @@ def test_modern_window_resize_edges_are_platform_independent() -> None:
     assert window._resize_edges_at(window.rect().bottomRight()) == (
         Qt.Edge.BottomEdge | Qt.Edge.RightEdge
     )
+
+
+def test_modern_window_refreshes_entire_surface_after_screen_change() -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    assert window._screen_change_window is window.windowHandle()
+    window.chromeOverlay.setGeometry(0, 0, 1, 1)
+    window._handle_screen_changed(window.windowHandle().screen())
+    assert window._surface_refresh_timer.isActive()
+    assert window._surface_settle_timer.isActive()
+
+    _application().processEvents()
+    assert window.chromeOverlay.geometry() == window.rect()
+    window._surface_settle_timer.stop()
+
+
+def test_modern_window_refreshes_surface_after_device_pixel_ratio_change() -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    window._surface_refresh_timer.stop()
+    window._surface_settle_timer.stop()
+    QApplication.sendEvent(window, QEvent(QEvent.Type.DevicePixelRatioChange))
+
+    assert window._surface_refresh_timer.isActive()
+    assert window._surface_settle_timer.isActive()
+    window._surface_refresh_timer.stop()
+    window._surface_settle_timer.stop()
+
+
+def test_modern_window_refreshes_surface_after_moving_stops() -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    window._surface_settle_timer.stop()
+    window.move(window.pos() + QPoint(20, 20))
+    _application().processEvents()
+
+    assert window._surface_settle_timer.isActive()
+    window._surface_settle_timer.stop()
 
 
 def test_tab_view_default_visual_colors() -> None:
