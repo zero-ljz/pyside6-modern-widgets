@@ -18,8 +18,8 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QAbstractButton,
     QApplication,
-    QFrame,
     QHBoxLayout,
+    QProxyStyle,
     QSizePolicy,
     QStackedWidget,
     QStyle,
@@ -36,6 +36,13 @@ from .theme import (
     palette_for_theme,
     theme_manager,
 )
+
+
+class _ModernTabBarStyle(QProxyStyle):
+    def pixelMetric(self, metric, option=None, widget=None) -> int:
+        if metric == QStyle.PixelMetric.PM_TabBarScrollButtonWidth:
+            return 28
+        return super().pixelMetric(metric, option, widget)
 
 
 class _TabCloseButton(QAbstractButton):
@@ -111,6 +118,8 @@ class _ModernTabBar(QTabBar):
         self._metrics = metrics
         self._hovered_index = -1
         self._keyboard_focus_visible = False
+        self._modern_style = _ModernTabBarStyle()
+        self.setStyle(self._modern_style)
         self.setObjectName("ModernTabBar")
         self.setAccessibleName("Document tabs")
         self.setDrawBase(False)
@@ -123,15 +132,81 @@ class _ModernTabBar(QTabBar):
         self.setTabsClosable(True)
         self.setUsesScrollButtons(True)
         self.setMinimumHeight(self._tab_height() + 2)
+        self._configure_scroll_buttons()
         self.currentChanged.connect(self._update_close_buttons)
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
+        self._configure_scroll_buttons()
         for index in range(self.count()):
             button = self._close_button(index)
             if button is not None:
                 button.setTheme(theme)
         self.update()
+
+    def _configure_scroll_buttons(self) -> None:
+        labels = {
+            "ScrollLeftButton": "Previous tabs",
+            "ScrollRightButton": "Next tabs",
+        }
+        for object_name, label in labels.items():
+            button = self.findChild(QToolButton, object_name)
+            if button is not None:
+                button.installEventFilter(self)
+                button.setAccessibleName(label)
+                button.setToolTip(label)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                button.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+                button.update()
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            event.type() == QEvent.Type.Paint
+            and isinstance(watched, QToolButton)
+            and watched.objectName() in ("ScrollLeftButton", "ScrollRightButton")
+        ):
+            self._paint_scroll_button(watched)
+            return True
+        return super().eventFilter(watched, event)
+
+    def _paint_scroll_button(self, button: QToolButton) -> None:
+        painter = QPainter(button)
+        rect = QRectF(button.rect())
+        painter.fillRect(button.rect(), QColor(self._theme.tab_bar))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        if button.isEnabled() and button.underMouse():
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(
+                QColor(
+                    self._theme.control_pressed if button.isDown() else self._theme.control_hover
+                )
+            )
+            painter.drawRoundedRect(
+                rect.adjusted(3, 5, -3, -5),
+                self._metrics.control_radius,
+                self._metrics.control_radius,
+            )
+
+        color = self._theme.text if button.isEnabled() else self._theme.text_disabled
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(
+            QPen(
+                QColor(color),
+                1.5,
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+        )
+        center = rect.center()
+        direction = -1 if button.objectName() == "ScrollLeftButton" else 1
+        path = QPainterPath()
+        path.moveTo(center.x() - direction * 2, center.y() - 4)
+        path.lineTo(center.x() + direction * 2, center.y())
+        path.lineTo(center.x() - direction * 2, center.y() + 4)
+        painter.drawPath(path)
 
     def tabSizeHint(self, index: int) -> QSize:
         count = max(1, self.count())
@@ -187,6 +262,15 @@ class _ModernTabBar(QTabBar):
         self.update()
         super().mousePressEvent(event)
 
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.MiddleButton and self.tabsClosable():
+            index = self.tabAt(event.position().toPoint())
+            if index >= 0:
+                self.tabCloseRequested.emit(index)
+                event.accept()
+                return
+        super().mouseReleaseEvent(event)
+
     def keyPressEvent(self, event) -> None:
         self._keyboard_focus_visible = True
         self.update()
@@ -217,6 +301,22 @@ class _ModernTabBar(QTabBar):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor(self._theme.tab_bar))
 
+        scroll_buttons = [
+            button
+            for object_name in ("ScrollLeftButton", "ScrollRightButton")
+            if (button := self.findChild(QToolButton, object_name)) is not None
+        ]
+        overflowed = self.count() > 0 and (
+            self.tabRect(0).left() < 0 or self.tabRect(self.count() - 1).right() >= self.width()
+        )
+        painter.save()
+        if scroll_buttons and (overflowed or any(button.isVisible() for button in scroll_buttons)):
+            controls_left = min(button.geometry().left() for button in scroll_buttons)
+            painter.setClipRect(
+                QRectF(0, 0, controls_left, self.height()),
+                Qt.ClipOperation.IntersectClip,
+            )
+
         for index in range(self.count()):
             rect = self.tabRect(index)
             selected = index == self.currentIndex()
@@ -244,7 +344,7 @@ class _ModernTabBar(QTabBar):
                 painter.setPen(QPen(QColor(self._theme.border), 1))
                 painter.drawPath(path)
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRect(0, self.height() - 2, self.width(), 2)
+                painter.drawRect(rect.left(), self.height() - 2, rect.width(), 2)
             elif hovered and enabled:
                 painter.setBrush(QColor(self._theme.tab_hover))
                 painter.setPen(Qt.PenStyle.NoPen)
@@ -271,6 +371,7 @@ class _ModernTabBar(QTabBar):
                     self._metrics.control_radius,
                     self._metrics.control_radius,
                 )
+        painter.restore()
 
     def _paint_tab_label(
         self,
@@ -413,11 +514,6 @@ class TabView(QWidget):
         self._add_button.clicked.connect(self.addTabClicked.emit)
         tab_layout.addWidget(self._add_button)
         layout.addWidget(self._tab_row)
-
-        self._divider = QFrame(self)
-        self._divider.setObjectName("ModernTabDivider")
-        self._divider.setFixedHeight(1)
-        layout.addWidget(self._divider)
 
         self._stack = QStackedWidget(self)
         self._stack.setObjectName("ModernTabStack")
@@ -638,9 +734,6 @@ class TabView(QWidget):
                 border: 1px solid {self._theme.focus};
             }}
             """
-        )
-        self._divider.setStyleSheet(
-            f"QFrame#ModernTabDivider {{ background: {self._theme.border}; border: none; }}"
         )
         self._stack.setStyleSheet(
             f"QStackedWidget#ModernTabStack {{ background: {self._theme.surface}; }}"

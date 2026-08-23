@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QTabBar,
     QTabWidget,
+    QToolButton,
     QWidget,
 )
 
@@ -620,6 +621,90 @@ def test_tab_view_keyboard_disabled_state_and_page_moves() -> None:
     tabs.tabBar().moveTab(2, 0)
     assert tabs.widget(0) is pages[2]
     assert tabs.currentWidget() is current_page
+
+
+def test_tab_view_middle_click_requests_tab_close() -> None:
+    tabs = TabView()
+    tabs.addTab(QLabel("first"), "First")
+    tabs.addTab(QLabel("second"), "Second")
+    tabs.resize(600, 300)
+    tabs.show()
+    _application().processEvents()
+    observed: list[int] = []
+    tabs.tabCloseRequested.connect(observed.append)
+
+    QTest.mouseClick(
+        tabs.tabBar(),
+        Qt.MouseButton.MiddleButton,
+        pos=tabs.tabBar().tabRect(1).center(),
+    )
+
+    assert observed == [1]
+
+
+def test_tab_view_overflow_buttons_use_modern_scroll_controls() -> None:
+    tabs = TabView(theme=LIGHT_THEME)
+    for index in range(8):
+        tabs.addTab(QLabel(str(index)), f"Document {index + 1}")
+    tabs.resize(460, 300)
+    tabs.show()
+    _application().processEvents()
+
+    tab_bar = tabs.tabBar()
+    left = tab_bar.findChild(QToolButton, "ScrollLeftButton")
+    right = tab_bar.findChild(QToolButton, "ScrollRightButton")
+
+    assert left is not None
+    assert right is not None
+    assert left.isVisible()
+    assert right.isVisible()
+    assert left.width() == 28
+    assert right.width() == 28
+    assert left.focusPolicy() == Qt.FocusPolicy.NoFocus
+    assert right.focusPolicy() == Qt.FocusPolicy.NoFocus
+    assert left.accessibleName() == "Previous tabs"
+    assert right.accessibleName() == "Next tabs"
+    assert left.grab().toImage().pixelColor(0, 0) == QColor(LIGHT_THEME.tab_bar)
+    right_image = right.grab().toImage()
+    assert right_image.pixelColor(0, 0) == QColor(LIGHT_THEME.tab_bar)
+    assert all(
+        right_image.pixelColor(right_image.width() - 1, y) == QColor(LIGHT_THEME.tab_bar)
+        for y in range(right_image.height())
+    )
+
+    right.hide()
+    tab_bar.update()
+    _application().processEvents()
+    assert tab_bar.grab().toImage().pixelColor(
+        tab_bar.width() - 1, tab_bar.height() // 2
+    ) == QColor(LIGHT_THEME.tab_bar)
+    right.show()
+
+    assert not left.isEnabled()
+    assert right.isEnabled()
+    QTest.mouseClick(right, Qt.MouseButton.LeftButton)
+    _application().processEvents()
+    assert left.isEnabled()
+    assert not right.hasFocus()
+
+
+def test_tab_view_has_no_divider_below_tab_row() -> None:
+    tabs = TabView(theme=LIGHT_THEME)
+    tabs.addTab(QLabel("first"), "First")
+    tabs.addTab(QLabel("second"), "Second")
+    tabs.resize(600, 300)
+    tabs.show()
+    _application().processEvents()
+
+    tab_bar = tabs.tabBar()
+    image = tab_bar.grab().toImage()
+    bottom = tab_bar.height() - 1
+
+    assert tabs.findChild(QWidget, "ModernTabDivider") is None
+    assert image.pixelColor(tab_bar.tabRect(0).center().x(), bottom) == QColor(
+        LIGHT_THEME.tab_selected
+    )
+    assert image.pixelColor(tab_bar.tabRect(1).center().x(), bottom) == QColor(LIGHT_THEME.tab_bar)
 
 
 def test_tab_view_rejects_removed_reverse_icon_signature() -> None:
