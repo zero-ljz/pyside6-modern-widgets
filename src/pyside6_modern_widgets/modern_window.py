@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, QRectF, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QBrush,
     QColor,
+    QCursor,
     QIcon,
     QPainter,
     QPainterPath,
@@ -466,6 +467,9 @@ class ModernWindow(QWidget):
         self.setMouseTracking(True)
         self.setWindowTitle("基础窗体")
         self._resize_cursor_active = False
+        self._system_menu_operation: str | None = None
+        self._system_menu_start_cursor = QPoint()
+        self._system_menu_start_geometry = QRect()
 
         self.cornerRadius = metrics.corner_radius
         self._menu_bar: QMenuBar | None = None
@@ -538,6 +542,7 @@ class ModernWindow(QWidget):
             self.mapFromGlobal(position),
             is_minimized=self.isMinimized(),
             is_maximized=self.isMaximized(),
+            command_handler=self._handle_native_system_menu_command,
         ):
             return
 
@@ -555,6 +560,65 @@ class ModernWindow(QWidget):
         maximize_action.setEnabled(not self.isMaximized())
         self._portable_system_menu = menu
         menu.popup(position)
+
+    def _handle_native_system_menu_command(self, command: int) -> bool:
+        command &= 0xFFF0
+        if command == _system_menu.SC_MOVE:
+            return self._start_system_menu_operation("move")
+        if command == _system_menu.SC_SIZE:
+            return self._start_system_menu_operation("size")
+
+        handlers = {
+            _system_menu.SC_MINIMIZE: self.showMinimized,
+            _system_menu.SC_MAXIMIZE: self.showMaximized,
+            _system_menu.SC_RESTORE: self.showNormal,
+        }
+        handler = handlers.get(command)
+        if handler is None:
+            return False
+        handler()
+        return True
+
+    def _start_system_menu_operation(self, operation: str) -> bool:
+        if self.isMaximized() or operation not in {"move", "size"}:
+            return False
+        self._system_menu_operation = operation
+        self._system_menu_start_cursor = QCursor.pos()
+        self._system_menu_start_geometry = self.geometry()
+        cursor = (
+            Qt.CursorShape.SizeAllCursor if operation == "move" else Qt.CursorShape.SizeFDiagCursor
+        )
+        self.setCursor(cursor)
+        self.grabMouse()
+        self.grabKeyboard()
+        return True
+
+    def _update_system_menu_operation(self, global_position: QPoint) -> None:
+        delta = global_position - self._system_menu_start_cursor
+        geometry = QRect(self._system_menu_start_geometry)
+        if self._system_menu_operation == "move":
+            geometry.translate(delta)
+        elif self._system_menu_operation == "size":
+            geometry.setWidth(
+                max(self.minimumWidth(), min(self.maximumWidth(), geometry.width() + delta.x()))
+            )
+            geometry.setHeight(
+                max(
+                    self.minimumHeight(),
+                    min(self.maximumHeight(), geometry.height() + delta.y()),
+                )
+            )
+        self.setGeometry(geometry)
+
+    def _finish_system_menu_operation(self, *, cancel: bool) -> None:
+        if self._system_menu_operation is None:
+            return
+        if cancel:
+            self.setGeometry(self._system_menu_start_geometry)
+        self._system_menu_operation = None
+        self.releaseMouse()
+        self.releaseKeyboard()
+        self.unsetCursor()
 
     def theme(self) -> ModernTheme:
         return self._theme
@@ -669,6 +733,27 @@ class ModernWindow(QWidget):
             self.chromeOverlay.raise_()
 
     def eventFilter(self, watched, event) -> bool:
+        if (
+            self._system_menu_operation is not None
+            and isinstance(watched, QWidget)
+            and watched.window() is self
+        ):
+            event_type = event.type()
+            if event_type == QEvent.Type.MouseMove:
+                self._update_system_menu_operation(event.globalPosition().toPoint())
+                return True
+            if event_type == QEvent.Type.MouseButtonPress:
+                cancel = event.button() != Qt.MouseButton.LeftButton
+                self._finish_system_menu_operation(cancel=cancel)
+                return True
+            if event_type == QEvent.Type.KeyPress and event.key() in (
+                Qt.Key.Key_Escape,
+                Qt.Key.Key_Enter,
+                Qt.Key.Key_Return,
+            ):
+                self._finish_system_menu_operation(cancel=event.key() == Qt.Key.Key_Escape)
+                return True
+
         if isinstance(watched, QWidget) and watched.window() is self:
             event_type = event.type()
             if event_type == QEvent.Type.MouseMove:

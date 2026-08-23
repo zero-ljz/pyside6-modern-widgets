@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QFont, QIcon, QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -175,13 +175,15 @@ def test_native_system_menu_rebuilds_stale_windows_menu(monkeypatch) -> None:
         def __init__(self) -> None:
             self.get_system_menu_calls: list[bool] = []
             self.track_error = 0
+            self.track_command = 0
             self.GetSystemMenu = StubFunction(self._get_system_menu)
             self.EnableMenuItem = StubFunction(lambda *_args: True)
             self.TrackPopupMenu = StubFunction(self._track_popup_menu)
             self.SetForegroundWindow = StubFunction(lambda *_args: True)
             self.GetDpiForWindow = StubFunction(lambda *_args: 144)
             self.ClientToScreen = StubFunction(self._client_to_screen)
-            self.PostMessageW = StubFunction(lambda *_args: True)
+            self.PostMessageW = StubFunction(self._post_message)
+            self.posted_messages: list[tuple[int, int]] = []
             self.track_position: tuple[int, int] | None = None
 
         def _get_system_menu(self, _hwnd, revert) -> int:
@@ -191,7 +193,11 @@ def test_native_system_menu_rebuilds_stale_windows_menu(monkeypatch) -> None:
         def _track_popup_menu(self, *_args) -> int:
             self.track_position = (_args[2], _args[3])
             ctypes.set_last_error(self.track_error)
-            return 0
+            return self.track_command
+
+        def _post_message(self, _hwnd, message, command, _lparam) -> bool:
+            self.posted_messages.append((message, command))
+            return True
 
         @staticmethod
         def _client_to_screen(_hwnd, point_pointer) -> bool:
@@ -212,6 +218,19 @@ def test_native_system_menu_rebuilds_stale_windows_menu(monkeypatch) -> None:
     assert user32.get_system_menu_calls == [True, False]
     assert user32.track_position == (1030, 530)
 
+    handled_commands: list[int] = []
+    user32.track_command = _system_menu.SC_RESTORE
+    assert _system_menu.show_native_system_menu(
+        100,
+        QPoint(20, 20),
+        is_minimized=False,
+        is_maximized=True,
+        command_handler=lambda command: handled_commands.append(command) or True,
+    )
+    assert handled_commands == [_system_menu.SC_RESTORE]
+    assert all(message != 0x0112 for message, _command in user32.posted_messages)
+
+    user32.track_command = 0
     user32.track_error = 1401
     assert not _system_menu.show_native_system_menu(
         100,
@@ -219,6 +238,89 @@ def test_native_system_menu_rebuilds_stale_windows_menu(monkeypatch) -> None:
         is_minimized=False,
         is_maximized=False,
     )
+
+
+def test_native_system_menu_restore_uses_qt_window_state(monkeypatch) -> None:
+    from pyside6_modern_widgets import _system_menu
+
+    def choose_restore(*_args, command_handler, **_kwargs) -> bool:
+        assert command_handler(_system_menu.SC_RESTORE)
+        return True
+
+    monkeypatch.setattr(_system_menu, "show_native_system_menu", choose_restore)
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    assert window.titleBar is not None
+    title_bar = window.titleBar
+    QTest.mouseDClick(
+        title_bar,
+        Qt.MouseButton.LeftButton,
+        pos=title_bar.titleLabel.geometry().center(),
+    )
+    _application().processEvents()
+    assert window.isMaximized()
+
+    window.showSystemWindowMenu(window.mapToGlobal(QPoint(20, 20)))
+    _application().processEvents()
+    assert not window.isMaximized()
+
+    QTest.mouseClick(title_bar.maximizeButton, Qt.MouseButton.LeftButton)
+    _application().processEvents()
+    assert window.isMaximized()
+
+    window.showSystemWindowMenu(window.mapToGlobal(QPoint(20, 20)))
+    _application().processEvents()
+    assert not window.isMaximized()
+
+
+def test_native_system_menu_maximize_can_be_restored_by_title_bar_button(monkeypatch) -> None:
+    from pyside6_modern_widgets import _system_menu
+
+    def choose_maximize(*_args, command_handler, **_kwargs) -> bool:
+        assert command_handler(_system_menu.SC_MAXIMIZE)
+        return True
+
+    monkeypatch.setattr(_system_menu, "show_native_system_menu", choose_maximize)
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    assert window.titleBar is not None
+    window.showSystemWindowMenu(window.mapToGlobal(QPoint(20, 20)))
+    _application().processEvents()
+    assert window.isMaximized()
+
+    QTest.mouseClick(window.titleBar.maximizeButton, Qt.MouseButton.LeftButton)
+    _application().processEvents()
+    assert not window.isMaximized()
+
+
+def test_native_system_menu_move_and_size_use_qt_system_operations(monkeypatch) -> None:
+    from pyside6_modern_widgets import _system_menu
+
+    window = ModernWindow()
+    window.setGeometry(100, 100, 640, 480)
+    monkeypatch.setattr(window, "grabMouse", lambda: None)
+    monkeypatch.setattr(window, "grabKeyboard", lambda: None)
+    monkeypatch.setattr(window, "releaseMouse", lambda: None)
+    monkeypatch.setattr(window, "releaseKeyboard", lambda: None)
+
+    assert window._handle_native_system_menu_command(_system_menu.SC_MOVE)
+    start_cursor = window._system_menu_start_cursor
+    window._update_system_menu_operation(start_cursor + QPoint(40, 25))
+    assert window.geometry() == QRect(140, 125, 640, 480)
+    window._finish_system_menu_operation(cancel=False)
+
+    assert window._handle_native_system_menu_command(_system_menu.SC_SIZE)
+    start_cursor = window._system_menu_start_cursor
+    window._update_system_menu_operation(start_cursor + QPoint(60, 35))
+    assert window.geometry() == QRect(140, 125, 700, 515)
+    window._finish_system_menu_operation(cancel=True)
+    assert window.geometry() == QRect(140, 125, 640, 480)
 
 
 def test_modern_window_does_not_overwrite_consumer_styles() -> None:

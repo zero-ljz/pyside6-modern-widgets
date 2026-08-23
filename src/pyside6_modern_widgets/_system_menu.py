@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from PySide6.QtCore import QPoint
+
+
+SC_SIZE = 0xF000
+SC_MOVE = 0xF010
+SC_MINIMIZE = 0xF020
+SC_MAXIMIZE = 0xF030
+SC_RESTORE = 0xF120
 
 
 def show_native_system_menu(
@@ -15,6 +23,7 @@ def show_native_system_menu(
     *,
     is_minimized: bool,
     is_maximized: bool,
+    command_handler: Callable[[int], bool] | None = None,
 ) -> bool:
     """Show the owning window's native system menu when the platform provides one."""
     if sys.platform != "win32":
@@ -73,11 +82,11 @@ def show_native_system_menu(
         mf_bycommand = 0x0000
         mf_enabled = 0x0000
         mf_grayed = 0x0001
-        sc_size = 0xF000
-        sc_move = 0xF010
-        sc_minimize = 0xF020
-        sc_maximize = 0xF030
-        sc_restore = 0xF120
+        sc_size = SC_SIZE
+        sc_move = SC_MOVE
+        sc_minimize = SC_MINIMIZE
+        sc_maximize = SC_MAXIMIZE
+        sc_restore = SC_RESTORE
 
         def set_enabled(command: int, enabled: bool) -> None:
             state = mf_enabled if enabled else mf_grayed
@@ -107,7 +116,7 @@ def show_native_system_menu(
         )
         if not command and ctypes.get_last_error():
             return False
-        if command:
+        if command and not (command_handler and command_handler(command)):
             user32.PostMessageW(window_handle, wm_syscommand, command, 0)
         user32.PostMessageW(window_handle, wm_null, 0, 0)
         return True
