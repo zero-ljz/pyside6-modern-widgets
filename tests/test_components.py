@@ -399,11 +399,34 @@ def test_windows_native_show_restores_qt_visibility(
     window.close()
 
 
+def test_non_windows_window_state_stays_managed_by_qt(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+    normal_geometry = window.geometry()
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
+
+    window.showMaximized()
+    _application().processEvents()
+
+    assert window.isMaximized()
+    assert window._normal_geometry_before_maximize is None
+
+    window.showNormal()
+    _application().processEvents()
+
+    assert not window.isMaximized()
+    assert window.geometry() == normal_geometry
+    window.close()
+
+
 def test_screen_change_preserves_stable_normal_size(monkeypatch) -> None:
     window = ModernWindow()
     window.resize(900, 600)
     window._normal_logical_size = QSize(900, 600)
     window._screen_device_pixel_ratio = 2.0
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
     monkeypatch.setattr(window._screen_resize_correction_timer, "start", lambda _delay: None)
 
     class ScreenStub:
@@ -433,6 +456,43 @@ def test_screen_change_preserves_stable_normal_size(monkeypatch) -> None:
     window._correct_screen_change_size()
 
     assert window.size() == QSize(1200, 800)
+
+
+def test_non_windows_screen_change_does_not_force_cached_size(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(900, 600)
+    window._normal_logical_size = QSize(900, 600)
+    window._screen_device_pixel_ratio = 2.0
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
+
+    class ScreenStub:
+        @staticmethod
+        def devicePixelRatio() -> float:
+            return 1.0
+
+    window._handle_screen_changed(ScreenStub())
+    window.resize(1200, 800)
+    window._correct_screen_change_size()
+
+    assert not window._screen_change_in_progress
+    assert window.size() == QSize(1200, 800)
+
+
+def test_system_resize_tracking_clears_after_native_mouse_loop(monkeypatch) -> None:
+    window = ModernWindow()
+    window._begin_system_resize_tracking()
+
+    assert window._system_resize_active
+    assert window._system_resize_watch_timer.isActive()
+
+    monkeypatch.setattr(window, "_has_pressed_mouse_buttons", lambda: True)
+    window._poll_system_resize_state()
+    assert window._system_resize_active
+
+    monkeypatch.setattr(window, "_has_pressed_mouse_buttons", lambda: False)
+    window._poll_system_resize_state()
+    assert not window._system_resize_active
+    assert not window._system_resize_watch_timer.isActive()
 
 
 def test_native_system_menu_move_and_size_use_qt_system_operations(monkeypatch) -> None:
@@ -984,6 +1044,19 @@ def test_modern_window_refreshes_entire_surface_after_screen_change() -> None:
     _application().processEvents()
     assert window.chromeOverlay.geometry() == window.rect()
     window._surface_settle_timer.stop()
+
+
+def test_modern_window_surface_refresh_is_asynchronous(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+    repaint_calls: list[bool] = []
+    monkeypatch.setattr(window, "repaint", lambda: repaint_calls.append(True))
+
+    window._refresh_window_surface()
+
+    assert repaint_calls == []
 
 
 def test_modern_window_refreshes_surface_after_device_pixel_ratio_change() -> None:

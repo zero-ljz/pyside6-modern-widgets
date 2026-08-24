@@ -485,6 +485,9 @@ class ModernWindow(QWidget):
         self._normal_logical_size = QSize(self.size())
         self._screen_change_in_progress = False
         self._system_resize_active = False
+        self._system_resize_watch_timer = QTimer(self)
+        self._system_resize_watch_timer.setInterval(50)
+        self._system_resize_watch_timer.timeout.connect(self._poll_system_resize_state)
         self._screen_resize_correction_timer = QTimer(self)
         self._screen_resize_correction_timer.setSingleShot(True)
         self._screen_resize_correction_timer.timeout.connect(self._correct_screen_change_size)
@@ -515,28 +518,29 @@ class ModernWindow(QWidget):
         return self._is_native_maximized()
 
     def showMaximized(self) -> None:
+        if not self._uses_windows_window_state():
+            QWidget.showMaximized(self)
+            return
         if self._normal_geometry_before_maximize is None and not self.isMaximized():
             normal_geometry = self.geometry()
             if normal_geometry.isValid():
                 self._normal_geometry_before_maximize = QRect(normal_geometry)
-        if self._uses_windows_window_state():
-            if self.isHidden():
-                QWidget.show(self)
-            self._show_native_window(3)  # SW_MAXIMIZE
-        else:
-            QWidget.showMaximized(self)
+        if self.isHidden():
+            QWidget.show(self)
+        self._show_native_window(3)  # SW_MAXIMIZE
 
     def showNormal(self) -> None:
+        if not self._uses_windows_window_state():
+            self._normal_geometry_before_maximize = None
+            QWidget.showNormal(self)
+            return
         normal_geometry = self._normal_geometry_before_maximize
         qt_state = QWidget.windowState(self)
         if normal_geometry is None and qt_state & Qt.WindowState.WindowMaximized:
             normal_geometry = QRect(self.normalGeometry())
-        if self._uses_windows_window_state():
-            if self.isHidden():
-                QWidget.show(self)
-            self._show_native_window(9)  # SW_RESTORE
-        else:
-            QWidget.showNormal(self)
+        if self.isHidden():
+            QWidget.show(self)
+        self._show_native_window(9)  # SW_RESTORE
         if normal_geometry is not None and normal_geometry.isValid():
             self.setGeometry(normal_geometry)
         self._normal_geometry_before_maximize = None
@@ -780,7 +784,8 @@ class ModernWindow(QWidget):
         current_dpr = screen.devicePixelRatio()
         self._screen_device_pixel_ratio = current_dpr
         if (
-            previous_dpr
+            self._uses_windows_window_state()
+            and previous_dpr
             and current_dpr
             and previous_dpr != current_dpr
             and not self.isMaximized()
@@ -795,7 +800,12 @@ class ModernWindow(QWidget):
         if not self._screen_change_in_progress:
             return
         self._screen_change_in_progress = False
-        if self.isMaximized() or self.isMinimized() or self._system_resize_active:
+        if (
+            not self._uses_windows_window_state()
+            or self.isMaximized()
+            or self.isMinimized()
+            or self._system_resize_active
+        ):
             return
         if self.size() != self._normal_logical_size:
             self.resize(self._normal_logical_size)
@@ -817,7 +827,6 @@ class ModernWindow(QWidget):
         for widget in widgets:
             if widget.isVisible():
                 widget.update()
-        self.repaint()
         window_handle = self.windowHandle()
         if window_handle is not None:
             window_handle.requestUpdate()
@@ -890,6 +899,26 @@ class ModernWindow(QWidget):
         if hasattr(self, "_surface_settle_timer"):
             self._surface_settle_timer.start(100)
 
+    @staticmethod
+    def _has_pressed_mouse_buttons() -> bool:
+        return QApplication.mouseButtons() != Qt.MouseButton.NoButton
+
+    def _begin_system_resize_tracking(self) -> None:
+        self._system_resize_active = True
+        self._system_resize_watch_timer.start()
+
+    def _finish_system_resize_tracking(self) -> None:
+        self._system_resize_active = False
+        self._system_resize_watch_timer.stop()
+
+    def _poll_system_resize_state(self) -> None:
+        if not self._has_pressed_mouse_buttons():
+            self._finish_system_resize_tracking()
+
+    def hideEvent(self, event) -> None:
+        self._finish_system_resize_tracking()
+        super().hideEvent(event)
+
     def eventFilter(self, watched, event) -> bool:
         if (
             self._system_menu_operation is not None
@@ -924,12 +953,12 @@ class ModernWindow(QWidget):
                 if event.button() == Qt.MouseButton.LeftButton and edges:
                     handle = self.windowHandle()
                     if handle is not None and handle.startSystemResize(edges):
-                        self._system_resize_active = True
+                        self._begin_system_resize_tracking()
                         self._screen_change_in_progress = False
                         self._screen_resize_correction_timer.stop()
                         return True
             elif event_type == QEvent.Type.MouseButtonRelease:
-                self._system_resize_active = False
+                self._finish_system_resize_tracking()
         return super().eventFilter(watched, event)
 
     def _install_resize_filters(self, widget: QWidget) -> None:
