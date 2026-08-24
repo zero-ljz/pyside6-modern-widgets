@@ -377,6 +377,28 @@ def test_windows_native_restore_preserves_normal_geometry(monkeypatch) -> None:
     assert window.geometry() == normal_geometry
 
 
+@pytest.mark.parametrize(
+    ("show_method", "expected_command"),
+    [("showNormal", 9), ("showMaximized", 3)],
+)
+def test_windows_native_show_restores_qt_visibility(
+    monkeypatch, show_method: str, expected_command: int
+) -> None:
+    window = ModernWindow()
+    commands: list[int] = []
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(window, "_show_native_window", commands.append)
+
+    assert window.isHidden()
+
+    getattr(window, show_method)()
+    _application().processEvents()
+
+    assert window.isVisible()
+    assert commands == [expected_command]
+    window.close()
+
+
 def test_screen_change_preserves_stable_normal_size(monkeypatch) -> None:
     window = ModernWindow()
     window.resize(900, 600)

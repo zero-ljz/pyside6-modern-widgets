@@ -520,6 +520,8 @@ class ModernWindow(QWidget):
             if normal_geometry.isValid():
                 self._normal_geometry_before_maximize = QRect(normal_geometry)
         if self._uses_windows_window_state():
+            if self.isHidden():
+                QWidget.show(self)
             self._show_native_window(3)  # SW_MAXIMIZE
         else:
             QWidget.showMaximized(self)
@@ -530,6 +532,8 @@ class ModernWindow(QWidget):
         if normal_geometry is None and qt_state & Qt.WindowState.WindowMaximized:
             normal_geometry = QRect(self.normalGeometry())
         if self._uses_windows_window_state():
+            if self.isHidden():
+                QWidget.show(self)
             self._show_native_window(9)  # SW_RESTORE
         else:
             QWidget.showNormal(self)
