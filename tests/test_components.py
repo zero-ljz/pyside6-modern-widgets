@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent, QPoint, QRect, Qt
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QColor, QContextMenuEvent, QFont, QIcon, QPalette, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -318,6 +318,99 @@ def test_native_system_menu_maximize_can_be_restored_by_title_bar_button(monkeyp
     QTest.mouseClick(window.titleBar.maximizeButton, Qt.MouseButton.LeftButton)
     _application().processEvents()
     assert not window.isMaximized()
+
+
+def test_windows_maximize_uses_native_state_when_qt_state_is_stale(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    native_state = {"maximized": False}
+    commands: list[int] = []
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(window, "_is_native_maximized", lambda: native_state["maximized"])
+
+    def show_native_window(command: int) -> None:
+        commands.append(command)
+        native_state["maximized"] = command == 3
+
+    monkeypatch.setattr(window, "_show_native_window", show_native_window)
+
+    QWidget.showMaximized(window)
+    _application().processEvents()
+    assert QWidget.isMaximized(window)
+    assert not window.isMaximized()
+
+    assert window.titleBar is not None
+    window.titleBar.changeMaximize()
+    assert commands == [3]
+    assert window.isMaximized()
+
+
+def test_windows_native_restore_preserves_normal_geometry(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+    normal_geometry = window.geometry()
+
+    native_state = {"maximized": False}
+    commands: list[int] = []
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(window, "_is_native_maximized", lambda: native_state["maximized"])
+
+    def show_native_window(command: int) -> None:
+        commands.append(command)
+        native_state["maximized"] = command == 3
+        if native_state["maximized"]:
+            window.setGeometry(0, 0, 1280, 720)
+
+    monkeypatch.setattr(window, "_show_native_window", show_native_window)
+
+    window.showMaximized()
+    assert window.geometry() != normal_geometry
+    window.showNormal()
+
+    assert commands == [3, 9]
+    assert not window.isMaximized()
+    assert window.geometry() == normal_geometry
+
+
+def test_screen_change_preserves_stable_normal_size(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(900, 600)
+    window._normal_logical_size = QSize(900, 600)
+    window._screen_device_pixel_ratio = 2.0
+    monkeypatch.setattr(window._screen_resize_correction_timer, "start", lambda _delay: None)
+
+    class ScreenStub:
+        @staticmethod
+        def devicePixelRatio() -> float:
+            return 1.0
+
+    window._handle_screen_changed(ScreenStub())
+    window.resize(1800, 1200)
+    window._screen_device_pixel_ratio = 1.0
+
+    class PrimaryScreenStub:
+        @staticmethod
+        def devicePixelRatio() -> float:
+            return 2.0
+
+    window._handle_screen_changed(PrimaryScreenStub())
+    window.resize(450, 300)
+    window._correct_screen_change_size()
+
+    assert window.size() == QSize(900, 600)
+
+    window._screen_device_pixel_ratio = 2.0
+    window._system_resize_active = True
+    window._handle_screen_changed(ScreenStub())
+    window.resize(1200, 800)
+    window._correct_screen_change_size()
+
+    assert window.size() == QSize(1200, 800)
 
 
 def test_native_system_menu_move_and_size_use_qt_system_operations(monkeypatch) -> None:

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from typing import cast
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -478,7 +479,15 @@ class ModernWindow(QWidget):
         self._system_menu_operation: str | None = None
         self._system_menu_start_cursor = QPoint()
         self._system_menu_start_geometry = QRect()
+        self._normal_geometry_before_maximize: QRect | None = None
         self._screen_change_window: QWindow | None = None
+        self._screen_device_pixel_ratio: float | None = None
+        self._normal_logical_size = QSize(self.size())
+        self._screen_change_in_progress = False
+        self._system_resize_active = False
+        self._screen_resize_correction_timer = QTimer(self)
+        self._screen_resize_correction_timer.setSingleShot(True)
+        self._screen_resize_correction_timer.timeout.connect(self._correct_screen_change_size)
         self._surface_refresh_timer = QTimer(self)
         self._surface_refresh_timer.setSingleShot(True)
         self._surface_refresh_timer.timeout.connect(self._refresh_window_surface)
@@ -492,6 +501,61 @@ class ModernWindow(QWidget):
         self.titleBar: CustomTitleBar | None = None
         self.initWindow()
         self.apply_window_style()
+
+    @staticmethod
+    def _uses_windows_window_state() -> bool:
+        return sys.platform == "win32" and QApplication.platformName() == "windows"
+
+    def isMaximized(self) -> bool:
+        qt_maximized = QWidget.isMaximized(self)
+        if not self._uses_windows_window_state():
+            return qt_maximized
+        if QWidget.isMinimized(self):
+            return qt_maximized or self._is_native_maximized()
+        return self._is_native_maximized()
+
+    def showMaximized(self) -> None:
+        if self._normal_geometry_before_maximize is None and not self.isMaximized():
+            normal_geometry = self.geometry()
+            if normal_geometry.isValid():
+                self._normal_geometry_before_maximize = QRect(normal_geometry)
+        if self._uses_windows_window_state():
+            self._show_native_window(3)  # SW_MAXIMIZE
+        else:
+            QWidget.showMaximized(self)
+
+    def showNormal(self) -> None:
+        normal_geometry = self._normal_geometry_before_maximize
+        qt_state = QWidget.windowState(self)
+        if normal_geometry is None and qt_state & Qt.WindowState.WindowMaximized:
+            normal_geometry = QRect(self.normalGeometry())
+        if self._uses_windows_window_state():
+            self._show_native_window(9)  # SW_RESTORE
+        else:
+            QWidget.showNormal(self)
+        if normal_geometry is not None and normal_geometry.isValid():
+            self.setGeometry(normal_geometry)
+        self._normal_geometry_before_maximize = None
+
+    def _show_native_window(self, command: int) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        show_window = ctypes.windll.user32.ShowWindow
+        show_window.argtypes = [wintypes.HWND, ctypes.c_int]
+        show_window.restype = wintypes.BOOL
+        show_window(wintypes.HWND(int(self.winId())), command)
+        if self.titleBar is not None:
+            self.titleBar.updateMaximizeIcon(self.isMaximized())
+
+    def _is_native_maximized(self) -> bool:
+        import ctypes
+        from ctypes import wintypes
+
+        is_zoomed = ctypes.windll.user32.IsZoomed
+        is_zoomed.argtypes = [wintypes.HWND]
+        is_zoomed.restype = wintypes.BOOL
+        return bool(is_zoomed(wintypes.HWND(int(self.winId()))))
 
     def initWindow(self) -> None:
         self.root_layout = QVBoxLayout(self)
@@ -703,10 +767,34 @@ class ModernWindow(QWidget):
         if window_handle is None or window_handle is self._screen_change_window:
             return
         self._screen_change_window = window_handle
+        screen = window_handle.screen()
+        self._screen_device_pixel_ratio = screen.devicePixelRatio() if screen else None
         window_handle.screenChanged.connect(self._handle_screen_changed)
 
-    def _handle_screen_changed(self, _screen) -> None:
+    def _handle_screen_changed(self, screen) -> None:
+        previous_dpr = self._screen_device_pixel_ratio
+        current_dpr = screen.devicePixelRatio()
+        self._screen_device_pixel_ratio = current_dpr
+        if (
+            previous_dpr
+            and current_dpr
+            and previous_dpr != current_dpr
+            and not self.isMaximized()
+            and not self.isMinimized()
+            and not self._system_resize_active
+        ):
+            self._screen_change_in_progress = True
+            self._screen_resize_correction_timer.start(250)
         self._schedule_surface_refresh()
+
+    def _correct_screen_change_size(self) -> None:
+        if not self._screen_change_in_progress:
+            return
+        self._screen_change_in_progress = False
+        if self.isMaximized() or self.isMinimized() or self._system_resize_active:
+            return
+        if self.size() != self._normal_logical_size:
+            self.resize(self._normal_logical_size)
 
     def _schedule_surface_refresh(self) -> None:
         if not hasattr(self, "_surface_refresh_timer"):
@@ -783,6 +871,12 @@ class ModernWindow(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        if (
+            not self._screen_change_in_progress
+            and not self.isMaximized()
+            and not self.isMinimized()
+        ):
+            self._normal_logical_size = QSize(event.size())
         if hasattr(self, "chromeOverlay"):
             self.chromeOverlay.setGeometry(self.rect())
             self.chromeOverlay.raise_()
@@ -826,7 +920,12 @@ class ModernWindow(QWidget):
                 if event.button() == Qt.MouseButton.LeftButton and edges:
                     handle = self.windowHandle()
                     if handle is not None and handle.startSystemResize(edges):
+                        self._system_resize_active = True
+                        self._screen_change_in_progress = False
+                        self._screen_resize_correction_timer.stop()
                         return True
+            elif event_type == QEvent.Type.MouseButtonRelease:
+                self._system_resize_active = False
         return super().eventFilter(watched, event)
 
     def _install_resize_filters(self, widget: QWidget) -> None:
