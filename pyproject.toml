@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyside6-modern-widgets"
-version = "0.3.3"
+version = "0.4.0"
 description = "Cross-platform modern frameless windows, navigation, and tabs for PySide6"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
@@ -38,6 +38,7 @@ hook-dirs = "pyside6_modern_widgets._pyinstaller:get_hook_dirs"
 
 [project.urls]
 Repository = "https://github.com/zero-ljz/pyside6-modern-widgets"
+Changelog = "https://github.com/zero-ljz/pyside6-modern-widgets/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
