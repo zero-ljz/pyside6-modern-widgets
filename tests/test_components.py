@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QTabBar,
     QTabWidget,
+    QTableWidget,
     QToolButton,
     QWidget,
 )
@@ -1057,6 +1058,16 @@ def test_modern_window_surface_refresh_is_asynchronous(monkeypatch) -> None:
     window._refresh_window_surface()
 
     assert repaint_calls == []
+
+
+def test_modern_window_surface_refresh_supports_item_views() -> None:
+    window = ModernWindow()
+    window.setCentralWidget(QTableWidget(window))
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    window._refresh_window_surface()
 
 
 def test_modern_window_refreshes_surface_after_device_pixel_ratio_change() -> None:

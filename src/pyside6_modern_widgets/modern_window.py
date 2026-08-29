@@ -826,7 +826,7 @@ class ModernWindow(QWidget):
         widgets = cast(list[QWidget], self.findChildren(QWidget))
         for widget in widgets:
             if widget.isVisible():
-                widget.update()
+                QWidget.update(widget)
         window_handle = self.windowHandle()
         if window_handle is not None:
             window_handle.requestUpdate()
