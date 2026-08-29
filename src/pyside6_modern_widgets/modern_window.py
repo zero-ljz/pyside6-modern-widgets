@@ -13,6 +13,7 @@ from PySide6.QtGui import (
     QIcon,
     QPainter,
     QPainterPath,
+    QPalette,
     QPen,
     QPixmap,
     QRadialGradient,
@@ -349,6 +350,15 @@ class CustomTitleBar(QWidget):
             + f"QPushButton:hover {{ color: {theme.danger}; }}"
         )
 
+    def setInactiveTitleColor(self, color: QColor) -> None:
+        palette = QPalette()
+        palette.setColor(
+            QPalette.ColorGroup.Inactive,
+            QPalette.ColorRole.WindowText,
+            color,
+        )
+        self.titleLabel.setPalette(palette)
+
     def setIcon(self, icon: QIcon) -> None:
         self.iconLabel.setVisible(not icon.isNull())
         if not icon.isNull():
@@ -618,6 +628,7 @@ class ModernWindow(QWidget):
             self.chromeOverlay.raise_()
         if hasattr(self, "titleBar") and self.titleBar:
             self.titleBar.setTheme(self._theme)
+            self._sync_inactive_title_color()
         if self._menu_bar is not None:
             self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
         self.frame.update()
@@ -768,6 +779,12 @@ class ModernWindow(QWidget):
         handled = super().event(event)
         if event.type() == QEvent.Type.DevicePixelRatioChange:
             self._schedule_surface_refresh()
+        elif event.type() in (
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.PaletteChange,
+            QEvent.Type.StyleChange,
+        ):
+            self._sync_inactive_title_color()
         return handled
 
     def _connect_screen_change_signal(self) -> None:
@@ -831,12 +848,32 @@ class ModernWindow(QWidget):
         if window_handle is not None:
             window_handle.requestUpdate()
 
+    def _sync_inactive_title_color(self) -> None:
+        title_bar = getattr(self, "titleBar", None)
+        if title_bar is None:
+            return
+        menu_bar = getattr(self, "_menu_bar", None)
+        owns_probe = menu_bar is None
+        if menu_bar is None:
+            menu_bar = QMenuBar()
+        menu_bar.ensurePolished()
+        color = QColor(
+            menu_bar.palette().color(
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorRole.ButtonText,
+            )
+        )
+        title_bar.setInactiveTitleColor(color)
+        if owns_probe:
+            menu_bar.deleteLater()
+
     def menuBar(self) -> QMenuBar:
         if self._menu_bar is None:
             self._menu_bar = QMenuBar(self)
             self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
             self.frameLayout.insertWidget(1, self._menu_bar)
             self._install_resize_filters(self._menu_bar)
+            self._sync_inactive_title_color()
         return self._menu_bar
 
     def addToolBar(self, *args) -> QToolBar:

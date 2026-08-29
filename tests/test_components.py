@@ -156,6 +156,26 @@ def test_title_bar_reserves_vertical_space_around_window_buttons() -> None:
         assert button.geometry().bottom() <= title_bar.rect().bottom() - 2
 
 
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_title_bar_uses_system_menu_inactive_text_color(theme) -> None:
+    window = ModernWindow(theme=theme)
+    menu_bar = window.menuBar()
+
+    assert window.titleBar is not None
+    title_palette = window.titleBar.titleLabel.palette()
+    assert title_palette.color(
+        QPalette.ColorGroup.Active,
+        QPalette.ColorRole.WindowText,
+    ) == QColor(theme.text)
+    assert title_palette.color(
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorRole.WindowText,
+    ) == menu_bar.palette().color(
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorRole.ButtonText,
+    )
+
+
 def test_system_menu_has_cross_platform_qt_fallback(monkeypatch) -> None:
     from pyside6_modern_widgets import _system_menu
 
