@@ -1317,6 +1317,57 @@ def test_modern_window_uses_cross_platform_watercolor(theme) -> None:
     assert not window.titleBar.autoFillBackground()
 
 
+@pytest.mark.parametrize(
+    ("windows_build", "expected"),
+    [(19045, False), (22000, True), (26100, True)],
+)
+def test_native_window_corners_require_windows_11(
+    monkeypatch, windows_build: int, expected: bool
+) -> None:
+    from pyside6_modern_widgets import modern_window
+
+    class WindowsVersion:
+        build = windows_build
+
+    monkeypatch.setattr(
+        ModernWindow,
+        "_uses_windows_window_state",
+        staticmethod(lambda: True),
+    )
+    monkeypatch.setattr(modern_window.sys, "getwindowsversion", WindowsVersion)
+
+    assert ModernWindow._supports_native_window_corners() is expected
+
+
+def test_windows_10_surface_falls_back_to_qt_painted_round_corners(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ModernWindow,
+        "_supports_native_window_corners",
+        staticmethod(lambda: False),
+    )
+
+    window = ModernWindow(theme=LIGHT_THEME)
+
+    assert not window._native_opaque_surface
+    assert window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    assert window.frame._corner_radius == window.cornerRadius
+
+
+def test_windows_11_surface_uses_native_round_corners(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ModernWindow,
+        "_supports_native_window_corners",
+        staticmethod(lambda: True),
+    )
+
+    window = ModernWindow(theme=LIGHT_THEME)
+
+    assert window._native_opaque_surface
+    assert window.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+    assert not window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    assert window.frame._corner_radius == 0
+
+
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
 def test_modern_window_watercolor_covers_title_bar_and_preserves_round_corners(theme) -> None:
     window = ModernWindow(theme=theme)

@@ -552,7 +552,7 @@ class ModernWindow(QWidget):
             | Qt.WindowType.WindowMinMaxButtonsHint
             | Qt.WindowType.WindowCloseButtonHint
         )
-        self._native_opaque_surface = self._uses_windows_window_state()
+        self._native_opaque_surface = self._supports_native_window_corners()
         if self._native_opaque_surface:
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         else:
@@ -595,6 +595,15 @@ class ModernWindow(QWidget):
     @staticmethod
     def _uses_windows_window_state() -> bool:
         return sys.platform == "win32" and QApplication.platformName() == "windows"
+
+    @staticmethod
+    def _supports_native_window_corners() -> bool:
+        if not ModernWindow._uses_windows_window_state():
+            return False
+        get_windows_version = getattr(sys, "getwindowsversion", None)
+        if get_windows_version is None:
+            return False
+        return get_windows_version().build >= 22000
 
     def isMaximized(self) -> bool:
         qt_maximized = QWidget.isMaximized(self)
