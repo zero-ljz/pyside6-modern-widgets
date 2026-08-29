@@ -681,6 +681,9 @@ class ModernWindow(QWidget):
         self.chromeOverlay.show()
         self.chromeOverlay.raise_()
         self._install_resize_filters(self)
+        application = QApplication.instance()
+        if application is not None:
+            application.installEventFilter(self)
 
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
@@ -1051,6 +1054,13 @@ class ModernWindow(QWidget):
 
     def eventFilter(self, watched, event) -> bool:
         if (
+            isinstance(watched, QWidget)
+            and watched.window() is self
+            and not watched.hasMouseTracking()
+        ):
+            watched.setMouseTracking(True)
+
+        if (
             self._system_menu_operation is not None
             and isinstance(watched, QWidget)
             and watched.window() is self
@@ -1093,7 +1103,6 @@ class ModernWindow(QWidget):
 
     def _install_resize_filters(self, widget: QWidget) -> None:
         widget.setMouseTracking(True)
-        widget.installEventFilter(self)
         for child in widget.children():
             if isinstance(child, QWidget):
                 self._install_resize_filters(child)

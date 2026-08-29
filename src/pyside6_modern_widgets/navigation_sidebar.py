@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 
 from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QSize, Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -172,6 +172,7 @@ class NavigationSidebar(QWidget):
     currentChanged = Signal(int)
     itemActivated = Signal(int)
     collapsedChanged = Signal(bool)
+    collapseIntentChanged = Signal(bool)
 
     def __init__(
         self,
@@ -191,6 +192,7 @@ class NavigationSidebar(QWidget):
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self._collapsed_width = metrics.navigation_collapsed_width
         self._expanded_width = metrics.navigation_expanded_width
+        self._overlay_surface = False
         self._compact_item_width = max(1, self._collapsed_width - 12)
         self._collapsed = False
         self._items: list[_NavigationItem] = []
@@ -320,8 +322,44 @@ class NavigationSidebar(QWidget):
     def isCollapsed(self) -> bool:
         return self._collapsed
 
+    def setOverlaySurface(self, overlay: bool) -> None:
+        if self._overlay_surface == overlay:
+            return
+        self._overlay_surface = overlay
+        self.setProperty("overlay", overlay)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if not self._overlay_surface:
+            return
+
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(self._theme.watercolor_base))
+        parent = self.parentWidget()
+        surface_width = parent.width() if parent is not None else self.width()
+        for color, x, y, radius in self._theme.watercolor_spots:
+            gradient = QRadialGradient(
+                surface_width * x,
+                self.height() * y,
+                surface_width * radius,
+            )
+            gradient.setColorAt(0, QColor(color))
+            gradient.setColorAt(1, QColor(255, 255, 255, 0))
+            painter.setBrush(QBrush(gradient))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(self.rect())
+
     def setCollapsed(self, collapsed: bool, *, animated: bool = True) -> None:
+        target = self._collapsed_width if collapsed else self._expanded_width
+        animations = (self._min_animation, self._max_animation)
         if collapsed == self._collapsed:
+            if not animated:
+                for animation in animations:
+                    animation.stop()
+                self.setFixedWidth(target)
             return
         self._collapsed = collapsed
         for item in self._items:
@@ -332,12 +370,13 @@ class NavigationSidebar(QWidget):
             if collapsed
             else Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
-        target = self._collapsed_width if collapsed else self._expanded_width
         if not animated:
+            for animation in animations:
+                animation.stop()
             self.setFixedWidth(target)
         else:
             start = self.width()
-            for animation in (self._min_animation, self._max_animation):
+            for animation in animations:
                 animation.stop()
                 animation.setStartValue(start)
                 animation.setEndValue(target)
@@ -345,7 +384,9 @@ class NavigationSidebar(QWidget):
         self.collapsedChanged.emit(collapsed)
 
     def toggle(self) -> None:
-        self.setCollapsed(not self._collapsed)
+        collapsed = not self._collapsed
+        self.collapseIntentChanged.emit(collapsed)
+        self.setCollapsed(collapsed)
 
     def theme(self) -> ModernTheme:
         return self._theme

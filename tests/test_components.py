@@ -7,8 +7,16 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt
-from PySide6.QtGui import QColor, QContextMenuEvent, QFont, QIcon, QPalette, QPixmap
+from PySide6.QtCore import QAbstractAnimation, QEvent, QPoint, QPointF, QRect, QSize, Qt
+from PySide6.QtGui import (
+    QColor,
+    QContextMenuEvent,
+    QFont,
+    QIcon,
+    QMouseEvent,
+    QPalette,
+    QPixmap,
+)
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -722,6 +730,44 @@ def test_navigation_focus_is_borderless_and_keeps_toggle_icon_centered() -> None
     ) / 2
 
 
+def test_navigation_non_animated_state_change_stops_width_animation() -> None:
+    sidebar = NavigationSidebar()
+    index = sidebar.addItem("Item")
+    button = sidebar.button(index)
+    assert button is not None
+    sidebar.setCollapsed(True, animated=False)
+
+    sidebar.setCollapsed(False)
+    assert sidebar._min_animation.state() == QAbstractAnimation.State.Running
+    sidebar.setCollapsed(True, animated=False)
+    QTest.qWait(DEFAULT_METRICS.animation_duration + 20)
+
+    assert sidebar._min_animation.state() == QAbstractAnimation.State.Stopped
+    assert sidebar._max_animation.state() == QAbstractAnimation.State.Stopped
+    assert sidebar.isCollapsed()
+    assert sidebar.width() == DEFAULT_METRICS.navigation_collapsed_width
+    assert button.text() == ""
+
+    sidebar.setCollapsed(False)
+    sidebar.setCollapsed(False, animated=False)
+    assert sidebar._min_animation.state() == QAbstractAnimation.State.Stopped
+    assert sidebar.width() == DEFAULT_METRICS.navigation_expanded_width
+    assert button.text() == "Item"
+
+
+def test_navigation_toggle_is_the_only_source_of_user_collapse_intent() -> None:
+    sidebar = NavigationSidebar()
+    collapse_intents = []
+    sidebar.collapseIntentChanged.connect(collapse_intents.append)
+
+    sidebar.toggle()
+    sidebar.toggle()
+    sidebar.setCollapsed(True, animated=False)
+    sidebar.setCollapsed(False, animated=False)
+
+    assert collapse_intents == [True, False]
+
+
 def test_navigation_view_manages_pages_and_selection() -> None:
     _application()
     view = NavigationView()
@@ -775,6 +821,114 @@ def test_navigation_view_only_uses_current_page_size_hints() -> None:
     assert view.stackedWidget.minimumSizeHint() == narrow.minimumSizeHint()
     view.setCurrentIndex(1)
     assert view.stackedWidget.minimumSizeHint() == wide.minimumSizeHint()
+
+
+def test_navigation_view_overlay_sidebar_does_not_move_content() -> None:
+    view = NavigationView()
+    view.addPage(QLabel("page"), "Page")
+    view.sidebar.setCollapsed(True, animated=False)
+    view.resize(700, 420)
+    view.show()
+    _application().processEvents()
+
+    view.setSidebarOverlay(True)
+    _application().processEvents()
+    content_geometry = view.contentContainer.geometry()
+    window_width = view.width()
+
+    view.sidebar.setCollapsed(False, animated=False)
+    _application().processEvents()
+
+    assert view.width() == window_width
+    assert view.contentContainer.geometry() == content_geometry
+    assert view.sidebar.geometry() == QRect(
+        0,
+        0,
+        DEFAULT_METRICS.navigation_expanded_width,
+        view.height(),
+    )
+    assert view.sidebar.property("overlay") is True
+    assert view._sidebar_shadow.isVisible()
+    assert view._sidebar_shadow.geometry() == QRect(
+        DEFAULT_METRICS.navigation_expanded_width,
+        0,
+        view._sidebar_shadow.WIDTH,
+        view.height(),
+    )
+
+    view.setSidebarOverlay(False)
+    _application().processEvents()
+    assert not view._sidebar_shadow.isVisible()
+    assert view.contentContainer.geometry().x() == (
+        DEFAULT_METRICS.navigation_expanded_width
+    )
+
+
+def test_navigation_view_overlay_sidebar_preserves_watercolor_surface() -> None:
+    view = NavigationView(theme=LIGHT_THEME)
+    view.addPage(QLabel("page"), "Page")
+    view.sidebar.setCollapsed(True, animated=False)
+    view.resize(700, 420)
+    view.show()
+    view.setSidebarOverlay(True)
+    view.sidebar.setCollapsed(False, animated=False)
+    _application().processEvents()
+
+    image = view.sidebar.grab().toImage()
+    base = QColor(LIGHT_THEME.watercolor_base)
+    sampled_colors = {
+        image.pixelColor(x, y).rgba()
+        for x in range(12, image.width() - 12, 24)
+        for y in range(80, image.height() - 12, 24)
+    }
+
+    assert all(QColor.fromRgba(color).alpha() == 255 for color in sampled_colors)
+    assert any(QColor.fromRgba(color) != base for color in sampled_colors)
+    assert len(sampled_colors) > 4
+
+    view_image = view.grab().toImage()
+    shadow_x = view.sidebar.width()
+    shadow_y = view.height() // 2
+    assert view_image.pixelColor(shadow_x - 1, shadow_y) != QColor(LIGHT_THEME.border)
+    assert view_image.pixelColor(shadow_x + 1, shadow_y).lightness() < (
+        view_image.pixelColor(shadow_x + view._sidebar_shadow.WIDTH - 1, shadow_y).lightness()
+    )
+
+    view.sidebar.setCollapsed(True, animated=False)
+    _application().processEvents()
+    collapsed_image = view.grab().toImage()
+    collapsed_edge = DEFAULT_METRICS.navigation_collapsed_width
+    assert collapsed_image.pixelColor(collapsed_edge - 1, shadow_y) != QColor(
+        LIGHT_THEME.border
+    )
+    assert collapsed_image.pixelColor(collapsed_edge, shadow_y) == QColor(LIGHT_THEME.border)
+
+
+def test_navigation_view_overlay_sidebar_closes_only_on_outside_click() -> None:
+    view = NavigationView()
+    view.addPage(QLabel("page"), "Page")
+    view.sidebar.setCollapsed(True, animated=False)
+    view.resize(700, 420)
+    view.show()
+    view.setSidebarOverlay(True)
+    view.sidebar.setCollapsed(False, animated=False)
+    _application().processEvents()
+
+    QTest.mouseClick(
+        view.sidebar,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(view.sidebar.width() - 20, view.sidebar.height() - 20),
+    )
+    _application().processEvents()
+    assert not view.sidebar.isCollapsed()
+
+    QTest.mouseClick(
+        view.contentContainer,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(view.contentContainer.width() - 20, 20),
+    )
+    _application().processEvents()
+    assert view.sidebar.isCollapsed()
 
 
 def test_tab_view_uses_native_tab_semantics_and_qtabwidget_api() -> None:
@@ -1126,6 +1280,37 @@ def test_modern_window_resize_edges_are_platform_independent() -> None:
     assert window._resize_edges_at(window.rect().bottomRight()) == (
         Qt.Edge.BottomEdge | Qt.Edge.RightEdge
     )
+
+
+def test_modern_window_restores_resize_cursor_over_late_content_children() -> None:
+    window = ModernWindow()
+    content = QWidget()
+    window.setCentralWidget(content)
+    late_child = QLabel("late child", content)
+    late_child.setGeometry(120, 100, 160, 40)
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    assert late_child.hasMouseTracking()
+    window._set_resize_cursor(Qt.Edge.RightEdge)
+    assert window._resize_cursor_active
+
+    local_position = late_child.rect().center()
+    QApplication.sendEvent(
+        late_child,
+        QMouseEvent(
+            QEvent.Type.MouseMove,
+            QPointF(local_position),
+            QPointF(late_child.mapToGlobal(local_position)),
+            Qt.MouseButton.NoButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        ),
+    )
+
+    assert not window._resize_cursor_active
+    assert window.cursor().shape() == Qt.CursorShape.ArrowCursor
 
 
 def test_modern_window_refreshes_entire_surface_after_screen_change() -> None:
