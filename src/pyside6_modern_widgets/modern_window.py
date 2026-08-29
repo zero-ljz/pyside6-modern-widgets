@@ -85,45 +85,90 @@ class BackgroundFrame(QFrame):
         *,
         theme: ModernTheme,
         corner_radius: int,
+        opaque_surface: bool = False,
     ) -> None:
         super().__init__(parent)
         self._theme = theme
         self._corner_radius = corner_radius
+        self._opaque_surface = opaque_surface
+        self._watercolor_cache: QPixmap | None = None
+        self._watercolor_cache_signature: tuple[int, int, float, ModernTheme] | None = None
+        self._live_resize = False
         self.setAutoFillBackground(False)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, not opaque_surface)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, opaque_surface)
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
+        self._invalidate_watercolor_cache()
         self.update()
 
     def setCornerRadius(self, radius: int) -> None:
         self._corner_radius = radius
         self.update()
 
-    def paintEvent(self, _event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+    def setLiveResize(self, active: bool) -> None:
+        if active == self._live_resize:
+            return
+        if active:
+            self._ensure_watercolor_cache()
+        self._live_resize = active
+        if not active:
+            self._invalidate_watercolor_cache()
+        self.update()
 
-        border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        path = QPainterPath()
-        path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
-        painter.setClipPath(path)
-        painter.fillPath(path, QColor(self._theme.watercolor_base))
+    def _invalidate_watercolor_cache(self) -> None:
+        self._watercolor_cache = None
+        self._watercolor_cache_signature = None
 
+    def _ensure_watercolor_cache(self) -> QPixmap:
+        dpr = self.devicePixelRatioF()
+        signature = (self.width(), self.height(), dpr, self._theme)
+        if self._watercolor_cache is not None and (
+            self._live_resize or signature == self._watercolor_cache_signature
+        ):
+            return self._watercolor_cache
+
+        logical_size = self.size().expandedTo(QSize(1, 1))
+        pixel_size = QSize(
+            max(1, round(logical_size.width() * dpr)),
+            max(1, round(logical_size.height() * dpr)),
+        )
+        pixmap = QPixmap(pixel_size)
+        pixmap.setDevicePixelRatio(dpr)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        logical_rect = QRectF(0, 0, logical_size.width(), logical_size.height())
+        painter.fillRect(logical_rect, QColor(self._theme.watercolor_base))
         for color, x, y, radius in self._theme.watercolor_spots:
             gradient = QRadialGradient(
-                self.width() * x,
-                self.height() * y,
-                self.width() * radius,
+                logical_size.width() * x,
+                logical_size.height() * y,
+                logical_size.width() * radius,
             )
             gradient.setColorAt(0, QColor(color))
             gradient.setColorAt(1, QColor(255, 255, 255, 0))
             painter.setBrush(QBrush(gradient))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRect(self.rect())
+            painter.drawRect(logical_rect)
+        painter.end()
+        self._watercolor_cache = pixmap
+        self._watercolor_cache_signature = signature
+        return pixmap
+
+    def paintEvent(self, _event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self._opaque_surface:
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+
+        border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        path = QPainterPath()
+        path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
+        painter.setClipPath(path)
+        painter.drawPixmap(self.rect(), self._ensure_watercolor_cache())
 
         painter.setClipping(False)
 
@@ -482,7 +527,11 @@ class ModernWindow(QWidget):
             | Qt.WindowType.WindowMinMaxButtonsHint
             | Qt.WindowType.WindowCloseButtonHint
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._native_opaque_surface = self._uses_windows_window_state()
+        if self._native_opaque_surface:
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        else:
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
         self.setWindowTitle("基础窗体")
         self._resize_cursor_active = False
@@ -507,6 +556,9 @@ class ModernWindow(QWidget):
         self._surface_settle_timer = QTimer(self)
         self._surface_settle_timer.setSingleShot(True)
         self._surface_settle_timer.timeout.connect(self._refresh_window_surface)
+        self._window_state_settle_timer = QTimer(self)
+        self._window_state_settle_timer.setSingleShot(True)
+        self._window_state_settle_timer.timeout.connect(self._sync_window_state_style)
 
         self.cornerRadius = metrics.corner_radius
         self._menu_bar: QMenuBar | None = None
@@ -538,6 +590,7 @@ class ModernWindow(QWidget):
         if self.isHidden():
             QWidget.show(self)
         self._show_native_window(3)  # SW_MAXIMIZE
+        self._schedule_window_state_style_sync()
 
     def showNormal(self) -> None:
         if not self._uses_windows_window_state():
@@ -554,6 +607,7 @@ class ModernWindow(QWidget):
         if normal_geometry is not None and normal_geometry.isValid():
             self.setGeometry(normal_geometry)
         self._normal_geometry_before_maximize = None
+        self._schedule_window_state_style_sync()
 
     def _show_native_window(self, command: int) -> None:
         import ctypes
@@ -565,6 +619,17 @@ class ModernWindow(QWidget):
         show_window(wintypes.HWND(int(self.winId())), command)
         if self.titleBar is not None:
             self.titleBar.updateMaximizeIcon(self.isMaximized())
+
+    def _schedule_window_state_style_sync(self) -> None:
+        self._sync_window_state_style()
+        self._window_state_settle_timer.start(50)
+
+    def _sync_window_state_style(self) -> None:
+        is_maximized = self.isMaximized()
+        if self.titleBar is not None:
+            self.titleBar.updateMaximizeIcon(is_maximized)
+        if not self.isMinimized():
+            self.apply_window_style()
 
     def _is_native_maximized(self) -> bool:
         import ctypes
@@ -582,7 +647,8 @@ class ModernWindow(QWidget):
         self.frame = BackgroundFrame(
             self,
             theme=self._theme,
-            corner_radius=self.cornerRadius,
+            corner_radius=0 if self._native_opaque_surface else self.cornerRadius,
+            opaque_surface=self._native_opaque_surface,
         )
         self.frame.setObjectName("backgroundFrame")
         self.apply_window_style()
@@ -619,13 +685,15 @@ class ModernWindow(QWidget):
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
         corner_radius = 0 if self.isMaximized() else max(0, self.cornerRadius)
+        paint_corner_radius = 0 if self._native_opaque_surface else corner_radius
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self.frame.setTheme(self._theme)
-        self.frame.setCornerRadius(corner_radius)
+        self.frame.setCornerRadius(paint_corner_radius)
         if hasattr(self, "chromeOverlay"):
             self.chromeOverlay.setTheme(self._theme)
-            self.chromeOverlay.setCornerRadius(corner_radius)
+            self.chromeOverlay.setCornerRadius(paint_corner_radius)
             self.chromeOverlay.raise_()
+        self._set_native_corner_preference(corner_radius > 0)
         if hasattr(self, "titleBar") and self.titleBar:
             self.titleBar.setTheme(self._theme)
             self._sync_inactive_title_color()
@@ -633,6 +701,31 @@ class ModernWindow(QWidget):
             self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
         self.frame.update()
         self.update()
+
+    def _set_native_corner_preference(self, rounded: bool) -> None:
+        if not self._native_opaque_surface or self.windowHandle() is None:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            preference = ctypes.c_int(2 if rounded else 1)
+            set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+            set_window_attribute.argtypes = [
+                wintypes.HWND,
+                wintypes.DWORD,
+                ctypes.c_void_p,
+                wintypes.DWORD,
+            ]
+            set_window_attribute.restype = ctypes.c_long
+            set_window_attribute(
+                wintypes.HWND(int(self.winId())),
+                33,  # DWMWA_WINDOW_CORNER_PREFERENCE
+                ctypes.byref(preference),
+                ctypes.sizeof(preference),
+            )
+        except (AttributeError, OSError):
+            return
 
     def showSystemWindowMenu(self, position: QPoint) -> None:
         if _system_menu.show_native_system_menu(
@@ -911,13 +1004,9 @@ class ModernWindow(QWidget):
         self.apply_window_style()
 
     def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.WindowStateChange:
-            is_maximized = self.isMaximized()
-            if hasattr(self, "titleBar") and self.titleBar:
-                self.titleBar.updateMaximizeIcon(is_maximized)
-            if not self.isMinimized():
-                self.apply_window_style()
         super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._schedule_window_state_style_sync()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -942,11 +1031,15 @@ class ModernWindow(QWidget):
 
     def _begin_system_resize_tracking(self) -> None:
         self._system_resize_active = True
+        self.frame.setLiveResize(True)
         self._system_resize_watch_timer.start()
 
     def _finish_system_resize_tracking(self) -> None:
+        was_active = self._system_resize_active
         self._system_resize_active = False
         self._system_resize_watch_timer.stop()
+        if was_active:
+            self.frame.setLiveResize(False)
 
     def _poll_system_resize_state(self) -> None:
         if not self._has_pressed_mouse_buttons():

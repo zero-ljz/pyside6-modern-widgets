@@ -18,8 +18,8 @@ from PySide6.QtWidgets import (
     QMenuBar,
     QStatusBar,
     QTabBar,
-    QTabWidget,
     QTableWidget,
+    QTabWidget,
     QToolButton,
     QWidget,
 )
@@ -378,8 +378,14 @@ def test_windows_native_restore_preserves_normal_geometry(monkeypatch) -> None:
 
     native_state = {"maximized": False}
     commands: list[int] = []
+    corner_preferences: list[bool] = []
     monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
     monkeypatch.setattr(window, "_is_native_maximized", lambda: native_state["maximized"])
+    monkeypatch.setattr(
+        window,
+        "_set_native_corner_preference",
+        corner_preferences.append,
+    )
 
     def show_native_window(command: int) -> None:
         commands.append(command)
@@ -391,11 +397,13 @@ def test_windows_native_restore_preserves_normal_geometry(monkeypatch) -> None:
 
     window.showMaximized()
     assert window.geometry() != normal_geometry
+    assert corner_preferences[-1] is False
     window.showNormal()
 
     assert commands == [3, 9]
     assert not window.isMaximized()
     assert window.geometry() == normal_geometry
+    assert corner_preferences[-1] is True
 
 
 @pytest.mark.parametrize(
@@ -746,6 +754,29 @@ def test_navigation_view_manages_pages_and_selection() -> None:
     assert view.sidebar.count() == 1
 
 
+def test_navigation_view_only_uses_current_page_size_hints() -> None:
+    class HintWidget(QWidget):
+        def __init__(self, hint: QSize) -> None:
+            super().__init__()
+            self._hint = hint
+
+        def sizeHint(self) -> QSize:
+            return self._hint
+
+        def minimumSizeHint(self) -> QSize:
+            return self._hint
+
+    view = NavigationView()
+    narrow = HintWidget(QSize(180, 120))
+    wide = HintWidget(QSize(720, 480))
+    view.addPage(narrow, "Narrow")
+    view.addPage(wide, "Wide")
+
+    assert view.stackedWidget.minimumSizeHint() == narrow.minimumSizeHint()
+    view.setCurrentIndex(1)
+    assert view.stackedWidget.minimumSizeHint() == wide.minimumSizeHint()
+
+
 def test_tab_view_uses_native_tab_semantics_and_qtabwidget_api() -> None:
     _application()
     tabs = TabView()
@@ -1013,6 +1044,53 @@ def test_modern_window_watercolor_covers_title_bar_and_preserves_round_corners(t
     assert window.titleBar is not None
     title_center = window.titleBar.geometry().center()
     assert image.pixelColor(title_center) != QColor(theme.surface)
+
+
+def test_modern_window_reuses_watercolor_during_live_resize() -> None:
+    window = ModernWindow(theme=LIGHT_THEME)
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    window._begin_system_resize_tracking()
+    assert window.frame._live_resize
+    cached_watercolor = window.frame._watercolor_cache
+    assert cached_watercolor is not None
+
+    window.resize(520, 420)
+    _application().processEvents()
+    assert window.frame._watercolor_cache is cached_watercolor
+    title_center = window.titleBar.geometry().center()
+    assert window.grab().toImage().pixelColor(title_center) != QColor(LIGHT_THEME.surface)
+
+    window._finish_system_resize_tracking()
+    assert not window.frame._live_resize
+    _application().processEvents()
+    assert window.frame._watercolor_cache is not cached_watercolor
+    assert window.frame._watercolor_cache_signature is not None
+    assert window.frame._watercolor_cache_signature[:2] == (
+        window.frame.width(),
+        window.frame.height(),
+    )
+
+
+def test_opaque_background_frame_paints_complete_watercolor_surface() -> None:
+    from pyside6_modern_widgets.modern_window import BackgroundFrame
+
+    frame = BackgroundFrame(
+        theme=LIGHT_THEME,
+        corner_radius=0,
+        opaque_surface=True,
+    )
+    frame.resize(320, 240)
+    frame.show()
+    _application().processEvents()
+
+    assert frame.testAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+    assert not frame.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+    image = frame.grab().toImage()
+    assert image.pixelColor(0, 0).alpha() == 255
+    assert image.pixelColor(frame.rect().center()) != QColor(LIGHT_THEME.surface)
 
 
 def test_opaque_tab_view_preserves_window_bottom_corners_and_border() -> None:

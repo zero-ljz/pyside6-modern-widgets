@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -67,13 +67,14 @@ class NavigationView(QWidget):
         content_layout = QVBoxLayout(self.contentContainer)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
-        self.stackedWidget = QStackedWidget(self.contentContainer)
+        self.stackedWidget = _CurrentPageStack(self.contentContainer)
         content_layout.addWidget(self.stackedWidget)
 
         layout.addWidget(self.sidebar)
         layout.addWidget(self.contentContainer, 1)
 
         self.sidebar.currentChanged.connect(self.stackedWidget.setCurrentIndex)
+        self.stackedWidget.currentChanged.connect(self.stackedWidget.updateGeometry)
         self.stackedWidget.currentChanged.connect(self._on_current_changed)
 
     def addPage(
@@ -146,3 +147,15 @@ class NavigationView(QWidget):
         if index >= 0 and self.sidebar.currentIndex() != index:
             self.sidebar.setCurrentIndex(index)
         self.currentChanged.emit(index)
+
+
+class _CurrentPageStack(QStackedWidget):
+    """Keep hidden pages from imposing their size hints on the active page."""
+
+    def sizeHint(self) -> QSize:
+        current = self.currentWidget()
+        return current.sizeHint() if current is not None else super().sizeHint()
+
+    def minimumSizeHint(self) -> QSize:
+        current = self.currentWidget()
+        return current.minimumSizeHint() if current is not None else super().minimumSizeHint()
