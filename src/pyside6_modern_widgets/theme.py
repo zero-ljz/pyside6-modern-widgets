@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from enum import Enum
 
 from PySide6.QtCore import QEvent, QObject, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
+
+
+class WatercolorStyle(Enum):
+    """Built-in watercolor color families."""
+
+    MODERN = "modern"
+    ORIGINAL = "original"
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +41,7 @@ class ModernTheme:
     focus: str
     watercolor_base: str
     watercolor_spots: tuple[tuple[str, float, float, float], ...]
+    watercolor_style: WatercolorStyle = WatercolorStyle.MODERN
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,11 +80,11 @@ LIGHT_THEME = ModernTheme(
     tab_hover="#EAEAEA",
     tab_divider="#D1D1D1",
     focus="#707070",
-    watercolor_base="#FFFCF5",
+    watercolor_base="#F7FAFC",
     watercolor_spots=(
-        ("#78FFB7B2", 0.1, 0.1, 0.5),
-        ("#78C7CEEA", 0.9, 0.9, 0.6),
-        ("#78E2F0CB", 0.2, 0.9, 0.4),
+        ("#667DD3FC", 0.08, 0.08, 0.52),
+        ("#55F6A6A1", 0.92, 0.18, 0.58),
+        ("#557ED6C4", 0.22, 0.92, 0.48),
     ),
 )
 
@@ -98,12 +107,34 @@ DARK_THEME = ModernTheme(
     tab_hover="#333333",
     tab_divider="#484848",
     focus="#A0A0A0",
+    watercolor_base="#151A1F",
+    watercolor_spots=(
+        ("#503B82F6", 0.08, 0.08, 0.52),
+        ("#45F472B6", 0.92, 0.18, 0.58),
+        ("#4034D399", 0.22, 0.92, 0.48),
+    ),
+)
+
+ORIGINAL_LIGHT_THEME = replace(
+    LIGHT_THEME,
+    watercolor_base="#FFFCF5",
+    watercolor_spots=(
+        ("#78FFB7B2", 0.1, 0.1, 0.5),
+        ("#78C7CEEA", 0.9, 0.9, 0.6),
+        ("#78E2F0CB", 0.2, 0.9, 0.4),
+    ),
+    watercolor_style=WatercolorStyle.ORIGINAL,
+)
+
+ORIGINAL_DARK_THEME = replace(
+    DARK_THEME,
     watercolor_base="#202020",
     watercolor_spots=(
         ("#503B3151", 0.1, 0.1, 0.5),
         ("#50314759", 0.9, 0.9, 0.6),
         ("#50314F45", 0.2, 0.9, 0.4),
     ),
+    watercolor_style=WatercolorStyle.ORIGINAL,
 )
 
 DEFAULT_METRICS = ModernMetrics()
@@ -112,6 +143,28 @@ DEFAULT_METRICS = ModernMetrics()
 def theme_for_palette(palette: QPalette) -> ModernTheme:
     """Choose the built-in theme matching an application palette."""
     return DARK_THEME if palette.color(QPalette.ColorRole.Window).lightness() < 128 else LIGHT_THEME
+
+
+def theme_with_watercolor_style(
+    theme: ModernTheme,
+    style: WatercolorStyle,
+) -> ModernTheme:
+    """Return ``theme`` with the selected watercolor colors applied."""
+    if theme.watercolor_style is style:
+        return theme
+    is_dark = QColor(theme.surface).lightness() < 128
+    reference = {
+        (False, WatercolorStyle.MODERN): LIGHT_THEME,
+        (True, WatercolorStyle.MODERN): DARK_THEME,
+        (False, WatercolorStyle.ORIGINAL): ORIGINAL_LIGHT_THEME,
+        (True, WatercolorStyle.ORIGINAL): ORIGINAL_DARK_THEME,
+    }[is_dark, style]
+    return replace(
+        theme,
+        watercolor_base=reference.watercolor_base,
+        watercolor_spots=reference.watercolor_spots,
+        watercolor_style=style,
+    )
 
 
 def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPalette:
@@ -128,8 +181,6 @@ def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPale
         palette.setColor(group, QPalette.ColorRole.Window, QColor(theme.surface))
         palette.setColor(group, QPalette.ColorRole.Base, QColor(theme.surface))
         palette.setColor(group, QPalette.ColorRole.Button, QColor(theme.surface))
-        palette.setColor(group, QPalette.ColorRole.Highlight, QColor(theme.focus))
-        palette.setColor(group, QPalette.ColorRole.HighlightedText, QColor(theme.surface))
     for role in (
         QPalette.ColorRole.Text,
         QPalette.ColorRole.WindowText,
@@ -176,6 +227,10 @@ class ThemeManager(QObject):
             application.setPalette(palette_for_theme(theme, application.palette()))
         self._set_theme(theme)
 
+    def setWatercolorStyle(self, style: WatercolorStyle) -> None:
+        """Change watercolor colors without replacing the application palette."""
+        self._set_theme(theme_with_watercolor_style(self._theme, style))
+
     def followsSystemTheme(self) -> bool:
         return self._follows_system
 
@@ -190,13 +245,23 @@ class ThemeManager(QObject):
             if application is not None:
                 application.installEventFilter(self)
         if enabled and application is not None:
-            self._set_theme(theme_for_palette(application.palette()))
+            self._set_theme(
+                theme_with_watercolor_style(
+                    theme_for_palette(application.palette()),
+                    self._theme.watercolor_style,
+                )
+            )
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if self._follows_system and event.type() == QEvent.Type.ApplicationPaletteChange:
             application = QApplication.instance()
             if isinstance(application, QApplication):
-                self._set_theme(theme_for_palette(application.palette()))
+                self._set_theme(
+                    theme_with_watercolor_style(
+                        theme_for_palette(application.palette()),
+                        self._theme.watercolor_style,
+                    )
+                )
         return super().eventFilter(watched, event)
 
     def _set_theme(self, theme: ModernTheme) -> None:

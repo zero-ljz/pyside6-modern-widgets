@@ -73,6 +73,9 @@ Use `theme_manager().setFollowsSystemTheme(True)` to select a built-in theme
 from application palette changes. Pass `theme=LIGHT_THEME` or
 `theme=DARK_THEME` to an individual widget for a local override. Layout metrics
 can be customized with `ModernMetrics` without modifying component internals.
+The Theme Style submenu in the upper-right window menu switches between the
+modern and classic watercolor palettes while preserving the current light or
+dark mode and application accent color.
 
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is

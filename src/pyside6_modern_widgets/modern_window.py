@@ -7,6 +7,8 @@ from typing import cast
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
     QBrush,
     QColor,
     QCursor,
@@ -41,8 +43,10 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
+    WatercolorStyle,
     palette_for_theme,
     theme_manager,
+    theme_with_watercolor_style,
     tinted_icon,
 )
 
@@ -340,6 +344,20 @@ class CustomTitleBar(QWidget):
 
     def _create_window_menu(self) -> QMenu:
         menu = QMenu(self)
+        self.watercolorMenu = menu.addMenu("主题风格")
+        self.watercolorActionGroup = QActionGroup(self)
+        self.watercolorActionGroup.setExclusive(True)
+        self.modernWatercolorAction = self.watercolorMenu.addAction("现代")
+        self.originalWatercolorAction = self.watercolorMenu.addAction("经典")
+        for action, style in (
+            (self.modernWatercolorAction, WatercolorStyle.MODERN),
+            (self.originalWatercolorAction, WatercolorStyle.ORIGINAL),
+        ):
+            action.setCheckable(True)
+            action.setData(style)
+            self.watercolorActionGroup.addAction(action)
+        self.watercolorActionGroup.triggered.connect(self._select_watercolor_style)
+        menu.addSeparator()
         self.quitAction = menu.addAction(
             _resource_icon("shutdown.png", self._theme),
             "退出程序",
@@ -358,6 +376,11 @@ class CustomTitleBar(QWidget):
         self.quitAction.triggered.connect(confirm_exit)
         return menu
 
+    def _select_watercolor_style(self, action: QAction) -> None:
+        style = action.data()
+        if isinstance(style, WatercolorStyle):
+            self.parent_window.setWatercolorStyle(style)
+
     def showWindowMenu(self) -> None:
         position = self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height()))
         self.windowMenu.popup(position)
@@ -368,6 +391,8 @@ class CustomTitleBar(QWidget):
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
+        self.modernWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.MODERN)
+        self.originalWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.ORIGINAL)
         self.setPalette(palette_for_theme(theme, self.palette()))
         title_font = self.titleLabel.font()
         title_font.setPointSizeF(max(title_font.pointSizeF(), 10.5))
@@ -821,6 +846,19 @@ class ModernWindow(QWidget):
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
         self.apply_window_style()
+
+    def watercolorStyle(self) -> WatercolorStyle:
+        return self._theme.watercolor_style
+
+    def setWatercolorStyle(self, style: WatercolorStyle) -> None:
+        theme = theme_with_watercolor_style(self._theme, style)
+        if theme is self._theme:
+            return
+        if self._uses_global_theme:
+            theme_manager().setWatercolorStyle(style)
+        else:
+            self._theme = theme
+            self.apply_window_style()
 
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
         if self._uses_global_theme:

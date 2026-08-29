@@ -36,11 +36,14 @@ from pyside6_modern_widgets import (
     DARK_THEME,
     DEFAULT_METRICS,
     LIGHT_THEME,
+    ORIGINAL_DARK_THEME,
+    ORIGINAL_LIGHT_THEME,
     ModernWindow,
     NavigationPosition,
     NavigationSidebar,
     NavigationView,
     TabView,
+    WatercolorStyle,
     theme_manager,
 )
 
@@ -120,7 +123,15 @@ def test_title_bar_menu_button_and_native_context_menu(monkeypatch) -> None:
         title_bar.pinButton
     )
     assert "contextMenuEvent" in type(title_bar).__dict__
-    assert [action.text() for action in title_bar.windowMenu.actions()] == ["退出程序"]
+    assert [
+        action.text() for action in title_bar.windowMenu.actions() if not action.isSeparator()
+    ] == ["主题风格", "退出程序"]
+    assert [action.text() for action in title_bar.watercolorMenu.actions()] == [
+        "现代",
+        "经典",
+    ]
+    assert title_bar.modernWatercolorAction.isChecked()
+    assert not title_bar.originalWatercolorAction.isChecked()
 
     QTest.mouseClick(title_bar.menuButton, Qt.MouseButton.LeftButton)
     _application().processEvents()
@@ -142,6 +153,57 @@ def test_title_bar_menu_button_and_native_context_menu(monkeypatch) -> None:
     )
     QApplication.sendEvent(title_bar, context_event)
     assert observed == [global_position]
+
+
+@pytest.mark.parametrize(
+    ("theme", "original_theme"),
+    (
+        (LIGHT_THEME, ORIGINAL_LIGHT_THEME),
+        (DARK_THEME, ORIGINAL_DARK_THEME),
+    ),
+)
+def test_title_bar_menu_switches_watercolor_style_without_changing_mode(
+    theme, original_theme
+) -> None:
+    window = ModernWindow(theme=theme)
+    assert window.titleBar is not None
+
+    window.titleBar.originalWatercolorAction.trigger()
+
+    assert window.theme() == original_theme
+    assert window.watercolorStyle() is WatercolorStyle.ORIGINAL
+    assert window.theme().surface == theme.surface
+    assert window.titleBar.originalWatercolorAction.isChecked()
+
+    window.titleBar.modernWatercolorAction.trigger()
+    assert window.theme() == theme
+    assert window.titleBar.modernWatercolorAction.isChecked()
+
+
+def test_title_bar_watercolor_menu_updates_global_theme_followers() -> None:
+    manager = theme_manager()
+    manager.setTheme(LIGHT_THEME)
+    accent = QColor("#E81123")
+    original_application_palette = QPalette(_application().palette())
+    application_palette = QPalette(original_application_palette)
+    application_palette.setColor(QPalette.ColorRole.Highlight, accent)
+    _application().setPalette(application_palette)
+    window = ModernWindow()
+    navigation = NavigationView()
+
+    try:
+        assert window.titleBar is not None
+        window.titleBar.originalWatercolorAction.trigger()
+
+        assert manager.theme() == ORIGINAL_LIGHT_THEME
+        assert window.theme() == ORIGINAL_LIGHT_THEME
+        assert navigation.theme() == ORIGINAL_LIGHT_THEME
+        assert _application().palette().color(QPalette.ColorRole.Highlight) == accent
+        assert window.palette().color(QPalette.ColorRole.Highlight) == accent
+        assert navigation.palette().color(QPalette.ColorRole.Highlight) == accent
+    finally:
+        manager.setTheme(LIGHT_THEME)
+        _application().setPalette(original_application_palette)
 
 
 def test_title_bar_reserves_vertical_space_around_window_buttons() -> None:
@@ -1211,7 +1273,25 @@ def test_theme_manager_can_follow_application_palette() -> None:
         manager.setTheme(LIGHT_THEME)
 
 
-@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_system_theme_changes_preserve_original_watercolor_style() -> None:
+    manager = theme_manager()
+    manager.setTheme(ORIGINAL_LIGHT_THEME)
+    manager.setFollowsSystemTheme(True)
+    palette = QPalette(_application().palette())
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202020"))
+
+    try:
+        _application().setPalette(palette)
+        _application().processEvents()
+        assert manager.theme() == ORIGINAL_DARK_THEME
+    finally:
+        manager.setTheme(LIGHT_THEME)
+
+
+@pytest.mark.parametrize(
+    "theme",
+    [LIGHT_THEME, DARK_THEME, ORIGINAL_LIGHT_THEME, ORIGINAL_DARK_THEME],
+)
 def test_theme_painter_colors_are_valid(theme) -> None:
     for color in (
         theme.text,
