@@ -81,6 +81,12 @@ not supported.
 Runnable window/navigation and multi-tab examples are available in the
 [`examples`](examples) directory.
 
+`NavigationView` automatically collapses into an overlay sidebar at widths up
+to `900px` and returns to the side-by-side layout at `1040px`. On return it
+restores the expand/collapse intent last selected with the sidebar toggle.
+Applications with a custom responsive policy can call
+`setAutoSidebarOverlay(False)` and control the mode with `setSidebarOverlay()`.
+
 `ModernWindow` intentionally remains based on `QWidget`, so it is suitable for both
 primary and auxiliary windows. Its compatibility surface is limited to the common
 `menuBar()`, `addToolBar()`, `statusBar()`, and `setCentralWidget()` methods; it does

@@ -825,6 +825,7 @@ def test_navigation_view_only_uses_current_page_size_hints() -> None:
 
 def test_navigation_view_overlay_sidebar_does_not_move_content() -> None:
     view = NavigationView()
+    view.setAutoSidebarOverlay(False)
     view.addPage(QLabel("page"), "Page")
     view.sidebar.setCollapsed(True, animated=False)
     view.resize(700, 420)
@@ -866,6 +867,7 @@ def test_navigation_view_overlay_sidebar_does_not_move_content() -> None:
 
 def test_navigation_view_overlay_sidebar_preserves_watercolor_surface() -> None:
     view = NavigationView(theme=LIGHT_THEME)
+    view.setAutoSidebarOverlay(False)
     view.addPage(QLabel("page"), "Page")
     view.sidebar.setCollapsed(True, animated=False)
     view.resize(700, 420)
@@ -906,6 +908,7 @@ def test_navigation_view_overlay_sidebar_preserves_watercolor_surface() -> None:
 
 def test_navigation_view_overlay_sidebar_closes_only_on_outside_click() -> None:
     view = NavigationView()
+    view.setAutoSidebarOverlay(False)
     view.addPage(QLabel("page"), "Page")
     view.sidebar.setCollapsed(True, animated=False)
     view.resize(700, 420)
@@ -929,6 +932,55 @@ def test_navigation_view_overlay_sidebar_closes_only_on_outside_click() -> None:
     )
     _application().processEvents()
     assert view.sidebar.isCollapsed()
+
+
+def test_navigation_view_switches_overlay_mode_automatically_with_hysteresis() -> None:
+    view = NavigationView()
+    view.addPage(QLabel("page"), "Page")
+    view.resize(1100, 420)
+    view.show()
+    _application().processEvents()
+
+    assert view.isAutoSidebarOverlay()
+    assert not view.isSidebarOverlay()
+
+    view.resize(900, 420)
+    _application().processEvents()
+    assert view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
+
+    view.resize(1000, 420)
+    _application().processEvents()
+    assert view.isSidebarOverlay()
+
+    view.resize(1040, 420)
+    _application().processEvents()
+    assert not view.isSidebarOverlay()
+    assert not view.sidebar.isCollapsed()
+
+    view.sidebar.toggle()
+    assert view.sidebar.isCollapsed()
+    view.resize(900, 420)
+    _application().processEvents()
+    assert view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
+    view.resize(1040, 420)
+    _application().processEvents()
+    assert not view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
+
+    view.sidebar.toggle()
+    view.resize(900, 420)
+    _application().processEvents()
+    assert view.sidebar.isCollapsed()
+    view.resize(1040, 420)
+    _application().processEvents()
+    assert not view.sidebar.isCollapsed()
+
+    view.setAutoSidebarOverlay(False)
+    view.resize(700, 420)
+    _application().processEvents()
+    assert not view.isSidebarOverlay()
 
 
 def test_tab_view_uses_native_tab_semantics_and_qtabwidget_api() -> None:

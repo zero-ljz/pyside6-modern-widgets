@@ -20,7 +20,6 @@ class ExampleWindow(ModernWindow):
         self.setWindowTitle("Modern Widgets Example")
         self.setWindowIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
         self.resize(1000, 640)
-        self.setMinimumSize(720, 460)
 
         self.navigation = NavigationView()
         self.setCentralWidget(self.navigation)

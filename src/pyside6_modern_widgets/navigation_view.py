@@ -55,6 +55,9 @@ class _SidebarOverlayShadow(QWidget):
 class NavigationView(QWidget):
     """Combine a ``NavigationSidebar`` with a synchronized page stack."""
 
+    SIDEBAR_OVERLAY_ENTER_WIDTH = 900
+    SIDEBAR_OVERLAY_EXIT_WIDTH = 1040
+
     currentChanged = Signal(int)
 
     def __init__(
@@ -69,6 +72,8 @@ class NavigationView(QWidget):
         self._theme = theme or theme_manager().theme()
         self._metrics = metrics
         self._sidebar_overlay = False
+        self._auto_sidebar_overlay = True
+        self._sidebar_user_prefers_expanded = True
         self._outside_click_filter_installed = False
         theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self.setObjectName("ModernNavigationView")
@@ -107,6 +112,9 @@ class NavigationView(QWidget):
         self._root_layout.addWidget(self.contentContainer, 1)
 
         self.sidebar.currentChanged.connect(self.stackedWidget.setCurrentIndex)
+        self.sidebar.collapseIntentChanged.connect(
+            self._on_sidebar_collapse_intent_changed
+        )
         self.sidebar.collapsedChanged.connect(self._sync_outside_click_filter)
         self.sidebar.collapsedChanged.connect(self._update_sidebar_shadow)
         self.stackedWidget.currentChanged.connect(self.stackedWidget.updateGeometry)
@@ -114,6 +122,16 @@ class NavigationView(QWidget):
 
     def isSidebarOverlay(self) -> bool:
         return self._sidebar_overlay
+
+    def isAutoSidebarOverlay(self) -> bool:
+        return self._auto_sidebar_overlay
+
+    def setAutoSidebarOverlay(self, enabled: bool) -> None:
+        if enabled == self._auto_sidebar_overlay:
+            return
+        self._auto_sidebar_overlay = enabled
+        if enabled:
+            self._update_automatic_sidebar_overlay()
 
     def setSidebarOverlay(self, overlay: bool) -> None:
         if overlay == self._sidebar_overlay:
@@ -133,7 +151,24 @@ class NavigationView(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self._update_automatic_sidebar_overlay()
         self._position_sidebar_layer()
+
+    def _update_automatic_sidebar_overlay(self) -> None:
+        if not self._auto_sidebar_overlay:
+            return
+        if self.width() <= self.SIDEBAR_OVERLAY_ENTER_WIDTH:
+            self.setSidebarOverlay(True)
+            if not self.sidebar.isCollapsed():
+                self.sidebar.setCollapsed(True, animated=False)
+        elif self.width() >= self.SIDEBAR_OVERLAY_EXIT_WIDTH:
+            self.setSidebarOverlay(False)
+            should_collapse = not self._sidebar_user_prefers_expanded
+            if self.sidebar.isCollapsed() != should_collapse:
+                self.sidebar.setCollapsed(should_collapse, animated=False)
+
+    def _on_sidebar_collapse_intent_changed(self, collapsed: bool) -> None:
+        self._sidebar_user_prefers_expanded = not collapsed
 
     def eventFilter(self, watched, event) -> bool:
         if watched is self.sidebar and event.type() == QEvent.Type.Resize:
