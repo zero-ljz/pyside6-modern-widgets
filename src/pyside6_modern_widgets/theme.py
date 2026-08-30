@@ -11,8 +11,9 @@ from PySide6.QtWidgets import QApplication
 
 
 class WatercolorStyle(Enum):
-    """Built-in watercolor color families."""
+    """Built-in window surface style families."""
 
+    STANDARD = "standard"
     MODERN = "modern"
     ORIGINAL = "original"
 
@@ -115,6 +116,20 @@ DARK_THEME = ModernTheme(
     ),
 )
 
+STANDARD_LIGHT_THEME = replace(
+    LIGHT_THEME,
+    watercolor_base="#F7F7F7",
+    watercolor_spots=(),
+    watercolor_style=WatercolorStyle.STANDARD,
+)
+
+STANDARD_DARK_THEME = replace(
+    DARK_THEME,
+    watercolor_base=DARK_THEME.surface,
+    watercolor_spots=(),
+    watercolor_style=WatercolorStyle.STANDARD,
+)
+
 ORIGINAL_LIGHT_THEME = replace(
     LIGHT_THEME,
     watercolor_base="#FFFCF5",
@@ -142,18 +157,24 @@ DEFAULT_METRICS = ModernMetrics()
 
 def theme_for_palette(palette: QPalette) -> ModernTheme:
     """Choose the built-in theme matching an application palette."""
-    return DARK_THEME if palette.color(QPalette.ColorRole.Window).lightness() < 128 else LIGHT_THEME
+    return (
+        STANDARD_DARK_THEME
+        if palette.color(QPalette.ColorRole.Window).lightness() < 128
+        else STANDARD_LIGHT_THEME
+    )
 
 
 def theme_with_watercolor_style(
     theme: ModernTheme,
     style: WatercolorStyle,
 ) -> ModernTheme:
-    """Return ``theme`` with the selected watercolor colors applied."""
+    """Return ``theme`` with the selected window surface style applied."""
     if theme.watercolor_style is style:
         return theme
     is_dark = QColor(theme.surface).lightness() < 128
     reference = {
+        (False, WatercolorStyle.STANDARD): STANDARD_LIGHT_THEME,
+        (True, WatercolorStyle.STANDARD): STANDARD_DARK_THEME,
         (False, WatercolorStyle.MODERN): LIGHT_THEME,
         (True, WatercolorStyle.MODERN): DARK_THEME,
         (False, WatercolorStyle.ORIGINAL): ORIGINAL_LIGHT_THEME,
@@ -213,7 +234,7 @@ class ThemeManager(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self._theme = LIGHT_THEME
+        self._theme = STANDARD_LIGHT_THEME
         self._follows_system = False
         self._application: QApplication | None = None
 
@@ -228,7 +249,7 @@ class ThemeManager(QObject):
         self._set_theme(theme)
 
     def setWatercolorStyle(self, style: WatercolorStyle) -> None:
-        """Change watercolor colors without replacing the application palette."""
+        """Change the window surface without replacing the application palette."""
         self._set_theme(theme_with_watercolor_style(self._theme, style))
 
     def followsSystemTheme(self) -> bool:

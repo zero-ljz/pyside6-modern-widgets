@@ -13,7 +13,7 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 
 Supports Windows, macOS, and Linux with Python 3.10-3.12, PySide6 6.8.3, and
 the Fusion style. Window backgrounds, including the custom title bar, use the
-same Qt-painted watercolor themes and behavior on every platform.
+same Qt-painted standard or watercolor themes and behavior on every platform.
 
 Right-clicking the custom title bar opens the native Windows system menu. On
 platforms without an equivalent frameless-window API, a Qt menu provides the
@@ -60,22 +60,25 @@ app.exec()
 
 ## Themes
 
-Widgets follow the process-wide theme manager by default. A theme change also
-updates the application palette so regular Qt content remains readable:
+Widgets use a neutral light-gray standard theme through the process-wide theme
+manager by default. A theme change also updates the application palette so
+regular Qt content remains readable:
 
 ```python
-from pyside6_modern_widgets import DARK_THEME, theme_manager
+from pyside6_modern_widgets import STANDARD_DARK_THEME, theme_manager
 
-theme_manager().setTheme(DARK_THEME)
+theme_manager().setTheme(STANDARD_DARK_THEME)
 ```
 
 Use `theme_manager().setFollowsSystemTheme(True)` to select a built-in theme
-from application palette changes. Pass `theme=LIGHT_THEME` or
-`theme=DARK_THEME` to an individual widget for a local override. Layout metrics
-can be customized with `ModernMetrics` without modifying component internals.
+from application palette changes. Pass `theme=STANDARD_LIGHT_THEME` or
+`theme=STANDARD_DARK_THEME` to an individual widget for a local override;
+`LIGHT_THEME` and `DARK_THEME` select the modern watercolor surfaces. Layout
+metrics can be customized with `ModernMetrics` without modifying component
+internals.
 The Theme Style submenu in the upper-right window menu switches between the
-modern and classic watercolor palettes while preserving the current light or
-dark mode and application accent color.
+standard colorless surface and the modern or classic watercolor palettes while
+preserving the current light or dark mode and application accent color.
 
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is

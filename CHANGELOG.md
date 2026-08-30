@@ -9,6 +9,8 @@ All notable changes to this project are documented in this file.
 - Made automatic navigation overlay mode follow the current page's minimum
   width instead of fixed `NavigationView` width breakpoints, while restoring
   the user's sidebar toggle intent when returning to side-by-side mode.
+- Made a new neutral-gray standard theme the default while retaining the modern
+  and classic watercolor themes as selectable styles.
 
 ### Fixed
 

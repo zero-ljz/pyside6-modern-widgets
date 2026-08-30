@@ -397,9 +397,11 @@ class CustomTitleBar(QWidget):
         self.watercolorMenu = menu.addMenu("主题风格")
         self.watercolorActionGroup = QActionGroup(self)
         self.watercolorActionGroup.setExclusive(True)
+        self.standardWatercolorAction = self.watercolorMenu.addAction("标准")
         self.modernWatercolorAction = self.watercolorMenu.addAction("现代")
         self.originalWatercolorAction = self.watercolorMenu.addAction("经典")
         for action, style in (
+            (self.standardWatercolorAction, WatercolorStyle.STANDARD),
             (self.modernWatercolorAction, WatercolorStyle.MODERN),
             (self.originalWatercolorAction, WatercolorStyle.ORIGINAL),
         ):
@@ -441,6 +443,9 @@ class CustomTitleBar(QWidget):
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
+        self.standardWatercolorAction.setChecked(
+            theme.watercolor_style is WatercolorStyle.STANDARD
+        )
         self.modernWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.MODERN)
         self.originalWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.ORIGINAL)
         self.setPalette(palette_for_theme(theme, self.palette()))
