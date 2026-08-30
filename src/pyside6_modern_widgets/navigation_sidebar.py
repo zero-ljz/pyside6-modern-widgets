@@ -50,9 +50,8 @@ class _CollapsedNavigationToolTipStyle(QProxyStyle):
 
 
 def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
-    compact_content_width = max(0, metrics.navigation_collapsed_width - 12)
-    item_background_width = max(0, compact_content_width - 4)
-    item_icon_padding = max(0, (item_background_width - 18) // 2)
+    compact_content_width = max(0, metrics.navigation_collapsed_width - 8)
+    item_icon_padding = max(0, (compact_content_width - 18) // 2)
     toggle_icon_padding = max(0, (compact_content_width - 20) // 2)
     return f"""
             QWidget#ModernNavigationSidebar {{
@@ -70,16 +69,16 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 padding-bottom: 0px;
                 padding-left: {item_icon_padding}px;
                 margin-top: 0px;
-                margin-right: 2px;
-                margin-bottom: 4px;
-                margin-left: 2px;
+                margin-right: 0px;
+                margin-bottom: 0px;
+                margin-left: 0px;
             }}
             QPushButton[class="NavigationItem"]:hover {{
                 background-color: {theme.control_hover};
             }}
             QPushButton[class="NavigationItem"]:pressed {{
                 background-color: {theme.control_pressed};
-                padding-left: 10px;
+                padding-left: 12px;
             }}
             QPushButton[class="NavigationItem"]:checked {{
                 background-color: {theme.control_pressed};
@@ -96,7 +95,7 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 padding-bottom: 0px;
                 margin-top: 0px;
                 margin-right: 0px;
-                margin-bottom: 10px;
+                margin-bottom: 0px;
                 margin-left: 0px;
                 text-align: left;
                 padding-left: {toggle_icon_padding}px;
@@ -219,7 +218,7 @@ class NavigationSidebar(QWidget):
         self._collapsed_width = metrics.navigation_collapsed_width
         self._expanded_width = metrics.navigation_expanded_width
         self._overlay_surface = False
-        self._compact_item_width = max(1, self._collapsed_width - 12)
+        self._compact_item_width = max(1, self._collapsed_width - 8)
         self._collapsed = False
         self._items: list[_NavigationItem] = []
         self._current_index = -1
@@ -231,8 +230,8 @@ class NavigationSidebar(QWidget):
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 10, 6, 10)
-        layout.setSpacing(2)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         self.toggleButton = _NavigationButton(self)
         self.toggleButton.setObjectName("NavigationToggleButton")
@@ -265,12 +264,11 @@ class NavigationSidebar(QWidget):
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scrollArea.setViewportMargins(0, 0, -_SIDEBAR_SCROLLBAR_WIDTH, 0)
         self.scrollContent = QWidget(self.scrollArea)
         self.scrollContent.setObjectName("NavigationScrollContent")
         self._top_layout = QVBoxLayout(self.scrollContent)
         self._top_layout.setContentsMargins(0, 0, 0, 0)
-        self._top_layout.setSpacing(0)
+        self._top_layout.setSpacing(4)
         self._top_layout.addStretch()
         self.scrollArea.setWidget(self.scrollContent)
         layout.addWidget(self.scrollArea)
@@ -280,7 +278,7 @@ class NavigationSidebar(QWidget):
         self._bottom_container.hide()
         self._bottom_layout = QVBoxLayout(self._bottom_container)
         self._bottom_layout.setContentsMargins(0, 0, 0, 0)
-        self._bottom_layout.setSpacing(0)
+        self._bottom_layout.setSpacing(4)
         layout.addWidget(self._bottom_container)
 
     def _init_animation(self) -> None:
@@ -472,6 +470,12 @@ class NavigationSidebar(QWidget):
                 self.setFixedWidth(target)
             return
         self._collapsed = collapsed
+        self.scrollArea.setViewportMargins(
+            0,
+            0,
+            -_SIDEBAR_SCROLLBAR_WIDTH if collapsed else 0,
+            0,
+        )
         for item in self._items:
             item.setCollapsed(collapsed)
             item._set_compact_width(self._compact_item_width if collapsed else None)

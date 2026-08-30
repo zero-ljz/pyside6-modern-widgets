@@ -37,4 +37,4 @@ __all__ = [
     "theme_with_watercolor_style",
 ]
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"

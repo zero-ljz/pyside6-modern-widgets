@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-30
+
+### Fixed
+
+- Matched collapsed navigation selections and the pane toggle background to
+  WinUI's 40-by-36 logical-pixel size and 4-pixel list and edge rhythm while
+  keeping expanded right corners visible beside the scrollbar.
+
 ## [0.4.1] - 2026-08-30
 
 ### Fixed
@@ -55,6 +63,7 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.3.3...v0.4.0
