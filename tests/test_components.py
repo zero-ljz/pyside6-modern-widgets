@@ -1339,33 +1339,127 @@ def test_native_window_corners_require_windows_11(
     assert ModernWindow._supports_native_window_corners() is expected
 
 
-def test_windows_10_surface_falls_back_to_qt_painted_round_corners(monkeypatch) -> None:
+def test_windows_10_surface_uses_translucent_deferred_live_resize(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ModernWindow,
+        "_uses_windows_window_state",
+        staticmethod(lambda: True),
+    )
     monkeypatch.setattr(
         ModernWindow,
         "_supports_native_window_corners",
         staticmethod(lambda: False),
     )
+    monkeypatch.setattr(ModernWindow, "_is_native_maximized", lambda _self: False)
 
     window = ModernWindow(theme=LIGHT_THEME)
 
     assert not window._native_opaque_surface
+    assert window._deferred_live_resize
     assert window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     assert window.frame._corner_radius == window.cornerRadius
+    assert window.chromeOverlay._corner_radius == window.cornerRadius
 
 
 def test_windows_11_surface_uses_native_round_corners(monkeypatch) -> None:
     monkeypatch.setattr(
         ModernWindow,
+        "_uses_windows_window_state",
+        staticmethod(lambda: True),
+    )
+    monkeypatch.setattr(
+        ModernWindow,
         "_supports_native_window_corners",
         staticmethod(lambda: True),
     )
+    monkeypatch.setattr(ModernWindow, "_is_native_maximized", lambda _self: False)
 
     window = ModernWindow(theme=LIGHT_THEME)
 
     assert window._native_opaque_surface
+    assert not window._deferred_live_resize
     assert window.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
     assert not window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     assert window.frame._corner_radius == 0
+    assert window.chromeOverlay._corner_radius == 0
+
+
+def test_windows_10_live_resize_freezes_content_without_scaling() -> None:
+    window = ModernWindow(theme=LIGHT_THEME)
+    window._deferred_live_resize = True
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    window._hover_resize_edges = Qt.Edge.RightEdge
+    window._prepare_deferred_resize_snapshot()
+    prepared_snapshot = window._pending_resize_snapshot
+    assert prepared_snapshot is not None
+
+    window._begin_system_resize_tracking(Qt.Edge.RightEdge)
+    assert window._pending_resize_snapshot is prepared_snapshot
+    assert not window._live_resize_overlay.isVisible()
+    assert not window._deferred_resize_sync_timer.isActive()
+    assert window.frame.updatesEnabled()
+
+    window.resize(660, 460)
+    _application().processEvents()
+    assert not window._live_resize_overlay.isVisible()
+    assert not window._deferred_resize_sync_timer.isActive()
+    assert window._pending_resize_snapshot is None
+    assert window.frame.updatesEnabled()
+
+    window.resize(520, 420)
+    _application().processEvents()
+    snapshot = window._live_resize_overlay._snapshot
+    assert snapshot is not None
+    assert snapshot is not prepared_snapshot
+    assert snapshot.deviceIndependentSize().toSize() == QSize(520, 420)
+    assert window._live_resize_overlay.geometry() == window.rect()
+    assert window._live_resize_overlay.isVisible()
+    assert window._deferred_resize_sync_timer.isActive()
+    assert not window.frame.updatesEnabled()
+    window._deferred_resize_sync_timer.stop()
+
+    window.resize(500, 400)
+    _application().processEvents()
+    assert window._live_resize_overlay._snapshot is snapshot
+
+    window._refresh_deferred_resize_snapshot()
+    synced_snapshot = window._live_resize_overlay._snapshot
+    assert synced_snapshot is not None
+    assert synced_snapshot is not snapshot
+    assert synced_snapshot.deviceIndependentSize().toSize() == QSize(500, 400)
+    assert not window.frame.updatesEnabled()
+
+    window.resize(540, 400)
+    _application().processEvents()
+    assert not window._live_resize_overlay.isVisible()
+    assert not window._deferred_resize_sync_timer.isActive()
+    assert window.frame.updatesEnabled()
+
+    window._finish_system_resize_tracking()
+    assert not window._live_resize_overlay.isVisible()
+    assert window._live_resize_overlay._snapshot is None
+    assert window.frame.updatesEnabled()
+
+
+def test_windows_10_live_resize_does_not_freeze_height_only_changes() -> None:
+    window = ModernWindow(theme=LIGHT_THEME)
+    window._deferred_live_resize = True
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+
+    window._begin_system_resize_tracking(Qt.Edge.BottomEdge)
+    window.resize(639, 420)
+    _application().processEvents()
+
+    assert not window._live_resize_overlay.isVisible()
+    assert not window._deferred_resize_sync_timer.isActive()
+    assert window._pending_resize_snapshot is None
+    assert window.frame.updatesEnabled()
+    window._finish_system_resize_tracking()
 
 
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
