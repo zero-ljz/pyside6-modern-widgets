@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenuBar,
     QStatusBar,
+    QStyle,
     QTabBar,
     QTableWidget,
     QTabWidget,
@@ -648,6 +649,33 @@ def test_navigation_sidebar_selection_and_collapse() -> None:
     assert sidebar.width() == 48
 
 
+def test_collapsed_navigation_tooltip_uses_short_initial_delay() -> None:
+    sidebar = NavigationSidebar()
+    index = sidebar.addItem("First")
+    button = sidebar.button(index)
+    assert button is not None
+
+    sidebar.setCollapsed(True, animated=False)
+
+    assert button.toolTip() == "First"
+    assert button.style().styleHint(QStyle.StyleHint.SH_ToolTip_WakeUpDelay, None, button) == 250
+
+
+def test_collapsed_navigation_shows_scrollbar_when_items_overflow() -> None:
+    sidebar = NavigationSidebar()
+    for index in range(8):
+        sidebar.addItem(f"Item {index}")
+    sidebar.setCollapsed(True, animated=False)
+    sidebar.resize(DEFAULT_METRICS.navigation_collapsed_width, 180)
+    sidebar.show()
+
+    _application().processEvents()
+
+    scrollbar = sidebar.scrollArea.verticalScrollBar()
+    assert scrollbar.maximum() > 0
+    assert scrollbar.isVisible()
+
+
 def test_collapsed_navigation_ignores_application_button_padding() -> None:
     app = _application()
     previous_style = app.styleSheet()
@@ -911,17 +939,10 @@ def test_navigation_view_overlay_sidebar_does_not_move_content() -> None:
         view.height(),
     )
     assert view.sidebar.property("overlay") is True
-    assert view._sidebar_shadow.isVisible()
-    assert view._sidebar_shadow.geometry() == QRect(
-        DEFAULT_METRICS.navigation_expanded_width,
-        0,
-        view._sidebar_shadow.WIDTH,
-        view.height(),
-    )
+    assert not hasattr(view, "_sidebar_shadow")
 
     view.setSidebarOverlay(False)
     _application().processEvents()
-    assert not view._sidebar_shadow.isVisible()
     assert view.contentContainer.geometry().x() == (
         DEFAULT_METRICS.navigation_expanded_width
     )
@@ -951,21 +972,60 @@ def test_navigation_view_overlay_sidebar_preserves_watercolor_surface() -> None:
     assert len(sampled_colors) > 4
 
     view_image = view.grab().toImage()
-    shadow_x = view.sidebar.width()
-    shadow_y = view.height() // 2
-    assert view_image.pixelColor(shadow_x - 1, shadow_y) != QColor(LIGHT_THEME.border)
-    assert view_image.pixelColor(shadow_x + 1, shadow_y).lightness() < (
-        view_image.pixelColor(shadow_x + view._sidebar_shadow.WIDTH - 1, shadow_y).lightness()
+    sidebar_edge_x = view.sidebar.width()
+    sidebar_edge_y = view.height() // 2
+    assert view_image.pixelColor(sidebar_edge_x - 1, sidebar_edge_y) == QColor(
+        LIGHT_THEME.border
+    )
+    assert view_image.pixelColor(sidebar_edge_x + 1, sidebar_edge_y) == QColor(
+        LIGHT_THEME.navigation_content
     )
 
     view.sidebar.setCollapsed(True, animated=False)
     _application().processEvents()
     collapsed_image = view.grab().toImage()
     collapsed_edge = DEFAULT_METRICS.navigation_collapsed_width
-    assert collapsed_image.pixelColor(collapsed_edge - 1, shadow_y) != QColor(
+    assert collapsed_image.pixelColor(collapsed_edge - 1, sidebar_edge_y) != QColor(
         LIGHT_THEME.border
     )
-    assert collapsed_image.pixelColor(collapsed_edge, shadow_y) == QColor(LIGHT_THEME.border)
+    assert collapsed_image.pixelColor(collapsed_edge, sidebar_edge_y) == QColor(
+        LIGHT_THEME.border
+    )
+
+
+def test_navigation_view_expanded_overlay_rounds_right_corners() -> None:
+    sidebar_color = QColor("#FF0000")
+    content_color = QColor("#00FF00")
+    border_color = QColor("#808080")
+    theme = replace(
+        LIGHT_THEME,
+        watercolor_base=sidebar_color.name(),
+        watercolor_spots=(),
+        navigation_content=content_color.name(),
+        border=border_color.name(),
+    )
+    view = NavigationView(theme=theme)
+    view.setAutoSidebarOverlay(False)
+    view.addPage(QLabel("page"), "Page")
+    view.sidebar.setCollapsed(True, animated=False)
+    view.resize(700, 420)
+    view.show()
+    view.setSidebarOverlay(True)
+    view.sidebar.setCollapsed(False, animated=False)
+    _application().processEvents()
+
+    image = view.grab().toImage()
+    right = view.sidebar.width() - 1
+    bottom = view.sidebar.height() - 1
+    radius = DEFAULT_METRICS.corner_radius
+
+    assert image.pixelColor(0, 0) == border_color
+    assert image.pixelColor(0, bottom) == border_color
+    assert image.pixelColor(0, view.height() // 2) == sidebar_color
+    assert image.pixelColor(right, 0) == border_color
+    assert image.pixelColor(right, bottom) == content_color
+    assert image.pixelColor(right, radius + 2) == border_color
+    assert image.pixelColor(right, bottom - radius - 2) == border_color
 
 
 def test_navigation_view_overlay_sidebar_closes_only_on_outside_click() -> None:

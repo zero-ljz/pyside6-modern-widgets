@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -25,31 +24,6 @@ from .theme import (
     palette_for_theme,
     theme_manager,
 )
-
-
-class _SidebarOverlayShadow(QWidget):
-    """A lightweight right-edge shadow for the overlay sidebar."""
-
-    WIDTH = 14
-
-    def __init__(self, parent: QWidget, theme: ModernTheme) -> None:
-        super().__init__(parent)
-        self._theme = theme
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-        self.hide()
-
-    def setTheme(self, theme: ModernTheme) -> None:
-        self._theme = theme
-        self.update()
-
-    def paintEvent(self, _event) -> None:
-        shadow_alpha = 72 if QColor(self._theme.watercolor_base).lightness() < 128 else 42
-        gradient = QLinearGradient(0, 0, self.width(), 0)
-        gradient.setColorAt(0, QColor(0, 0, 0, shadow_alpha))
-        gradient.setColorAt(1, QColor(0, 0, 0, 0))
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), QBrush(gradient))
 
 
 class NavigationView(QWidget):
@@ -100,7 +74,6 @@ class NavigationView(QWidget):
             True,
         )
         self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
-        self._sidebar_shadow = _SidebarOverlayShadow(self, self._theme)
 
         content_layout = QVBoxLayout(self.contentContainer)
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -116,7 +89,6 @@ class NavigationView(QWidget):
             self._on_sidebar_collapse_intent_changed
         )
         self.sidebar.collapsedChanged.connect(self._sync_outside_click_filter)
-        self.sidebar.collapsedChanged.connect(self._update_sidebar_shadow)
         self.stackedWidget.currentChanged.connect(self.stackedWidget.updateGeometry)
         self.stackedWidget.currentChanged.connect(self._on_current_changed)
 
@@ -145,7 +117,6 @@ class NavigationView(QWidget):
         self.sidebar.setOverlaySurface(overlay)
         self._position_sidebar_layer()
         self.sidebar.show()
-        self._update_sidebar_shadow()
         self._sync_outside_click_filter()
         self.updateGeometry()
 
@@ -195,19 +166,6 @@ class NavigationView(QWidget):
                 self.height(),
             )
             self.sidebar.raise_()
-            self._sidebar_shadow.setGeometry(
-                self.sidebar.width(),
-                0,
-                _SidebarOverlayShadow.WIDTH,
-                self.height(),
-            )
-            self._sidebar_shadow.raise_()
-
-    def _update_sidebar_shadow(self, _collapsed: bool | None = None) -> None:
-        visible = self._sidebar_overlay and not self.sidebar.isCollapsed()
-        self._sidebar_shadow.setVisible(visible)
-        if visible:
-            self._sidebar_shadow.raise_()
 
     def _sync_outside_click_filter(self, _collapsed: bool | None = None) -> None:
         application = QApplication.instance()
@@ -278,7 +236,6 @@ class NavigationView(QWidget):
         self._theme = theme or theme_manager().theme()
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self.sidebar.setTheme(self._theme)
-        self._sidebar_shadow.setTheme(self._theme)
         self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
 
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
@@ -286,7 +243,6 @@ class NavigationView(QWidget):
             self._theme = theme
             self.setPalette(palette_for_theme(theme, self.palette()))
             self.sidebar.setTheme(theme)
-            self._sidebar_shadow.setTheme(theme)
             self.contentContainer.setStyleSheet(navigation_content_style(theme))
 
     def _on_current_changed(self, index: int) -> None:

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Reduced the initial tooltip delay for collapsed sidebar navigation items.
+- Restored vertical scrolling when collapsed sidebar navigation items overflow.
+- Rounded the right corners of expanded overlay sidebars in narrow layouts.
+- Removed the expanded overlay sidebar's right-edge shadow.
+- Outlined the top, right, and bottom of expanded overlay sidebars with the window border color.
+
 ## [0.4.0] - 2026-08-29
 
 ### Added

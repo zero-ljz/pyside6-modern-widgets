@@ -4,11 +4,20 @@ from __future__ import annotations
 
 from enum import Enum
 
-from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QSize, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QRadialGradient
+from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QIcon,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QRadialGradient,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
+    QProxyStyle,
     QPushButton,
     QScrollArea,
     QStyle,
@@ -27,6 +36,15 @@ from .theme import (
     theme_manager,
     tinted_icon,
 )
+
+_COLLAPSED_TOOLTIP_WAKE_UP_DELAY_MS = 250
+
+
+class _CollapsedNavigationToolTipStyle(QProxyStyle):
+    def styleHint(self, hint, option=None, widget=None, returnData=None) -> int:
+        if hint == QStyle.StyleHint.SH_ToolTip_WakeUpDelay:
+            return _COLLAPSED_TOOLTIP_WAKE_UP_DELAY_MS
+        return super().styleHint(hint, option, widget, returnData)
 
 
 def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
@@ -142,6 +160,8 @@ class _NavigationItem(_NavigationButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setIcon(_coerce_icon(icon))
         self.setIconSize(QSize(18, 18))
+        self._tooltip_style = _CollapsedNavigationToolTipStyle()
+        self.setStyle(self._tooltip_style)
         self._unconstrained_minimum_width = self.minimumWidth()
         self._unconstrained_maximum_width = self.maximumWidth()
         self.setCollapsed(False)
@@ -234,6 +254,7 @@ class NavigationSidebar(QWidget):
         self.scrollArea = QScrollArea(self)
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scrollContent = QWidget(self.scrollArea)
         self.scrollContent.setObjectName("NavigationScrollContent")
         self._top_layout = QVBoxLayout(self.scrollContent)
@@ -327,16 +348,52 @@ class NavigationSidebar(QWidget):
             return
         self._overlay_surface = overlay
         self.setProperty("overlay", overlay)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, overlay)
         self.style().unpolish(self)
         self.style().polish(self)
         self.update()
 
+    def _overlay_surface_path(self) -> QPainterPath:
+        surface_rect = QRectF(self.rect())
+        surface_path = QPainterPath()
+        if self._collapsed or self._metrics.corner_radius <= 0:
+            surface_path.addRect(surface_rect)
+            return surface_path
+
+        radius = min(
+            float(self._metrics.corner_radius),
+            surface_rect.width(),
+            surface_rect.height() / 2,
+        )
+        surface_path.moveTo(surface_rect.left(), surface_rect.top())
+        surface_path.lineTo(surface_rect.right() - radius, surface_rect.top())
+        surface_path.quadTo(
+            surface_rect.right(),
+            surface_rect.top(),
+            surface_rect.right(),
+            surface_rect.top() + radius,
+        )
+        surface_path.lineTo(surface_rect.right(), surface_rect.bottom() - radius)
+        surface_path.quadTo(
+            surface_rect.right(),
+            surface_rect.bottom(),
+            surface_rect.right() - radius,
+            surface_rect.bottom(),
+        )
+        surface_path.lineTo(surface_rect.left(), surface_rect.bottom())
+        surface_path.closeSubpath()
+        return surface_path
+
     def paintEvent(self, event) -> None:
-        super().paintEvent(event)
         if not self._overlay_surface:
+            super().paintEvent(event)
             return
 
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        painter.setClipPath(self._overlay_surface_path())
+
         painter.fillRect(self.rect(), QColor(self._theme.watercolor_base))
         parent = self.parentWidget()
         surface_width = parent.width() if parent is not None else self.width()
@@ -352,6 +409,35 @@ class NavigationSidebar(QWidget):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRect(self.rect())
 
+        if not self._collapsed:
+            border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+            radius = min(
+                max(0.0, float(self._metrics.corner_radius) - 0.5),
+                border_rect.width(),
+                border_rect.height() / 2,
+            )
+            border_path = QPainterPath()
+            border_path.moveTo(border_rect.left(), border_rect.top())
+            border_path.lineTo(border_rect.right() - radius, border_rect.top())
+            border_path.quadTo(
+                border_rect.right(),
+                border_rect.top(),
+                border_rect.right(),
+                border_rect.top() + radius,
+            )
+            border_path.lineTo(border_rect.right(), border_rect.bottom() - radius)
+            border_path.quadTo(
+                border_rect.right(),
+                border_rect.bottom(),
+                border_rect.right() - radius,
+                border_rect.bottom(),
+            )
+            border_path.lineTo(border_rect.left(), border_rect.bottom())
+            painter.setClipping(False)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(self._theme.border), 1))
+            painter.drawPath(border_path)
+
     def setCollapsed(self, collapsed: bool, *, animated: bool = True) -> None:
         target = self._collapsed_width if collapsed else self._expanded_width
         animations = (self._min_animation, self._max_animation)
@@ -365,11 +451,6 @@ class NavigationSidebar(QWidget):
         for item in self._items:
             item.setCollapsed(collapsed)
             item._set_compact_width(self._compact_item_width if collapsed else None)
-        self.scrollArea.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-            if collapsed
-            else Qt.ScrollBarPolicy.ScrollBarAsNeeded
-        )
         if not animated:
             for animation in animations:
                 animation.stop()
