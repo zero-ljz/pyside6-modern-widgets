@@ -50,7 +50,7 @@ class _CollapsedNavigationToolTipStyle(QProxyStyle):
 
 
 def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
-    compact_content_width = max(0, metrics.navigation_collapsed_width - 8)
+    compact_content_width = max(0, metrics.navigation_collapsed_width - 12)
     item_icon_padding = max(0, (compact_content_width - 18) // 2)
     toggle_icon_padding = max(0, (compact_content_width - 20) // 2)
     return f"""
@@ -70,7 +70,7 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 padding-left: {item_icon_padding}px;
                 margin-top: 0px;
                 margin-right: 0px;
-                margin-bottom: 0px;
+                margin-bottom: 4px;
                 margin-left: 0px;
             }}
             QPushButton[class="NavigationItem"]:hover {{
@@ -95,7 +95,7 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 padding-bottom: 0px;
                 margin-top: 0px;
                 margin-right: 0px;
-                margin-bottom: 0px;
+                margin-bottom: 4px;
                 margin-left: 0px;
                 text-align: left;
                 padding-left: {toggle_icon_padding}px;
@@ -218,7 +218,7 @@ class NavigationSidebar(QWidget):
         self._collapsed_width = metrics.navigation_collapsed_width
         self._expanded_width = metrics.navigation_expanded_width
         self._overlay_surface = False
-        self._compact_item_width = max(1, self._collapsed_width - 8)
+        self._compact_item_width = max(1, self._collapsed_width - 12)
         self._collapsed = False
         self._items: list[_NavigationItem] = []
         self._current_index = -1
@@ -230,7 +230,7 @@ class NavigationSidebar(QWidget):
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(6, 8, 6, 4)
         layout.setSpacing(4)
 
         self.toggleButton = _NavigationButton(self)

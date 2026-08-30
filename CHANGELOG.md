@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-30
+
+### Changed
+
+- Restored the original navigation item active geometry in both collapsed and
+  expanded sidebars while keeping the toggle and outer spacing aligned with
+  the navigation list.
+
 ## [0.4.2] - 2026-08-30
 
 ### Fixed
@@ -63,7 +71,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.3.3...v0.4.0

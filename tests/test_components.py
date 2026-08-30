@@ -685,6 +685,14 @@ def test_collapsed_navigation_shows_scrollbar_when_items_overflow() -> None:
     button = sidebar.button(0)
     assert button is not None
     assert button.width() == sidebar.scrollArea.viewport().width()
+    assert button.mapTo(sidebar, button.rect().topLeft()).x() == 6
+    next_button = sidebar.button(1)
+    assert next_button is not None
+    assert (
+        next_button.mapTo(sidebar, next_button.rect().topLeft()).y()
+        - button.mapTo(sidebar, button.rect().topLeft()).y()
+        == 40
+    )
 
     button_image = button.grab().toImage()
     middle_y = DEFAULT_METRICS.navigation_item_height // 2
@@ -699,8 +707,8 @@ def test_collapsed_navigation_shows_scrollbar_when_items_overflow() -> None:
         for y in range(button_image.height())
         if button_image.pixelColor(middle_x, y) == active_background
     ]
-    assert (min(active_x_positions), max(active_x_positions)) == (0, 39)
-    assert (min(active_y_positions), max(active_y_positions)) == (0, 35)
+    assert (min(active_x_positions), max(active_x_positions)) == (0, 35)
+    assert (min(active_y_positions), max(active_y_positions)) == (0, 31)
 
     viewport_right = sidebar.scrollArea.viewport().mapTo(
         sidebar,
@@ -737,6 +745,7 @@ def test_expanded_navigation_scrollbar_does_not_cover_active_corners() -> None:
 
     button = sidebar.button(0)
     assert button is not None
+    assert button.mapTo(sidebar, button.rect().topLeft()).x() == 6
     image = button.grab().toImage()
     background_right = button.width() - 1
     assert image.pixelColor(background_right, 1) != active_background
@@ -752,6 +761,19 @@ def test_expanded_navigation_scrollbar_does_not_cover_active_corners() -> None:
     assert (min(active_x_positions), max(active_x_positions)) == (
         0,
         button.width() - 1,
+    )
+    active_y_positions = [
+        y
+        for y in range(image.height())
+        if image.pixelColor(button.width() // 2, y) == active_background
+    ]
+    assert (min(active_y_positions), max(active_y_positions)) == (0, 31)
+    next_button = sidebar.button(1)
+    assert next_button is not None
+    assert (
+        next_button.mapTo(sidebar, next_button.rect().topLeft()).y()
+        - button.mapTo(sidebar, button.rect().topLeft()).y()
+        == 40
     )
 
 
@@ -797,6 +819,54 @@ def test_navigation_does_not_compress_bottom_items_when_height_is_limited() -> N
     assert sidebar.height() == required_height
 
 
+def test_navigation_visible_outer_spacing_is_balanced() -> None:
+    toggle_background = QColor("#FF00FF")
+    active_background = QColor("#00FF00")
+    theme = replace(
+        LIGHT_THEME,
+        navigation_background="#FFFFFF",
+        control_hover=toggle_background.name(),
+        control_pressed=active_background.name(),
+    )
+    sidebar = NavigationSidebar(theme=theme)
+    sidebar.addItem("Top")
+    bottom_index = sidebar.addItem("Bottom", position=NavigationPosition.BOTTOM)
+    sidebar.setCurrentIndex(bottom_index)
+    sidebar.setCollapsed(True, animated=False)
+    sidebar.resize(DEFAULT_METRICS.navigation_collapsed_width, 240)
+    sidebar.show()
+    sidebar.toggleButton.setFocus(Qt.FocusReason.BacktabFocusReason)
+
+    _application().processEvents()
+
+    toggle_image = sidebar.toggleButton.grab().toImage()
+    toggle_x = sidebar.toggleButton.width() // 2
+    toggle_background_y = [
+        y
+        for y in range(toggle_image.height())
+        if toggle_image.pixelColor(toggle_x, y) == toggle_background
+    ]
+    bottom_button = sidebar.button(bottom_index)
+    assert bottom_button is not None
+    bottom_image = bottom_button.grab().toImage()
+    bottom_x = bottom_button.width() // 2
+    bottom_background_y = [
+        y
+        for y in range(bottom_image.height())
+        if bottom_image.pixelColor(bottom_x, y) == active_background
+    ]
+
+    visible_top_spacing = (
+        sidebar.toggleButton.mapTo(sidebar, QPoint(0, 0)).y()
+        + min(toggle_background_y)
+    )
+    visible_bottom_spacing = sidebar.height() - 1 - (
+        bottom_button.mapTo(sidebar, QPoint(0, 0)).y()
+        + max(bottom_background_y)
+    )
+    assert visible_top_spacing == visible_bottom_spacing == 8
+
+
 def test_collapsed_navigation_ignores_application_button_padding() -> None:
     app = _application()
     previous_style = app.styleSheet()
@@ -825,8 +895,8 @@ def test_collapsed_navigation_ignores_application_button_padding() -> None:
             for x in range(image.width())
             if image.pixelColor(x, y) == icon_color
         ]
-        assert min(icon_x_positions) == 11
-        assert max(icon_x_positions) == 28
+        assert min(icon_x_positions) == 9
+        assert max(icon_x_positions) == 26
     finally:
         app.setStyleSheet(previous_style)
 
@@ -920,7 +990,7 @@ def test_navigation_focus_is_borderless_and_keeps_toggle_icon_centered() -> None
     button.clearFocus()
     sidebar.toggleButton.setFocus(Qt.FocusReason.BacktabFocusReason)
     _application().processEvents()
-    assert sidebar.toggleButton.width() == DEFAULT_METRICS.navigation_collapsed_width - 8
+    assert sidebar.toggleButton.width() == DEFAULT_METRICS.navigation_collapsed_width - 12
     toggle_image = sidebar.toggleButton.grab().toImage()
     assert toggle_image.pixelColor(
         sidebar.toggleButton.width() // 2, 0
@@ -937,13 +1007,13 @@ def test_navigation_focus_is_borderless_and_keeps_toggle_icon_centered() -> None
         for y in range(toggle_image.height())
         if toggle_image.pixelColor(middle_x, y) == QColor(focus_background)
     ]
-    assert (min(background_x_positions), max(background_x_positions)) == (0, 39)
-    assert (min(background_y_positions), max(background_y_positions)) == (0, 35)
+    assert (min(background_x_positions), max(background_x_positions)) == (0, 35)
+    assert (min(background_y_positions), max(background_y_positions)) == (0, 31)
     toggle_top = sidebar.toggleButton.mapTo(
         sidebar,
         sidebar.toggleButton.rect().topLeft(),
     ).y()
-    assert toggle_top == 4
+    assert toggle_top == 8
     toggle_bottom = sidebar.toggleButton.mapTo(
         sidebar,
         sidebar.toggleButton.rect().bottomLeft(),
