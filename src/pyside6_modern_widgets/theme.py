@@ -55,7 +55,7 @@ class ModernMetrics:
     title_button_size: int = 30
     navigation_item_height: int = 36
     navigation_collapsed_width: int = 48
-    navigation_expanded_width: int = 240
+    navigation_expanded_width: int = 224
     tab_height: int = 38
     tab_min_width: int = 80
     tab_max_width: int = 200

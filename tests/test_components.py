@@ -675,6 +675,42 @@ def test_navigation_sidebar_selection_and_collapse() -> None:
     assert sidebar.width() == 48
 
 
+def test_navigation_item_text_and_icon_can_be_updated() -> None:
+    sidebar = NavigationSidebar()
+    index = sidebar.addItem("Original")
+    button = sidebar.button(index)
+    assert button is not None
+
+    sidebar.setItemText(index, "Updated")
+    assert sidebar.itemText(index) == "Updated"
+    assert button.text() == "Updated"
+    assert button.toolTip() == ""
+
+    sidebar.setCollapsed(True, animated=False)
+    sidebar.setItemText(index, "Updated while collapsed")
+    assert sidebar.itemText(index) == "Updated while collapsed"
+    assert button.text() == ""
+    assert button.toolTip() == "Updated while collapsed"
+
+    button.setText("Updated through button")
+    assert sidebar.itemText(index) == "Updated through button"
+    assert button.text() == ""
+    assert button.toolTip() == "Updated through button"
+
+    icon = QIcon(QPixmap(8, 8))
+    sidebar.setItemIcon(index, icon)
+    assert sidebar.itemIcon(index).cacheKey() == icon.cacheKey()
+
+    sidebar.setCollapsed(False, animated=False)
+    assert button.text() == "Updated through button"
+    assert button.toolTip() == ""
+
+    assert sidebar.itemText(-1) == ""
+    assert sidebar.itemIcon(-1).isNull()
+    sidebar.setItemText(-1, "Ignored")
+    sidebar.setItemIcon(-1, QIcon())
+
+
 def test_collapsed_navigation_tooltip_uses_short_initial_delay() -> None:
     sidebar = NavigationSidebar()
     index = sidebar.addItem("First")
@@ -940,7 +976,7 @@ def test_navigation_icons_stay_fixed_when_collapse_changes() -> None:
     sidebar.toggleButton.setIcon(QIcon(toggle_pixmap))
     sidebar.setCurrentIndex(0)
     sidebar.setCollapsed(True, animated=False)
-    sidebar.resize(48, 240)
+    sidebar.resize(DEFAULT_METRICS.navigation_collapsed_width, 240)
     sidebar.show()
     _application().processEvents()
 
@@ -984,7 +1020,7 @@ def test_navigation_focus_is_borderless_and_keeps_toggle_icon_centered() -> None
     toggle_pixmap = QPixmap(20, 20)
     toggle_pixmap.fill(toggle_color)
     sidebar.toggleButton.setIcon(QIcon(toggle_pixmap))
-    sidebar.resize(240, 240)
+    sidebar.resize(DEFAULT_METRICS.navigation_expanded_width, 240)
     sidebar.show()
     _application().processEvents()
 

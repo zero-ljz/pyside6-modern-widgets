@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Reduced the default expanded navigation sidebar width from 240 to 224 logical
+  pixels for a more compact desktop layout.
 - Made automatic navigation overlay mode follow the current page's minimum
   width instead of fixed `NavigationView` width breakpoints, while restoring
   the user's sidebar toggle intent when returning to side-by-side mode.
@@ -14,6 +16,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept runtime navigation item text updates synchronized across expanded and
+  collapsed states, including updates made through the exposed item button.
 - Restored the user's expanded sidebar intent after window chrome actions or
   resizing move an overlay sidebar back into a side-by-side layout.
 

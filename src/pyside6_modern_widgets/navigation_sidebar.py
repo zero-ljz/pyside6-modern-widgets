@@ -167,12 +167,19 @@ class _NavigationItem(_NavigationButton):
         self.setIconSize(QSize(18, 18))
         self._tooltip_style = _CollapsedNavigationToolTipStyle()
         self.setStyle(self._tooltip_style)
+        self._collapsed = False
         self._unconstrained_minimum_width = self.minimumWidth()
         self._unconstrained_maximum_width = self.maximumWidth()
         self.setCollapsed(False)
 
+    def setText(self, text: str) -> None:
+        self.fullText = text
+        super().setText("" if self._collapsed else text)
+        self.setToolTip(text if self._collapsed else "")
+
     def setCollapsed(self, collapsed: bool) -> None:
-        self.setText("" if collapsed else self.fullText)
+        self._collapsed = collapsed
+        super().setText("" if collapsed else self.fullText)
         self.setToolTip(self.fullText if collapsed else "")
 
     def _set_compact_width(self, width: int | None) -> None:
@@ -348,6 +355,20 @@ class NavigationSidebar(QWidget):
 
     def button(self, index: int) -> QPushButton | None:
         return self._items[index] if 0 <= index < len(self._items) else None
+
+    def itemText(self, index: int) -> str:
+        return self._items[index].fullText if 0 <= index < len(self._items) else ""
+
+    def setItemText(self, index: int, text: str) -> None:
+        if 0 <= index < len(self._items):
+            self._items[index].setText(text)
+
+    def itemIcon(self, index: int) -> QIcon:
+        return self._items[index].icon() if 0 <= index < len(self._items) else QIcon()
+
+    def setItemIcon(self, index: int, icon) -> None:
+        if 0 <= index < len(self._items):
+            self._items[index].setIcon(_coerce_icon(icon))
 
     def currentIndex(self) -> int:
         return self._current_index
