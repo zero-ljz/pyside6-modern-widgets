@@ -67,6 +67,7 @@ class NavigationView(QWidget):
         self.sidebar.installEventFilter(self)
         self._sidebar_host = QWidget(self)
         self._sidebar_host.setFixedWidth(self.sidebar.width())
+        self._sync_sidebar_minimum_height()
         self.contentContainer = QFrame(self)
         self.contentContainer.setObjectName("NavigationContent")
         self.contentContainer.setAttribute(
@@ -146,6 +147,8 @@ class NavigationView(QWidget):
             if not self._sidebar_overlay:
                 self._sidebar_host.setFixedWidth(event.size().width())
             self._position_sidebar_layer()
+        elif watched is self.sidebar and event.type() == QEvent.Type.LayoutRequest:
+            self._sync_sidebar_minimum_height()
         elif (
             self._outside_click_filter_installed
             and event.type() == QEvent.Type.MouseButtonPress
@@ -166,6 +169,10 @@ class NavigationView(QWidget):
                 self.height(),
             )
             self.sidebar.raise_()
+
+    def _sync_sidebar_minimum_height(self) -> None:
+        self._sidebar_host.setMinimumHeight(self.sidebar.minimumSizeHint().height())
+        self.updateGeometry()
 
     def _sync_outside_click_filter(self, _collapsed: bool | None = None) -> None:
         application = QApplication.instance()
@@ -190,6 +197,7 @@ class NavigationView(QWidget):
         page.setAutoFillBackground(False)
         page_index = self.stackedWidget.addWidget(page)
         item_index = self.sidebar.addItem(text, icon, position)
+        self._sync_sidebar_minimum_height()
         if item_index != page_index:
             self.stackedWidget.removeWidget(page)
             self.sidebar.removeItem(item_index)
@@ -205,6 +213,7 @@ class NavigationView(QWidget):
         was_current = index == self.currentIndex()
         self.stackedWidget.removeWidget(page)
         self.sidebar.removeItem(index)
+        self._sync_sidebar_minimum_height()
         page.setParent(None)
         if self.count() and was_current:
             self.setCurrentIndex(min(index, self.count() - 1))

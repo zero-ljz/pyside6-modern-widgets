@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QProxyStyle,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QStyle,
     QStyleOptionButton,
     QStylePainter,
@@ -38,6 +39,7 @@ from .theme import (
 )
 
 _COLLAPSED_TOOLTIP_WAKE_UP_DELAY_MS = 250
+_SIDEBAR_SCROLLBAR_WIDTH = 4
 
 
 class _CollapsedNavigationToolTipStyle(QProxyStyle):
@@ -49,7 +51,8 @@ class _CollapsedNavigationToolTipStyle(QProxyStyle):
 
 def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
     compact_content_width = max(0, metrics.navigation_collapsed_width - 12)
-    item_icon_padding = max(0, (compact_content_width - 18) // 2)
+    item_background_width = max(0, compact_content_width - 4)
+    item_icon_padding = max(0, (item_background_width - 18) // 2)
     toggle_icon_padding = max(0, (compact_content_width - 20) // 2)
     return f"""
             QWidget#ModernNavigationSidebar {{
@@ -67,16 +70,16 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 padding-bottom: 0px;
                 padding-left: {item_icon_padding}px;
                 margin-top: 0px;
-                margin-right: 0px;
+                margin-right: 2px;
                 margin-bottom: 4px;
-                margin-left: 0px;
+                margin-left: 2px;
             }}
             QPushButton[class="NavigationItem"]:hover {{
                 background-color: {theme.control_hover};
             }}
             QPushButton[class="NavigationItem"]:pressed {{
                 background-color: {theme.control_pressed};
-                padding-left: 12px;
+                padding-left: 10px;
             }}
             QPushButton[class="NavigationItem"]:checked {{
                 background-color: {theme.control_pressed};
@@ -103,7 +106,10 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
             }}
             QScrollArea {{ border: none; background-color: transparent; }}
             QWidget#NavigationScrollContent {{ background-color: transparent; }}
-            QScrollBar:vertical {{ width: 4px; background: transparent; }}
+            QScrollBar:vertical {{
+                width: {_SIDEBAR_SCROLLBAR_WIDTH}px;
+                background: transparent;
+            }}
             QScrollBar::handle:vertical {{
                 background: {theme.scrollbar};
                 min-height: 20px;
@@ -156,7 +162,7 @@ class _NavigationItem(_NavigationButton):
         self.setProperty("class", "NavigationItem")
         self.setCheckable(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumHeight(metrics.navigation_item_height)
+        self.setFixedHeight(metrics.navigation_item_height)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setIcon(_coerce_icon(icon))
         self.setIconSize(QSize(18, 18))
@@ -246,27 +252,36 @@ class NavigationSidebar(QWidget):
                 - layout.contentsMargins().right(),
             )
         )
-        self.toggleButton.setMinimumHeight(self._metrics.navigation_item_height)
+        self.toggleButton.setFixedHeight(self._metrics.navigation_item_height)
         self.toggleButton.setToolTip("Toggle navigation")
         self.toggleButton.clicked.connect(self.toggle)
         layout.addWidget(self.toggleButton, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.scrollArea = QScrollArea(self)
+        self.scrollArea.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Ignored,
+        )
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scrollArea.setViewportMargins(0, 0, -_SIDEBAR_SCROLLBAR_WIDTH, 0)
         self.scrollContent = QWidget(self.scrollArea)
         self.scrollContent.setObjectName("NavigationScrollContent")
         self._top_layout = QVBoxLayout(self.scrollContent)
         self._top_layout.setContentsMargins(0, 0, 0, 0)
-        self._top_layout.setSpacing(4)
+        self._top_layout.setSpacing(0)
         self._top_layout.addStretch()
         self.scrollArea.setWidget(self.scrollContent)
         layout.addWidget(self.scrollArea)
 
-        self._bottom_layout = QVBoxLayout()
-        self._bottom_layout.setSpacing(4)
-        layout.addLayout(self._bottom_layout)
+        self._bottom_container = QWidget(self)
+        self._bottom_container.setFixedHeight(0)
+        self._bottom_container.hide()
+        self._bottom_layout = QVBoxLayout(self._bottom_container)
+        self._bottom_layout.setContentsMargins(0, 0, 0, 0)
+        self._bottom_layout.setSpacing(0)
+        layout.addWidget(self._bottom_container)
 
     def _init_animation(self) -> None:
         self._min_animation = QPropertyAnimation(
@@ -299,6 +314,7 @@ class NavigationSidebar(QWidget):
             self._top_layout.insertWidget(self._top_layout.count() - 1, button)
         else:
             self._bottom_layout.addWidget(button)
+            self._sync_bottom_container_height()
         button.clicked.connect(lambda _checked=False, target=button: self._activate_button(target))
         return index
 
@@ -310,6 +326,7 @@ class NavigationSidebar(QWidget):
         self._top_layout.removeWidget(button)
         self._bottom_layout.removeWidget(button)
         button.setParent(None)
+        self._sync_bottom_container_height()
 
         if not self._items:
             self._current_index = -1
@@ -320,6 +337,13 @@ class NavigationSidebar(QWidget):
             self._current_index = -1
             self.setCurrentIndex(min(index, len(self._items) - 1))
         return button
+
+    def _sync_bottom_container_height(self) -> None:
+        has_items = self._bottom_layout.count() > 0
+        self._bottom_container.setFixedHeight(
+            self._bottom_layout.sizeHint().height() if has_items else 0
+        )
+        self._bottom_container.setVisible(has_items)
 
     def count(self) -> int:
         return len(self._items)

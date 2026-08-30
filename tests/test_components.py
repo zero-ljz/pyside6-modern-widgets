@@ -662,9 +662,16 @@ def test_collapsed_navigation_tooltip_uses_short_initial_delay() -> None:
 
 
 def test_collapsed_navigation_shows_scrollbar_when_items_overflow() -> None:
-    sidebar = NavigationSidebar()
+    active_background = QColor("#FF0000")
+    theme = replace(
+        LIGHT_THEME,
+        navigation_background="#FFFFFF",
+        control_pressed=active_background.name(),
+    )
+    sidebar = NavigationSidebar(theme=theme)
     for index in range(8):
         sidebar.addItem(f"Item {index}")
+    sidebar.setCurrentIndex(0)
     sidebar.setCollapsed(True, animated=False)
     sidebar.resize(DEFAULT_METRICS.navigation_collapsed_width, 180)
     sidebar.show()
@@ -674,6 +681,70 @@ def test_collapsed_navigation_shows_scrollbar_when_items_overflow() -> None:
     scrollbar = sidebar.scrollArea.verticalScrollBar()
     assert scrollbar.maximum() > 0
     assert scrollbar.isVisible()
+
+    button = sidebar.button(0)
+    assert button is not None
+    assert button.width() == sidebar.scrollArea.viewport().width()
+
+    button_image = button.grab().toImage()
+    middle_y = DEFAULT_METRICS.navigation_item_height // 2
+    active_x_positions = [
+        x
+        for x in range(button_image.width())
+        if button_image.pixelColor(x, middle_y) == active_background
+    ]
+    middle_x = button.width() // 2
+    active_y_positions = [
+        y
+        for y in range(button_image.height())
+        if button_image.pixelColor(middle_x, y) == active_background
+    ]
+    assert (min(active_x_positions), max(active_x_positions)) == (2, 33)
+    assert (min(active_y_positions), max(active_y_positions)) == (0, 31)
+
+    viewport_right = sidebar.scrollArea.viewport().mapTo(
+        sidebar,
+        QPoint(sidebar.scrollArea.viewport().width(), 0),
+    ).x()
+    scrollbar_left = scrollbar.mapTo(sidebar, QPoint(0, 0)).x()
+    assert scrollbar_left < viewport_right
+
+
+def test_navigation_does_not_compress_bottom_items_when_height_is_limited() -> None:
+    sidebar = NavigationSidebar()
+    for index in range(3):
+        sidebar.addItem(f"Top {index}")
+    for index in range(3):
+        sidebar.addItem(f"Bottom {index}", position=NavigationPosition.BOTTOM)
+    sidebar.setCollapsed(True, animated=False)
+    sidebar.resize(DEFAULT_METRICS.navigation_collapsed_width, 180)
+    sidebar.show()
+
+    _application().processEvents()
+
+    assert sidebar._top_layout.spacing() == 0
+    assert sidebar._bottom_layout.spacing() == 0
+    bottom_buttons = []
+    for index in range(3, sidebar.count()):
+        button = sidebar.button(index)
+        assert button is not None
+        assert button.height() == DEFAULT_METRICS.navigation_item_height
+        bottom_buttons.append(button)
+
+    assert sidebar.height() == 180
+    assert sidebar._bottom_container.height() == (
+        len(bottom_buttons) * DEFAULT_METRICS.navigation_item_height
+        + (len(bottom_buttons) - 1) * sidebar._bottom_layout.spacing()
+    )
+    for index in range(1, len(bottom_buttons)):
+        previous = bottom_buttons[index - 1]
+        current = bottom_buttons[index]
+        assert previous.geometry().bottom() < current.geometry().top()
+
+    required_height = sidebar.minimumSizeHint().height()
+    sidebar.resize(DEFAULT_METRICS.navigation_collapsed_width, 1)
+    _application().processEvents()
+    assert sidebar.height() == required_height
 
 
 def test_collapsed_navigation_ignores_application_button_padding() -> None:
@@ -888,6 +959,26 @@ def test_navigation_view_manages_pages_and_selection() -> None:
     assert view.count() == 1
     assert view.widget(0) is second
     assert view.sidebar.count() == 1
+
+
+def test_navigation_view_inherits_sidebar_minimum_height() -> None:
+    view = NavigationView()
+    view.addPage(QLabel("top"), "Top")
+    for index in range(3):
+        view.addPage(
+            QLabel(f"bottom {index}"),
+            f"Bottom {index}",
+            position=NavigationPosition.BOTTOM,
+        )
+
+    required_height = view.sidebar.minimumSizeHint().height()
+    assert view._sidebar_host.minimumHeight() == required_height
+
+    view.resize(400, 1)
+    view.show()
+    _application().processEvents()
+
+    assert view.height() >= required_height
 
 
 def test_navigation_view_only_uses_current_page_size_hints() -> None:

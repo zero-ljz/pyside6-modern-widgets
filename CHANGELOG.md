@@ -4,8 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-30
+
+### Fixed
+
+- Kept collapsed navigation selection backgrounds square and centered while
+  allowing the vertical scrollbar to overlay their right edge.
+- Prevented windows hosting navigation views from resizing below the height
+  required by fixed bottom sidebar items.
+
 ### Changed
 
+- Tightened the vertical spacing between sidebar navigation items.
 - Reduced the initial tooltip delay for collapsed sidebar navigation items.
 - Restored vertical scrolling when collapsed sidebar navigation items overflow.
 - Rounded the right corners of expanded overlay sidebars in narrow layouts.
@@ -45,4 +55,6 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.3.3...v0.4.0
