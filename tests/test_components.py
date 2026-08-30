@@ -1293,53 +1293,165 @@ def test_navigation_view_overlay_sidebar_closes_only_on_outside_click() -> None:
     assert view.sidebar.isCollapsed()
 
 
-def test_navigation_view_switches_overlay_mode_automatically_with_hysteresis() -> None:
+def test_maximizing_an_overlay_navigation_view_preserves_expanded_sidebar() -> None:
+    class MinimumWidthPage(QWidget):
+        def minimumSizeHint(self) -> QSize:
+            return QSize(300, 120)
+
+    window = ModernWindow()
     view = NavigationView()
-    view.addPage(QLabel("page"), "Page")
-    view.resize(1100, 420)
+    view.addPage(MinimumWidthPage(), "Page")
+    window.setCentralWidget(view)
+    window.resize(500, 420)
+    window.show()
+    _application().processEvents()
+
+    assert window.titleBar is not None
+    assert view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
+
+    view.sidebar.setCollapsed(False, animated=False)
+    collapsed_states: list[bool] = []
+    view.sidebar.collapsedChanged.connect(collapsed_states.append)
+    QTest.mouseClick(window.titleBar.maximizeButton, Qt.MouseButton.LeftButton)
+    _application().processEvents()
+
+    assert window.isMaximized()
+    assert not view.isSidebarOverlay()
+    assert not view.sidebar.isCollapsed()
+    assert collapsed_states == [True, False]
+
+
+def test_navigation_view_switches_overlay_mode_automatically_with_hysteresis() -> None:
+    class MinimumWidthPage(QWidget):
+        def minimumSizeHint(self) -> QSize:
+            return QSize(700, 120)
+
+    view = NavigationView()
+    view.addPage(MinimumWidthPage(), "Page")
+    required_width = (
+        DEFAULT_METRICS.navigation_expanded_width
+        + view.contentContainer.minimumSizeHint().width()
+    )
+    exit_width = required_width + view.SIDEBAR_OVERLAY_HYSTERESIS
+    view.resize(exit_width + 20, 420)
     view.show()
     _application().processEvents()
 
     assert view.isAutoSidebarOverlay()
     assert not view.isSidebarOverlay()
 
-    view.resize(900, 420)
+    view.resize(required_width, 420)
     _application().processEvents()
     assert view.isSidebarOverlay()
     assert view.sidebar.isCollapsed()
 
-    view.resize(1000, 420)
+    view.resize(exit_width - 1, 420)
     _application().processEvents()
     assert view.isSidebarOverlay()
 
-    view.resize(1040, 420)
+    view.resize(exit_width, 420)
     _application().processEvents()
     assert not view.isSidebarOverlay()
     assert not view.sidebar.isCollapsed()
 
     view.sidebar.toggle()
     assert view.sidebar.isCollapsed()
-    view.resize(900, 420)
+    view.resize(required_width, 420)
     _application().processEvents()
     assert view.isSidebarOverlay()
     assert view.sidebar.isCollapsed()
-    view.resize(1040, 420)
+    view.resize(exit_width, 420)
     _application().processEvents()
     assert not view.isSidebarOverlay()
     assert view.sidebar.isCollapsed()
 
     view.sidebar.toggle()
-    view.resize(900, 420)
+    assert not view.sidebar.isCollapsed()
+    view.resize(required_width, 420)
     _application().processEvents()
     assert view.sidebar.isCollapsed()
-    view.resize(1040, 420)
+    view.resize(exit_width, 420)
     _application().processEvents()
     assert not view.sidebar.isCollapsed()
 
     view.setAutoSidebarOverlay(False)
-    view.resize(700, 420)
+    view.resize(required_width - 20, 420)
     _application().processEvents()
     assert not view.isSidebarOverlay()
+
+
+def test_navigation_view_starts_collapsed_when_first_shown_in_overlay_mode() -> None:
+    class MinimumWidthPage(QWidget):
+        def minimumSizeHint(self) -> QSize:
+            return QSize(700, 120)
+
+    view = NavigationView()
+    view.addPage(MinimumWidthPage(), "Page")
+    view.resize(
+        DEFAULT_METRICS.navigation_expanded_width
+        + view.contentContainer.minimumSizeHint().width(),
+        420,
+    )
+
+    assert view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
+
+    view.show()
+    _application().processEvents()
+
+    assert view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
+
+    manual_view = NavigationView()
+    manual_view.setAutoSidebarOverlay(False)
+    manual_view.setSidebarOverlay(True)
+    manual_view.show()
+    _application().processEvents()
+
+    assert manual_view.isSidebarOverlay()
+    assert not manual_view.sidebar.isCollapsed()
+
+
+def test_navigation_view_rechecks_content_width_for_page_and_layout_changes() -> None:
+    class ResizableHintPage(QWidget):
+        def __init__(self, minimum_width: int) -> None:
+            super().__init__()
+            self._minimum_width = minimum_width
+
+        def minimumSizeHint(self) -> QSize:
+            return QSize(self._minimum_width, 120)
+
+    view = NavigationView()
+    narrow = ResizableHintPage(300)
+    wide = ResizableHintPage(700)
+    view.addPage(narrow, "Narrow")
+    view.addPage(wide, "Wide")
+    view.resize(
+        DEFAULT_METRICS.navigation_expanded_width
+        + narrow.minimumSizeHint().width()
+        + view.SIDEBAR_OVERLAY_HYSTERESIS,
+        420,
+    )
+    view.show()
+    _application().processEvents()
+
+    assert not view.isSidebarOverlay()
+
+    view.setCurrentIndex(1)
+    _application().processEvents()
+    assert view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
+
+    view.setCurrentIndex(0)
+    _application().processEvents()
+    assert not view.isSidebarOverlay()
+    assert not view.sidebar.isCollapsed()
+
+    narrow.setMinimumWidth(700)
+    _application().processEvents()
+    assert view.isSidebarOverlay()
+    assert view.sidebar.isCollapsed()
 
 
 def test_tab_view_uses_native_tab_semantics_and_qtabwidget_api() -> None:

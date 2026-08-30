@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Made automatic navigation overlay mode follow the current page's minimum
+  width instead of fixed `NavigationView` width breakpoints, while restoring
+  the user's sidebar toggle intent when returning to side-by-side mode.
+
+### Fixed
+
+- Restored the user's expanded sidebar intent after window chrome actions or
+  resizing move an overlay sidebar back into a side-by-side layout.
+
 ## [0.4.3] - 2026-08-30
 
 ### Changed

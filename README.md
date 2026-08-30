@@ -84,9 +84,11 @@ not supported.
 Runnable window/navigation and multi-tab examples are available in the
 [`examples`](examples) directory.
 
-`NavigationView` automatically collapses into an overlay sidebar at widths up
-to `900px` and returns to the side-by-side layout at `1040px`. On return it
-restores the expand/collapse intent last selected with the sidebar toggle.
+`NavigationView` automatically uses an overlay sidebar when expanding it beside
+the current page would compress the page below its minimum width. A small
+hysteresis margin prevents repeated mode changes near that width. On return to
+the side-by-side layout, it restores the expand/collapse intent last selected
+with the sidebar toggle. Overlay mode starts with its sidebar collapsed.
 Applications with a custom responsive policy can call
 `setAutoSidebarOverlay(False)` and control the mode with `setSidebarOverlay()`.
 

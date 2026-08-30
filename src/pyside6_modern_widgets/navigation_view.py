@@ -29,8 +29,7 @@ from .theme import (
 class NavigationView(QWidget):
     """Combine a ``NavigationSidebar`` with a synchronized page stack."""
 
-    SIDEBAR_OVERLAY_ENTER_WIDTH = 900
-    SIDEBAR_OVERLAY_EXIT_WIDTH = 1040
+    SIDEBAR_OVERLAY_HYSTERESIS = 48
 
     currentChanged = Signal(int)
 
@@ -80,6 +79,7 @@ class NavigationView(QWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
         self.stackedWidget = _CurrentPageStack(self.contentContainer)
+        self.stackedWidget.installEventFilter(self)
         content_layout.addWidget(self.stackedWidget)
 
         self._root_layout.addWidget(self._sidebar_host)
@@ -129,15 +129,25 @@ class NavigationView(QWidget):
     def _update_automatic_sidebar_overlay(self) -> None:
         if not self._auto_sidebar_overlay:
             return
-        if self.width() <= self.SIDEBAR_OVERLAY_ENTER_WIDTH:
+        required_width = (
+            self._metrics.navigation_expanded_width + self._minimum_content_width()
+        )
+        if self.width() <= required_width:
             self.setSidebarOverlay(True)
             if not self.sidebar.isCollapsed():
                 self.sidebar.setCollapsed(True, animated=False)
-        elif self.width() >= self.SIDEBAR_OVERLAY_EXIT_WIDTH:
+        elif self.width() >= required_width + self.SIDEBAR_OVERLAY_HYSTERESIS:
             self.setSidebarOverlay(False)
             should_collapse = not self._sidebar_user_prefers_expanded
             if self.sidebar.isCollapsed() != should_collapse:
                 self.sidebar.setCollapsed(should_collapse, animated=False)
+
+    def _minimum_content_width(self) -> int:
+        return max(
+            0,
+            self.contentContainer.minimumWidth(),
+            self.contentContainer.minimumSizeHint().width(),
+        )
 
     def _on_sidebar_collapse_intent_changed(self, collapsed: bool) -> None:
         self._sidebar_user_prefers_expanded = not collapsed
@@ -149,6 +159,8 @@ class NavigationView(QWidget):
             self._position_sidebar_layer()
         elif watched is self.sidebar and event.type() == QEvent.Type.LayoutRequest:
             self._sync_sidebar_minimum_height()
+        elif watched is self.stackedWidget and event.type() == QEvent.Type.LayoutRequest:
+            self._update_automatic_sidebar_overlay()
         elif (
             self._outside_click_filter_installed
             and event.type() == QEvent.Type.MouseButtonPress
@@ -257,6 +269,7 @@ class NavigationView(QWidget):
     def _on_current_changed(self, index: int) -> None:
         if index >= 0 and self.sidebar.currentIndex() != index:
             self.sidebar.setCurrentIndex(index)
+        self._update_automatic_sidebar_overlay()
         self.currentChanged.emit(index)
 
 
@@ -269,4 +282,6 @@ class _CurrentPageStack(QStackedWidget):
 
     def minimumSizeHint(self) -> QSize:
         current = self.currentWidget()
-        return current.minimumSizeHint() if current is not None else super().minimumSizeHint()
+        if current is None:
+            return super().minimumSizeHint()
+        return current.minimumSizeHint().expandedTo(current.minimumSize())
