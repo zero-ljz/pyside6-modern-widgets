@@ -11,6 +11,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Made `ModernWindow` accept the `QWidget(parent, f)` constructor shape and
+  direct widget layouts, while synchronizing its custom chrome with tool and
+  popup window flags.
 - Reduced the default expanded navigation sidebar width from 240 to 224 logical
   pixels for a more compact desktop layout.
 - Made automatic navigation overlay mode follow the current page's minimum

@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
-    QSpacerItem,
     QWidget,
 )
 
@@ -282,10 +281,9 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.titleLabel = QLabel(self.parent_window.windowTitle(), self)
         self.titleLabel.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.titleLabel.setObjectName("ModernWindowTitle")
+        self.titleLabel.setMinimumWidth(0)
+        self.titleLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.main_layout.addWidget(self.titleLabel)
-        self.main_layout.addSpacerItem(
-            QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        )
 
         self.right_layout = QHBoxLayout()
         self.right_layout.setContentsMargins(0, 0, 0, 0)

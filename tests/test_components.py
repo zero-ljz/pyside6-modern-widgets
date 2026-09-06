@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTabWidget,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -65,7 +66,7 @@ def test_modern_window_preserves_base_window_api() -> None:
     assert not isinstance(window, QMainWindow)
     assert window.layout() is window.root_layout
     assert window.titleBar is not None
-    assert window.titleBar.parent() is window.frame
+    assert window.titleBar.parent() is window
     for icon_name in (
         "pin.png",
         "push-pin.png",
@@ -112,6 +113,60 @@ def test_modern_window_preserves_base_window_api() -> None:
     assert "border: none" in status_bar.styleSheet()
     toolbar = window.addToolBar("Tools")
     assert window.toolbarLayout.indexOf(toolbar) >= 0
+
+
+def test_modern_window_accepts_a_qwidget_layout_directly() -> None:
+    window = ModernWindow()
+    layout = QVBoxLayout(window)
+    content = QLabel("content")
+    layout.addWidget(content)
+    window.resize(420, 240)
+    window.show()
+    _application().processEvents()
+
+    assert window.layout() is layout
+    assert window.root_layout is None
+    assert window.titleBar is not None
+    assert content.geometry().top() >= window.titleBar.height()
+    assert window.frame.geometry() == window.rect()
+
+
+def test_modern_window_matches_qwidget_tool_window_chrome() -> None:
+    window = ModernWindow()
+    window.setWindowTitle("A QWidget tool window with a longer title")
+    window.setWindowFlag(Qt.WindowType.Tool, True)
+    window.resize(320, 180)
+    window.show()
+    _application().processEvents()
+
+    assert window.windowType() == Qt.WindowType.Tool
+    assert window.titleBar is not None
+    assert window.titleBar.isVisible()
+    assert not window.titleBar.menuButton.isVisible()
+    assert not window.titleBar.pinButton.isVisible()
+    assert not window.titleBar.minimizeButton.isVisible()
+    assert not window.titleBar.maximizeButton.isVisible()
+    assert window.titleBar.closeButton.isVisible()
+    assert window.titleBar.titleLabel.width() > 0
+    assert (
+        window.titleBar.titleLabel.geometry().right()
+        < window.titleBar.closeButton.geometry().left()
+    )
+
+
+def test_modern_window_accepts_qwidget_constructor_flags() -> None:
+    tool = ModernWindow(None, f=Qt.WindowType.Tool)
+    popup = ModernWindow(None, f=Qt.WindowType.Popup)
+
+    assert tool.windowType() == Qt.WindowType.Tool
+    assert tool.windowFlags() & Qt.WindowType.FramelessWindowHint
+    assert tool.titleBar is not None
+    assert not tool.titleBar.minimizeButton.isVisibleTo(tool.titleBar)
+    assert not tool.titleBar.maximizeButton.isVisibleTo(tool.titleBar)
+    assert popup.windowType() == Qt.WindowType.Popup
+    assert popup.titleBar is not None
+    assert popup.titleBar.isHidden()
+    assert popup.contentsMargins().top() == 0
 
 
 def test_title_bar_menu_button_and_native_context_menu(monkeypatch) -> None:

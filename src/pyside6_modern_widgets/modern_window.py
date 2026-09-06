@@ -38,6 +38,8 @@ from .theme import (
     tinted_icon,
 )
 
+_DEFAULT_WINDOW_FLAGS = Qt.WindowType.Widget
+
 
 def _menu_bar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
     return f"""
@@ -166,6 +168,30 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         self.parent_window.showSystemWindowMenu(event.globalPos())
         event.accept()
 
+    def syncWindowFlags(self, flags: Qt.WindowType) -> bool:
+        window_type = flags & Qt.WindowType.WindowType_Mask
+        title_bar_visible = window_type not in {
+            Qt.WindowType.Popup,
+            Qt.WindowType.ToolTip,
+            Qt.WindowType.SplashScreen,
+        }
+        regular_window = window_type == Qt.WindowType.Window
+        customized = bool(flags & Qt.WindowType.CustomizeWindowHint)
+
+        self.menuButton.setVisible(
+            regular_window and bool(flags & Qt.WindowType.WindowSystemMenuHint)
+        )
+        self.pinButton.setVisible(regular_window and not customized)
+        self.minimizeButton.setVisible(
+            regular_window and bool(flags & Qt.WindowType.WindowMinimizeButtonHint)
+        )
+        self.maximizeButton.setVisible(
+            regular_window and bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
+        )
+        self.closeButton.setVisible(bool(flags & Qt.WindowType.WindowCloseButtonHint))
+        self.setVisible(title_bar_visible)
+        return title_bar_visible
+
     def setTheme(self, theme: ModernTheme) -> None:
         super().setTheme(theme)
         self.standardWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.STANDARD)
@@ -231,21 +257,20 @@ class ModernWindow(QWidget):
     def __init__(
         self,
         parent: QWidget | None = None,
+        f: Qt.WindowType = _DEFAULT_WINDOW_FLAGS,
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
-        super().__init__(parent)
+        flags = f
+        if parent is not None and not flags & Qt.WindowType.WindowType_Mask:
+            flags |= Qt.WindowType.Window
+        super().__init__(parent, flags)
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
         self._metrics = metrics
         theme_manager().themeChanged.connect(self._on_global_theme_changed)
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowSystemMenuHint
-            | Qt.WindowType.WindowMinMaxButtonsHint
-            | Qt.WindowType.WindowCloseButtonHint
-        )
+        QWidget.setWindowFlag(self, Qt.WindowType.FramelessWindowHint, True)
         self._native_opaque_surface = self._supports_native_window_corners()
         self._deferred_live_resize = (
             self._uses_windows_window_state() and not self._native_opaque_surface
@@ -255,7 +280,6 @@ class ModernWindow(QWidget):
         else:
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
-        self.setWindowTitle("基础窗体")
         self._resize_cursor_active = False
         self._system_menu_operation: str | None = None
         self._system_menu_start_cursor = QPoint()
@@ -295,6 +319,10 @@ class ModernWindow(QWidget):
         self.cornerRadius = metrics.corner_radius
         self._menu_bar: QMenuBar | None = None
         self._status_bar: QStatusBar | None = None
+        self.root_layout: QVBoxLayout | None = None
+        self.frameLayout: QVBoxLayout | None = None
+        self.toolbarLayout: QVBoxLayout | None = None
+        self.content: QWidget | None = None
         self.titleBar: CustomTitleBar | None = None
         self.initWindow()
         self.apply_window_style()
@@ -311,6 +339,17 @@ class ModernWindow(QWidget):
         if get_windows_version is None:
             return False
         return get_windows_version().build >= 22000
+
+    def setWindowFlags(self, flags: Qt.WindowType) -> None:
+        QWidget.setWindowFlags(self, flags | Qt.WindowType.FramelessWindowHint)
+        if hasattr(self, "titleBar"):
+            self._sync_chrome_with_window_flags()
+
+    def setWindowFlag(self, flag: Qt.WindowType, on: bool = True) -> None:
+        QWidget.setWindowFlag(self, flag, on)
+        QWidget.setWindowFlag(self, Qt.WindowType.FramelessWindowHint, True)
+        if hasattr(self, "titleBar"):
+            self._sync_chrome_with_window_flags()
 
     def isMaximized(self) -> bool:
         qt_maximized = QWidget.isMaximized(self)
@@ -382,9 +421,6 @@ class ModernWindow(QWidget):
         return bool(is_zoomed(wintypes.HWND(int(self.winId()))))
 
     def initWindow(self) -> None:
-        self.root_layout = QVBoxLayout(self)
-        self.root_layout.setContentsMargins(0, 0, 0, 0)
-
         self.frame = BackgroundFrame(
             self,
             theme=self._theme,
@@ -392,12 +428,7 @@ class ModernWindow(QWidget):
             opaque_surface=self._native_opaque_surface,
         )
         self.frame.setObjectName("backgroundFrame")
-        self.apply_window_style()
-        self.root_layout.addWidget(self.frame)
-
-        self.frameLayout = QVBoxLayout(self.frame)
-        self.frameLayout.setContentsMargins(0, 0, 0, 0)
-        self.frameLayout.setSpacing(0)
+        self.frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         title_bar = CustomTitleBar(
             self,
@@ -405,14 +436,6 @@ class ModernWindow(QWidget):
             metrics=self._metrics,
         )
         self.titleBar = title_bar
-        self.frameLayout.addWidget(title_bar)
-
-        self.toolbarLayout = QVBoxLayout()
-        self.toolbarLayout.setSpacing(0)
-        self.frameLayout.addLayout(self.toolbarLayout)
-
-        self.content = QWidget(self)
-        self.frameLayout.addWidget(self.content)
         self.chromeOverlay = WindowChromeOverlay(
             self,
             theme=self._theme,
@@ -426,11 +449,32 @@ class ModernWindow(QWidget):
             self._theme,
             self.cornerRadius,
         )
-        self._live_resize_overlay.setGeometry(self.rect())
+        self._sync_chrome_with_window_flags()
+        self._layout_chrome()
         self._install_resize_filters(self)
         application = QApplication.instance()
         if application is not None:
             application.installEventFilter(self)
+
+    def _layout_chrome(self) -> None:
+        self.frame.setGeometry(self.rect())
+        self.frame.lower()
+        if self.titleBar is not None:
+            self.titleBar.setGeometry(0, 0, self.width(), self.titleBar.height())
+            self.titleBar.raise_()
+        self.chromeOverlay.setGeometry(self.rect())
+        self.chromeOverlay.raise_()
+        self._live_resize_overlay.setGeometry(self.rect())
+        if self._live_resize_overlay.isVisible():
+            self._live_resize_overlay.raise_()
+
+    def _sync_chrome_with_window_flags(self) -> None:
+        if self.titleBar is None:
+            return
+        title_bar_visible = self.titleBar.syncWindowFlags(self.windowFlags())
+        top_margin = self.titleBar.height() if title_bar_visible else 0
+        QWidget.setContentsMargins(self, 0, top_margin, 0, 0)
+        self._layout_chrome()
 
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
@@ -631,6 +675,7 @@ class ModernWindow(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self._connect_screen_change_signal()
+        self._sync_chrome_with_window_flags()
         if not event.spontaneous():
             self.apply_window_style()
         self._schedule_surface_refresh()
@@ -727,16 +772,39 @@ class ModernWindow(QWidget):
         if owns_probe:
             menu_bar.deleteLater()
 
+    def _ensure_compatibility_layout(self) -> None:
+        if self.root_layout is not None:
+            return
+        if self.layout() is not None:
+            raise RuntimeError(
+                "QMainWindow-compatible APIs cannot be mixed with a layout installed "
+                "directly on ModernWindow"
+            )
+
+        self.root_layout = QVBoxLayout(self)
+        self.root_layout.setContentsMargins(0, 0, 0, 0)
+        self.root_layout.setSpacing(0)
+        self.frameLayout = self.root_layout
+        self.toolbarLayout = QVBoxLayout()
+        self.toolbarLayout.setSpacing(0)
+        self.root_layout.addLayout(self.toolbarLayout)
+        self.content = QWidget(self)
+        self.root_layout.addWidget(self.content)
+
     def menuBar(self) -> QMenuBar:
         if self._menu_bar is None:
+            self._ensure_compatibility_layout()
+            assert self.frameLayout is not None
             self._menu_bar = QMenuBar(self)
             self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
-            self.frameLayout.insertWidget(1, self._menu_bar)
+            self.frameLayout.insertWidget(0, self._menu_bar)
             self._install_resize_filters(self._menu_bar)
             self._sync_inactive_title_color()
         return self._menu_bar
 
     def addToolBar(self, *args) -> QToolBar:
+        self._ensure_compatibility_layout()
+        assert self.toolbarLayout is not None
         toolbar = next((arg for arg in args if isinstance(arg, QToolBar)), None)
         if toolbar is None:
             title = next((arg for arg in args if isinstance(arg, str)), "")
@@ -748,6 +816,8 @@ class ModernWindow(QWidget):
 
     def statusBar(self) -> QStatusBar:
         if self._status_bar is None:
+            self._ensure_compatibility_layout()
+            assert self.frameLayout is not None
             self._status_bar = QStatusBar(self)
             self._status_bar.setStyleSheet("QStatusBar { background: transparent; border: none; }")
             self._status_bar.setSizeGripEnabled(False)
@@ -756,6 +826,11 @@ class ModernWindow(QWidget):
         return self._status_bar
 
     def setCentralWidget(self, widget: QWidget) -> None:
+        self._ensure_compatibility_layout()
+        assert self.frameLayout is not None
+        assert self.content is not None
+        if widget is self.content:
+            return
         self.frameLayout.removeWidget(self.content)
         self.content.deleteLater()
         self.content = widget
@@ -783,13 +858,8 @@ class ModernWindow(QWidget):
             and not self.isMinimized()
         ):
             self._normal_logical_size = QSize(event.size())
-        if hasattr(self, "chromeOverlay"):
-            self.chromeOverlay.setGeometry(self.rect())
-            self.chromeOverlay.raise_()
         if hasattr(self, "_live_resize_overlay"):
-            self._live_resize_overlay.setGeometry(self.rect())
-            if self._live_resize_overlay.isVisible():
-                self._live_resize_overlay.raise_()
+            self._layout_chrome()
         if self._system_resize_active and self._deferred_live_resize:
             self._update_deferred_resize_state(event.size().width())
 
@@ -824,7 +894,7 @@ class ModernWindow(QWidget):
             or not self._has_horizontal_resize_edge(self._hover_resize_edges)
         ):
             return
-        self._pending_resize_snapshot = self.frame.grab()
+        self._pending_resize_snapshot = self.grab()
 
     def _begin_system_resize_tracking(self, edges: Qt.Edge | None = None) -> None:
         if self._system_resize_active:
@@ -860,7 +930,7 @@ class ModernWindow(QWidget):
     def _start_deferred_resize_overlay(self) -> None:
         if self._live_resize_overlay.isVisible():
             return
-        snapshot = self._pending_resize_snapshot or self.frame.grab()
+        snapshot = self._pending_resize_snapshot or self.grab()
         self._pending_resize_snapshot = None
         self._live_resize_overlay.setGeometry(self.rect())
         self._live_resize_overlay.begin(snapshot, self._theme, self.cornerRadius)
@@ -885,7 +955,8 @@ class ModernWindow(QWidget):
             return
 
         self.frame.setUpdatesEnabled(True)
-        snapshot = self.frame.grab()
+        self._live_resize_overlay.hide()
+        snapshot = self.grab()
         self.frame.setUpdatesEnabled(False)
         self._live_resize_overlay.begin(snapshot, self._theme, self.cornerRadius)
 
@@ -1009,6 +1080,6 @@ class ModernWindow(QWidget):
     def hideTitleBar(self) -> None:
         if hasattr(self, "titleBar") and self.titleBar:
             self.titleBar.hide()
-            self.frameLayout.removeWidget(self.titleBar)
             self.titleBar.deleteLater()
             self.titleBar = None
+            QWidget.setContentsMargins(self, 0, 0, 0, 0)

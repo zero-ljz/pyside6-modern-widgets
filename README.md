@@ -3,8 +3,8 @@
 Cross-platform desktop widgets for PySide6. The package provides frameless
 window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 
-- `ModernWindow`: a lightweight, frameless `QWidget` window with selected
-  `QMainWindow`-compatible methods.
+- `ModernWindow`: a frameless replacement for top-level `QWidget` windows with
+  selected `QMainWindow`-compatible methods.
 - `ModernDialog`: a frameless `QDialog` that preserves the standard dialog API.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
@@ -58,6 +58,28 @@ window.resize(800, 500)
 window.show()
 app.exec()
 ```
+
+An existing top-level `QWidget` subclass can keep its direct layout when its
+base class changes to `ModernWindow`. The standard `QWidget(parent, f)`
+constructor shape and window flags are preserved:
+
+```python
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QVBoxLayout
+
+from pyside6_modern_widgets import ModernWindow
+
+
+class ToolWindow(ModernWindow):
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.WindowType.Tool)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Tool content"))
+```
+
+Use either a layout installed directly on `ModernWindow` or its optional
+`menuBar()`, `addToolBar()`, `statusBar()`, and `setCentralWidget()` compatibility
+APIs. The two layout models intentionally cannot be mixed in one window.
 
 `ModernDialog` accepts ordinary Qt layouts directly and retains `exec()`,
 `accept()`, `reject()`, and the standard dialog result codes:
@@ -118,8 +140,8 @@ with the sidebar toggle. Overlay mode starts with its sidebar collapsed.
 Applications with a custom responsive policy can call
 `setAutoSidebarOverlay(False)` and control the mode with `setSidebarOverlay()`.
 
-`ModernWindow` intentionally remains based on `QWidget`, so it is suitable for both
-primary and auxiliary windows. Its compatibility surface is limited to the common
+`ModernWindow` intentionally remains based on `QWidget`, so it is suitable for
+top-level primary and auxiliary windows. Its compatibility surface is limited to the common
 `menuBar()`, `addToolBar()`, `statusBar()`, and `setCentralWidget()` methods; it does
 not implement `QMainWindow` docking or state-management features.
 
