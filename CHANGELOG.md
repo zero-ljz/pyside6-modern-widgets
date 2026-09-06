@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added `ModernDialog`, a frameless `QDialog` that shares the modern window
+  chrome while retaining native dialog layouts, modality, signals, and results.
+
 ### Changed
 
 - Reduced the default expanded navigation sidebar width from 240 to 224 logical
@@ -13,6 +18,8 @@ All notable changes to this project are documented in this file.
   the user's sidebar toggle intent when returning to side-by-side mode.
 - Made a new neutral-gray standard theme the default while retaining the modern
   and classic watercolor themes as selectable styles.
+- Extracted reusable window surfaces, overlays, and title-bar behavior from
+  `ModernWindow` for use by other top-level widgets.
 
 ### Fixed
 

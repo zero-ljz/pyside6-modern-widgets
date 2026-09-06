@@ -18,6 +18,12 @@ Run the multi-tab `ModernWindow` example without a menu bar:
 python examples/tab_view_example.py
 ```
 
+Run the `ModernDialog` example, which uses the standard `QDialog` API:
+
+```shell
+python examples/dialog_example.py
+```
+
 The tab example supports adding, closing (including middle-click), selecting, and dragging
 tabs. `TabView` also provides `Ctrl+T`, `Ctrl+W`, `Ctrl+Tab`, and `Ctrl+Shift+Tab`
 shortcuts.

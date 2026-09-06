@@ -1,5 +1,6 @@
 """Public API for pyside6-modern-widgets."""
 
+from .modern_dialog import ModernDialog
 from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar
 from .navigation_view import NavigationView
@@ -28,6 +29,7 @@ __all__ = [
     "ORIGINAL_LIGHT_THEME",
     "STANDARD_DARK_THEME",
     "STANDARD_LIGHT_THEME",
+    "ModernDialog",
     "ModernMetrics",
     "ModernTheme",
     "ModernWindow",
