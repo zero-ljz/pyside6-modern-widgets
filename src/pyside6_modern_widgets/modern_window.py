@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QMenu,
     QMenuBar,
-    QMessageBox,
     QPushButton,
     QStatusBar,
     QToolBar,
@@ -143,13 +142,15 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         )
 
         def confirm_exit() -> None:
-            answer = QMessageBox.question(
+            from .modern_message_box import ModernMessageBox
+
+            answer = ModernMessageBox.question(
                 self,
                 "确认退出",
                 "确定要退出吗？",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                ModernMessageBox.StandardButton.Yes | ModernMessageBox.StandardButton.No,
             )
-            if answer == QMessageBox.StandardButton.Yes:
+            if answer == ModernMessageBox.StandardButton.Yes:
                 QApplication.quit()
 
         self.quitAction.triggered.connect(confirm_exit)

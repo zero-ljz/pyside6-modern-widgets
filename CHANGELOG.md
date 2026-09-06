@@ -8,6 +8,8 @@ All notable changes to this project are documented in this file.
 
 - Added `ModernDialog`, a frameless `QDialog` that shares the modern window
   chrome while retaining native dialog layouts, modality, signals, and results.
+- Added `ModernMessageBox` with common `QMessageBox` icons, standard and custom
+  buttons, convenience methods, detailed text, and optional checkboxes.
 
 ### Changed
 

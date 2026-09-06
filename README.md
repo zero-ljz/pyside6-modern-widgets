@@ -6,6 +6,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernWindow`: a frameless replacement for top-level `QWidget` windows with
   selected `QMainWindow`-compatible methods.
 - `ModernDialog`: a frameless `QDialog` that preserves the standard dialog API.
+- `ModernMessageBox`: a themed message box with familiar `QMessageBox` buttons
+  and convenience methods.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -103,6 +105,21 @@ layout.addWidget(buttons)
 dialog.exec()
 ```
 
+`ModernMessageBox` provides the common information, question, warning, and
+critical flows while returning `QMessageBox`-compatible standard buttons:
+
+```python
+from pyside6_modern_widgets import ModernMessageBox
+
+answer = ModernMessageBox.question(
+    window,
+    "Confirm",
+    "Continue with this operation?",
+    ModernMessageBox.StandardButton.Yes | ModernMessageBox.StandardButton.No,
+    ModernMessageBox.StandardButton.No,
+)
+```
+
 ## Themes
 
 Widgets use a neutral light-gray standard theme through the process-wide theme
@@ -129,7 +146,8 @@ preserving the current light or dark mode and application accent color.
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is
 not supported.
 
-Runnable window, dialog, navigation, and multi-tab examples are available in the
+The runnable navigation example includes interactive window, dialog, and message
+box pages. A separate multi-tab example is also available in the
 [`examples`](examples) directory.
 
 `NavigationView` automatically uses an overlay sidebar when expanding it beside

@@ -6,7 +6,8 @@ Install the package in editable mode from the repository root:
 python -m pip install -e .
 ```
 
-Run the window and navigation example, whose pages are intentionally empty:
+Run the window and navigation example. It includes interactive `ModernDialog`
+and `ModernMessageBox` pages:
 
 ```shell
 python examples/navigation_view_example.py
@@ -16,12 +17,6 @@ Run the multi-tab `ModernWindow` example without a menu bar:
 
 ```shell
 python examples/tab_view_example.py
-```
-
-Run the `ModernDialog` example, which uses the standard `QDialog` API:
-
-```shell
-python examples/dialog_example.py
 ```
 
 The tab example supports adding, closing (including middle-click), selecting, and dragging
