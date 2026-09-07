@@ -10,8 +10,8 @@ All notable changes to this project are documented in this file.
   chrome while retaining native dialog layouts, modality, signals, and results.
 - Added `ModernMessageBox` with common `QMessageBox` icons, standard and custom
   buttons, convenience methods, detailed text, and optional checkboxes.
-- Added `ModernMenu`, a `QMenu` subclass with Windows system acrylic, a
-  cross-platform translucent fallback, and rounded backgrounds while retaining
+- Added `ModernMenu`, a `QMenu` subclass with Windows 11 system acrylic, an
+  opaque fallback, and rounded backgrounds while retaining
   native menu layout.
 - Added `ModernMenuBar`, which creates `ModernMenu` drop-down menus while
   preserving the standard `QMenuBar` API.

@@ -8,8 +8,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernDialog`: a frameless `QDialog` that preserves the standard dialog API.
 - `ModernMessageBox`: a themed message box with familiar `QMessageBox` buttons
   and convenience methods.
-- `ModernMenu`: a native `QMenu` with Windows system acrylic (and a
-  translucent fallback elsewhere) plus rounded outer and selected-item
+- `ModernMenu`: a native `QMenu` with Windows 11 system acrylic (and an
+  opaque fallback elsewhere) plus rounded outer and selected-item
   backgrounds.
 - `ModernMenuBar`: a `QMenuBar` that creates `ModernMenu` drop-down menus.
 - `NavigationSidebar`: a collapsible navigation sidebar.

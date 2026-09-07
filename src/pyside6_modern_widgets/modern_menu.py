@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
 
 from .theme import DEFAULT_METRICS, ModernMetrics
 
-_ACRYLIC_ALPHA = 230
 _FALLBACK_BASE_STYLE = "fusion"
 _WINDOWS_ACRYLIC_TINT_ALPHA = 170
 _MENU_ITEM_EXTRA_HEIGHT = 4
@@ -48,6 +47,13 @@ def _base_style_name(widget: QWidget) -> str:
     # Application style sheets wrap the base style in an anonymous QStyleSheetStyle.
     # Passing its empty name to QProxyStyle selects the platform default instead.
     return widget.style().name() or _FALLBACK_BASE_STYLE
+
+
+def _supports_windows_acrylic() -> bool:
+    if sys.platform != "win32" or QApplication.platformName() != "windows":
+        return False
+    get_windows_version = getattr(sys, "getwindowsversion", None)
+    return get_windows_version is not None and get_windows_version().build >= 22000
 
 
 def _enable_windows_rounded_corners(menu: QMenu, radius: int) -> bool:
@@ -80,7 +86,7 @@ def _enable_windows_rounded_corners(menu: QMenu, radius: int) -> bool:
 
 
 def _enable_windows_acrylic(menu: QMenu) -> bool:
-    if sys.platform != "win32" or QApplication.platformName() != "windows":
+    if not _supports_windows_acrylic():
         return False
     try:
         import ctypes
@@ -169,7 +175,7 @@ class _RoundedMenuStyle(QProxyStyle):
                 option.palette,
                 widget if isinstance(widget, QWidget) else None,
             )
-            surface.setAlpha(0 if self._native_acrylic else _ACRYLIC_ALPHA)
+            surface.setAlpha(0 if self._native_acrylic else 255)
             painter.setBrush(surface)
             painter.setPen(QPen(_soft_line_color(option.palette, _OUTLINE_ALPHA), 1))
             rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)

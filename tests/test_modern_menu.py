@@ -66,7 +66,7 @@ def test_modern_menu_clips_only_the_outer_corners() -> None:
     assert menu.mask().isEmpty()
     assert image.hasAlphaChannel()
     assert image.pixelColor(0, 0).alpha() == 0
-    assert 0 < image.pixelColor(menu.width() - 8, first_item_y).alpha() < 255
+    assert image.pixelColor(menu.width() - 8, first_item_y).alpha() == 255
     menu.hide()
 
 
@@ -85,11 +85,18 @@ def test_modern_menu_has_even_vertical_margins_and_soft_lines() -> None:
     bottom_margin = menu.height() - last_rect.bottom() - 1
     separator_center = menu.actionGeometry(separator).center()
     separator_color = image.pixelColor(separator_center)
+    surface_color = palette.color(QPalette.ColorRole.Window)
+
+    def color_distance(left: QColor, right: QColor) -> int:
+        return sum(abs(a - b) for a, b in zip(left.getRgb()[:3], right.getRgb()[:3]))
 
     assert first_rect.top() == bottom_margin
     assert first_rect.top() > 0
     assert separator_color != palette.color(palette.ColorRole.Dark)
-    assert separator_color.alpha() < palette.color(palette.ColorRole.Dark).alpha()
+    assert color_distance(separator_color, surface_color) < color_distance(
+        palette.color(QPalette.ColorRole.Dark), surface_color
+    )
+    assert separator_color.alpha() == 255
     menu.hide()
 
 
@@ -110,8 +117,25 @@ def test_modern_menu_uses_opaque_ancestor_surface_for_a_transparent_palette() ->
     surface = image.pixelColor(menu.width() - 8, menu.actionGeometry(action).center().y())
 
     assert surface.name() == "#e1e4e8"
-    assert surface.alpha() == 230
+    assert surface.alpha() == 255
     menu.hide()
+
+
+def test_windows_acrylic_requires_windows_11(monkeypatch) -> None:
+    from pyside6_modern_widgets import modern_menu
+
+    class WindowsVersion:
+        build = 19045
+
+    monkeypatch.setattr(modern_menu.sys, "platform", "win32")
+    monkeypatch.setattr(modern_menu.QApplication, "platformName", lambda: "windows")
+    monkeypatch.setattr(modern_menu.sys, "getwindowsversion", WindowsVersion, raising=False)
+
+    assert not modern_menu._supports_windows_acrylic()
+
+    WindowsVersion.build = 22000
+
+    assert modern_menu._supports_windows_acrylic()
 
 
 def test_modern_menu_requires_native_rounding_before_enabling_acrylic(monkeypatch) -> None:
