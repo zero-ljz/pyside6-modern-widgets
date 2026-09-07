@@ -2,6 +2,7 @@
 
 from .modern_dialog import ModernDialog
 from .modern_menu import ModernMenu
+from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
 from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar
@@ -33,6 +34,7 @@ __all__ = [
     "STANDARD_LIGHT_THEME",
     "ModernDialog",
     "ModernMenu",
+    "ModernMenuBar",
     "ModernMessageBox",
     "ModernMetrics",
     "ModernTheme",

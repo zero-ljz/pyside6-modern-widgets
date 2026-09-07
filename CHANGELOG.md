@@ -13,9 +13,13 @@ All notable changes to this project are documented in this file.
 - Added `ModernMenu`, a `QMenu` subclass with Windows system acrylic, a
   cross-platform translucent fallback, and rounded backgrounds while retaining
   native menu layout.
+- Added `ModernMenuBar`, which creates `ModernMenu` drop-down menus while
+  preserving the standard `QMenuBar` API.
 
 ### Changed
 
+- Made `ModernWindow` use modern menus for its menu bar, title-bar menu, and
+  cross-platform system-menu fallback.
 - Made `ModernWindow` accept the `QWidget(parent, f)` constructor shape and
   direct widget layouts, while synchronizing its custom chrome with tool and
   popup window flags.
@@ -31,6 +35,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Prevented menu-bar style sheets from overriding `ModernMenu` palette and
+  drawing behavior in `ModernMenuBar` drop-downs.
+- Matched the native Windows acrylic backdrop to rounded menu corners and made
+  its tint more transparent, with a Qt-painted fallback when unavailable.
 - Kept runtime navigation item text updates synchronized across expanded and
   collapsed states, including updates made through the exposed item button.
 - Restored the user's expanded sidebar intent after window chrome actions or

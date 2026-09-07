@@ -9,7 +9,6 @@ from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QColor, QCursor, QIcon, QPalette, QPixmap, QWindow
 from PySide6.QtWidgets import (
     QApplication,
-    QMenu,
     QMenuBar,
     QPushButton,
     QStatusBar,
@@ -26,6 +25,8 @@ from ._window_chrome import (
     WindowTitleBar,
     button_style,
 )
+from .modern_menu import ModernMenu
+from .modern_menu_bar import ModernMenuBar
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -118,8 +119,8 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         button.clicked.connect(callback)
         return button
 
-    def _create_window_menu(self) -> QMenu:
-        menu = QMenu(self)
+    def _create_window_menu(self) -> ModernMenu:
+        menu = ModernMenu(self, metrics=self._metrics)
         self.watercolorMenu = menu.addMenu("主题风格")
         self.watercolorActionGroup = QActionGroup(self)
         self.watercolorActionGroup.setExclusive(True)
@@ -318,7 +319,7 @@ class ModernWindow(QWidget):
         self._window_state_settle_timer.timeout.connect(self._sync_window_state_style)
 
         self.cornerRadius = metrics.corner_radius
-        self._menu_bar: QMenuBar | None = None
+        self._menu_bar: ModernMenuBar | None = None
         self._status_bar: QStatusBar | None = None
         self.root_layout: QVBoxLayout | None = None
         self.frameLayout: QVBoxLayout | None = None
@@ -536,7 +537,7 @@ class ModernWindow(QWidget):
         ):
             return
 
-        menu = QMenu(self)
+        menu = ModernMenu(self, metrics=self._metrics)
         menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         restore_action = menu.addAction("还原", self.showNormal)
         minimize_action = menu.addAction("最小化", self.showMinimized)
@@ -792,11 +793,11 @@ class ModernWindow(QWidget):
         self.content = QWidget(self)
         self.root_layout.addWidget(self.content)
 
-    def menuBar(self) -> QMenuBar:
+    def menuBar(self) -> ModernMenuBar:
         if self._menu_bar is None:
             self._ensure_compatibility_layout()
             assert self.frameLayout is not None
-            self._menu_bar = QMenuBar(self)
+            self._menu_bar = ModernMenuBar(self, metrics=self._metrics)
             self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
             self.frameLayout.insertWidget(0, self._menu_bar)
             self._install_resize_filters(self._menu_bar)

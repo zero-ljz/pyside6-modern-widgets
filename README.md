@@ -11,6 +11,7 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernMenu`: a native `QMenu` with Windows system acrylic (and a
   translucent fallback elsewhere) plus rounded outer and selected-item
   backgrounds.
+- `ModernMenuBar`: a `QMenuBar` that creates `ModernMenu` drop-down menus.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -63,6 +64,9 @@ window.resize(800, 500)
 window.show()
 app.exec()
 ```
+
+`ModernWindow.menuBar()` returns a `ModernMenuBar`, so menus created from a
+title or icon automatically use `ModernMenu`, including nested submenus.
 
 An existing top-level `QWidget` subclass can keep its direct layout when its
 base class changes to `ModernWindow`. The standard `QWidget(parent, f)`

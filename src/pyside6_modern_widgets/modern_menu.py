@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from .theme import DEFAULT_METRICS, ModernMetrics
 
 _ACRYLIC_ALPHA = 230
-_WINDOWS_ACRYLIC_TINT_ALPHA = 204
+_WINDOWS_ACRYLIC_TINT_ALPHA = 170
 _MENU_ITEM_EXTRA_HEIGHT = 4
 _MENU_VERTICAL_MARGIN = 2
 _OUTLINE_ALPHA = 30
@@ -30,6 +30,46 @@ def _soft_line_color(palette: QPalette, alpha: int) -> QColor:
     color = QColor(palette.color(QPalette.ColorRole.WindowText))
     color.setAlpha(alpha)
     return color
+
+
+def _surface_color(palette: QPalette, widget: QWidget | None = None) -> QColor:
+    color = QColor(palette.color(QPalette.ColorRole.Window))
+    ancestor = widget.parentWidget() if widget is not None else None
+    while color.alpha() == 0 and ancestor is not None:
+        color = QColor(ancestor.palette().color(QPalette.ColorRole.Window))
+        ancestor = ancestor.parentWidget()
+    if color.alpha() == 0:
+        color = QColor(QApplication.palette().color(QPalette.ColorRole.Window))
+    return color
+
+
+def _enable_windows_rounded_corners(menu: QMenu, radius: int) -> bool:
+    if radius <= 0 or sys.platform != "win32" or QApplication.platformName() != "windows":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        preference = ctypes.c_int(2)  # DWMWCP_ROUND
+        set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        set_window_attribute.argtypes = [
+            wintypes.HWND,
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+        ]
+        set_window_attribute.restype = ctypes.c_long
+        return (
+            set_window_attribute(
+                wintypes.HWND(int(menu.winId())),
+                33,  # DWMWA_WINDOW_CORNER_PREFERENCE
+                ctypes.byref(preference),
+                ctypes.sizeof(preference),
+            )
+            == 0
+        )
+    except (AttributeError, OSError, ValueError):
+        return False
 
 
 def _enable_windows_acrylic(menu: QMenu) -> bool:
@@ -54,7 +94,7 @@ def _enable_windows_acrylic(menu: QMenu) -> bool:
                 ("size", ctypes.c_size_t),
             ]
 
-        tint = menu.palette().color(QPalette.ColorRole.Window)
+        tint = _surface_color(menu.palette(), menu)
         gradient_color = (
             (_WINDOWS_ACRYLIC_TINT_ALPHA << 24)
             | (tint.blue() << 16)
@@ -118,7 +158,10 @@ class _RoundedMenuStyle(QProxyStyle):
         if element == QStyle.PrimitiveElement.PE_PanelMenu:
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            surface = QColor(option.palette.color(QPalette.ColorRole.Window))
+            surface = _surface_color(
+                option.palette,
+                widget if isinstance(widget, QWidget) else None,
+            )
             surface.setAlpha(0 if self._native_acrylic else _ACRYLIC_ALPHA)
             painter.setBrush(surface)
             painter.setPen(QPen(_soft_line_color(option.palette, _OUTLINE_ALPHA), 1))
@@ -146,7 +189,10 @@ class _RoundedMenuStyle(QProxyStyle):
             and self._radius > 0
         ):
             rect = QRectF(option.rect).adjusted(4, 2, -4, -2)
-            window_color = option.palette.color(QPalette.ColorRole.Window)
+            window_color = _surface_color(
+                option.palette,
+                widget if isinstance(widget, QWidget) else None,
+            )
             hover = (
                 QColor(255, 255, 255, 20) if window_color.lightness() < 128 else QColor(0, 0, 0, 13)
             )
@@ -196,7 +242,11 @@ class ModernMenu(QMenu):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self._rounded_style.setNativeAcrylic(_enable_windows_acrylic(self))
+        has_native_corners = _enable_windows_rounded_corners(
+            self,
+            self._metrics.control_radius,
+        )
+        self._rounded_style.setNativeAcrylic(has_native_corners and _enable_windows_acrylic(self))
         self.update()
 
     @overload
