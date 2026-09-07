@@ -8,6 +8,9 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernDialog`: a frameless `QDialog` that preserves the standard dialog API.
 - `ModernMessageBox`: a themed message box with familiar `QMessageBox` buttons
   and convenience methods.
+- `ModernMenu`: a native `QMenu` with Windows system acrylic (and a
+  translucent fallback elsewhere) plus rounded outer and selected-item
+  backgrounds.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -118,6 +121,20 @@ answer = ModernMessageBox.question(
     ModernMessageBox.StandardButton.Yes | ModernMessageBox.StandardButton.No,
     ModernMessageBox.StandardButton.No,
 )
+```
+
+`ModernMenu` accepts the same common constructor forms as `QMenu` and works
+with ordinary `QAction` instances, separators, checkable actions, and submenus:
+
+```python
+from PySide6.QtGui import QAction
+
+from pyside6_modern_widgets import ModernMenu
+
+menu = ModernMenu("Actions", window)
+menu.addAction(QAction("Open", menu))
+menu.addSeparator()
+menu.addMenu("Recent")
 ```
 
 ## Themes

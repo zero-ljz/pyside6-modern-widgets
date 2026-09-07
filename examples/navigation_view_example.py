@@ -1,16 +1,17 @@
-"""Interactive example for the modern window, navigation, and dialogs."""
+"""Interactive example for the modern window, navigation, menus, and dialogs."""
 
 from __future__ import annotations
 
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QDialogButtonBox,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QStyle,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from pyside6_modern_widgets import (
     ModernDialog,
+    ModernMenu,
     ModernMessageBox,
     ModernWindow,
     NavigationPosition,
@@ -40,7 +42,7 @@ class ExampleWindow(ModernWindow):
 
         self.navigation = NavigationView()
         self.setCentralWidget(self.navigation)
-        self._page_names = ("Home", "Dialog", "Message boxes", "Settings")
+        self._page_names = ("Home", "Dialog", "Message boxes", "Menu", "Settings")
 
         self.navigation.addPage(
             self._create_home_page(),
@@ -57,6 +59,11 @@ class ExampleWindow(ModernWindow):
             self._create_message_box_page(),
             "Message boxes",
             standard_icon(QStyle.StandardPixmap.SP_MessageBoxInformation),
+        )
+        self.navigation.addPage(
+            self._create_menu_page(),
+            "Menu",
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
         )
         self.navigation.addPage(
             self._create_settings_page(),
@@ -87,7 +94,7 @@ class ExampleWindow(ModernWindow):
 
     def _create_home_page(self) -> QWidget:
         page, layout = self._create_page("Modern Widgets")
-        layout.addWidget(QLabel("Window, navigation, dialog, and message box examples."))
+        layout.addWidget(QLabel("Window, navigation, menu, dialog, and message box examples."))
         layout.addStretch()
         return page
 
@@ -144,6 +151,92 @@ class ExampleWindow(ModernWindow):
         page, layout = self._create_page("Settings")
         layout.addStretch()
         return page
+
+    def _create_menu_page(self) -> QWidget:
+        page, layout = self._create_page("Menus")
+        self.menu_button = QPushButton(
+            standard_icon(QStyle.StandardPixmap.SP_TitleBarMenuButton),
+            "Open ModernMenu",
+        )
+        self.menu_button.setFixedWidth(220)
+        self.menu_button.clicked.connect(self._show_menu)
+        layout.addWidget(self.menu_button, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.native_menu_button = QPushButton(
+            standard_icon(QStyle.StandardPixmap.SP_TitleBarMenuButton),
+            "Open native QMenu",
+        )
+        self.native_menu_button.setFixedWidth(220)
+        self.native_menu_button.clicked.connect(self._show_native_menu)
+        layout.addWidget(self.native_menu_button, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.choice_groups: list[QActionGroup] = []
+        self.example_menu = ModernMenu("Actions", self)
+        self._populate_example_menu(self.example_menu)
+        self.example_menu.triggered.connect(self._menu_action_triggered)
+
+        self.native_menu = QMenu("Native actions", self)
+        self._populate_example_menu(self.native_menu)
+        self.native_menu.triggered.connect(self._menu_action_triggered)
+        layout.addStretch()
+        return page
+
+    def _populate_example_menu(self, menu: QMenu) -> None:
+        default_action = menu.addAction("Default action")
+        menu.setDefaultAction(default_action)
+        menu.addAction(
+            standard_icon(QStyle.StandardPixmap.SP_DialogOpenButton),
+            "Qt standard icon",
+        )
+        menu.addAction(
+            QIcon(":/pyside6_modern_widgets/icons/application.png"),
+            "Custom icon",
+        )
+        menu.addSeparator()
+
+        toggle_action = menu.addAction("Checkable toggle")
+        toggle_action.setCheckable(True)
+        toggle_action.setChecked(True)
+
+        choice_menu = menu.addMenu("Single choice")
+        choice_group = QActionGroup(choice_menu)
+        choice_group.setExclusive(True)
+        self.choice_groups.append(choice_group)
+        for text in ("Compact", "Comfortable", "Spacious"):
+            action = choice_menu.addAction(text)
+            action.setCheckable(True)
+            choice_group.addAction(action)
+            if text == "Comfortable":
+                action.setChecked(True)
+
+        menu.addSeparator()
+        combined_shortcut = menu.addAction("Combined shortcut")
+        combined_shortcut.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        combined_shortcut.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+        alt_shortcut = menu.addAction("Alt shortcut")
+        alt_shortcut.setShortcut(QKeySequence("Alt+M"))
+        alt_shortcut.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+        menu.addAction("&Keyboard mnemonic")
+
+        nested_menu = menu.addMenu("Nested menus")
+        level_two_menu = nested_menu.addMenu("Level 2")
+        level_three_menu = level_two_menu.addMenu("Level 3")
+        level_three_menu.addAction("Deep action")
+
+        menu.addSeparator()
+        unavailable_action = menu.addAction("Unavailable action")
+        unavailable_action.setEnabled(False)
+
+    def _show_menu(self) -> None:
+        position = self.menu_button.mapToGlobal(self.menu_button.rect().bottomLeft())
+        self.example_menu.popup(position)
+
+    def _show_native_menu(self) -> None:
+        position = self.native_menu_button.mapToGlobal(self.native_menu_button.rect().bottomLeft())
+        self.native_menu.popup(position)
+
+    def _menu_action_triggered(self, action: QAction) -> None:
+        self.statusBar().showMessage(f"Menu: {action.text()}", 3000)
 
     def _show_dialog(self) -> None:
         dialog = ModernDialog(self)

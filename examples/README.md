@@ -6,8 +6,8 @@ Install the package in editable mode from the repository root:
 python -m pip install -e .
 ```
 
-Run the window and navigation example. It includes interactive `ModernDialog`
-and `ModernMessageBox` pages:
+Run the window and navigation example. It includes interactive `ModernDialog`,
+`ModernMessageBox`, and side-by-side `ModernMenu`/native `QMenu` examples:
 
 ```shell
 python examples/navigation_view_example.py

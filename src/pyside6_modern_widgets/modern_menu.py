@@ -1,0 +1,224 @@
+"""A native QMenu with an acrylic surface and rounded backgrounds."""
+
+from __future__ import annotations
+
+import sys
+from typing import overload
+
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtWidgets import (
+    QApplication,
+    QMenu,
+    QProxyStyle,
+    QStyle,
+    QStyleOptionMenuItem,
+    QWidget,
+)
+
+from .theme import DEFAULT_METRICS, ModernMetrics
+
+_ACRYLIC_ALPHA = 230
+_WINDOWS_ACRYLIC_TINT_ALPHA = 204
+_MENU_ITEM_EXTRA_HEIGHT = 4
+_MENU_VERTICAL_MARGIN = 2
+_OUTLINE_ALPHA = 30
+_SEPARATOR_ALPHA = 20
+
+
+def _soft_line_color(palette: QPalette, alpha: int) -> QColor:
+    color = QColor(palette.color(QPalette.ColorRole.WindowText))
+    color.setAlpha(alpha)
+    return color
+
+
+def _enable_windows_acrylic(menu: QMenu) -> bool:
+    if sys.platform != "win32" or QApplication.platformName() != "windows":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class AccentPolicy(ctypes.Structure):
+            _fields_ = [
+                ("state", ctypes.c_int),
+                ("flags", ctypes.c_int),
+                ("gradient_color", ctypes.c_uint),
+                ("animation_id", ctypes.c_int),
+            ]
+
+        class WindowCompositionAttributeData(ctypes.Structure):
+            _fields_ = [
+                ("attribute", ctypes.c_int),
+                ("data", ctypes.c_void_p),
+                ("size", ctypes.c_size_t),
+            ]
+
+        tint = menu.palette().color(QPalette.ColorRole.Window)
+        gradient_color = (
+            (_WINDOWS_ACRYLIC_TINT_ALPHA << 24)
+            | (tint.blue() << 16)
+            | (tint.green() << 8)
+            | tint.red()
+        )
+        accent = AccentPolicy(
+            4,  # ACCENT_ENABLE_ACRYLICBLURBEHIND
+            2,
+            gradient_color,
+            0,
+        )
+        data = WindowCompositionAttributeData(
+            19,  # WCA_ACCENT_POLICY
+            ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p),
+            ctypes.sizeof(accent),
+        )
+        set_window_composition_attribute = ctypes.windll.user32.SetWindowCompositionAttribute
+        set_window_composition_attribute.argtypes = [
+            wintypes.HWND,
+            ctypes.POINTER(WindowCompositionAttributeData),
+        ]
+        set_window_composition_attribute.restype = wintypes.BOOL
+        return bool(
+            set_window_composition_attribute(
+                wintypes.HWND(int(menu.winId())),
+                ctypes.byref(data),
+            )
+        )
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+class _RoundedMenuStyle(QProxyStyle):
+    """Clip only the native selected-item rendering to a rounded rectangle."""
+
+    def __init__(self, radius: int, base_style_name: str) -> None:
+        super().__init__(base_style_name)
+        self._radius = max(0, radius)
+        self._native_acrylic = False
+
+    def setNativeAcrylic(self, enabled: bool) -> None:
+        self._native_acrylic = enabled
+
+    def sizeFromContents(self, content_type, option, size, widget=None):
+        result = super().sizeFromContents(content_type, option, size, widget)
+        if (
+            content_type == QStyle.ContentsType.CT_MenuItem
+            and isinstance(option, QStyleOptionMenuItem)
+            and option.menuItemType != QStyleOptionMenuItem.MenuItemType.Separator
+        ):
+            result.setHeight(result.height() + _MENU_ITEM_EXTRA_HEIGHT)
+        return result
+
+    def pixelMetric(self, metric, option=None, widget=None) -> int:
+        if metric == QStyle.PixelMetric.PM_MenuVMargin:
+            return _MENU_VERTICAL_MARGIN
+        return super().pixelMetric(metric, option, widget)
+
+    def drawPrimitive(self, element, option, painter, widget=None) -> None:
+        if element == QStyle.PrimitiveElement.PE_PanelMenu:
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            surface = QColor(option.palette.color(QPalette.ColorRole.Window))
+            surface.setAlpha(0 if self._native_acrylic else _ACRYLIC_ALPHA)
+            painter.setBrush(surface)
+            painter.setPen(QPen(_soft_line_color(option.palette, _OUTLINE_ALPHA), 1))
+            rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)
+            painter.drawRoundedRect(rect, self._radius, self._radius)
+            painter.restore()
+            return
+        super().drawPrimitive(element, option, painter, widget)
+
+    def drawControl(self, element, option, painter, widget=None) -> None:
+        if (
+            element == QStyle.ControlElement.CE_MenuItem
+            and isinstance(option, QStyleOptionMenuItem)
+            and option.menuItemType == QStyleOptionMenuItem.MenuItemType.Separator
+        ):
+            painter.save()
+            painter.setPen(QPen(_soft_line_color(option.palette, _SEPARATOR_ALPHA), 1))
+            y = option.rect.center().y()
+            painter.drawLine(option.rect.left() + 12, y, option.rect.right() - 12, y)
+            painter.restore()
+            return
+        if (
+            element == QStyle.ControlElement.CE_MenuItem
+            and option.state & QStyle.StateFlag.State_Selected
+            and self._radius > 0
+        ):
+            rect = QRectF(option.rect).adjusted(4, 2, -4, -2)
+            window_color = option.palette.color(QPalette.ColorRole.Window)
+            hover = (
+                QColor(255, 255, 255, 20) if window_color.lightness() < 128 else QColor(0, 0, 0, 13)
+            )
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(hover)
+            painter.drawRoundedRect(rect, self._radius, self._radius)
+            painter.restore()
+
+            native_option = QStyleOptionMenuItem(option)
+            native_option.state &= ~QStyle.StateFlag.State_Selected  # type: ignore[attr-defined]
+            super().drawControl(element, native_option, painter, widget)
+            return
+        super().drawControl(element, option, painter, widget)
+
+
+class ModernMenu(QMenu):
+    """A native ``QMenu`` with acrylic and rounded selection geometry."""
+
+    def __init__(
+        self,
+        title: str | QWidget | None = None,
+        parent: QWidget | None = None,
+        *,
+        metrics: ModernMetrics = DEFAULT_METRICS,
+    ) -> None:
+        if isinstance(title, QWidget):
+            if parent is not None:
+                raise TypeError("parent specified twice")
+            parent = title
+            title = None
+        elif title is not None and not isinstance(title, str):
+            raise TypeError("title must be a string or QWidget parent")
+
+        if title is None:
+            super().__init__(parent)
+        else:
+            super().__init__(title, parent)
+
+        self._metrics = metrics
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        self.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._rounded_style = _RoundedMenuStyle(metrics.control_radius, self.style().name())
+        self.setStyle(self._rounded_style)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._rounded_style.setNativeAcrylic(_enable_windows_acrylic(self))
+        self.update()
+
+    @overload
+    def addMenu(self, menu: QMenu, /) -> QAction: ...
+
+    @overload
+    def addMenu(self, title: str, /) -> ModernMenu: ...
+
+    @overload
+    def addMenu(self, icon: QIcon | QPixmap, title: str, /) -> ModernMenu: ...
+
+    def addMenu(self, *args):
+        if len(args) == 1 and isinstance(args[0], str):
+            submenu = self._create_submenu(args[0])
+            super().addMenu(submenu)
+            return submenu
+        if len(args) == 2 and isinstance(args[0], (QIcon, QPixmap)) and isinstance(args[1], str):
+            submenu = self._create_submenu(args[1])
+            submenu.setIcon(QIcon(args[0]))
+            super().addMenu(submenu)
+            return submenu
+        return super().addMenu(*args)
+
+    def _create_submenu(self, title: str) -> ModernMenu:
+        return ModernMenu(title, self, metrics=self._metrics)
