@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from .theme import DEFAULT_METRICS, ModernMetrics
 
 _ACRYLIC_ALPHA = 230
+_FALLBACK_BASE_STYLE = "fusion"
 _WINDOWS_ACRYLIC_TINT_ALPHA = 170
 _MENU_ITEM_EXTRA_HEIGHT = 4
 _MENU_VERTICAL_MARGIN = 2
@@ -41,6 +42,12 @@ def _surface_color(palette: QPalette, widget: QWidget | None = None) -> QColor:
     if color.alpha() == 0:
         color = QColor(QApplication.palette().color(QPalette.ColorRole.Window))
     return color
+
+
+def _base_style_name(widget: QWidget) -> str:
+    # Application style sheets wrap the base style in an anonymous QStyleSheetStyle.
+    # Passing its empty name to QProxyStyle selects the platform default instead.
+    return widget.style().name() or _FALLBACK_BASE_STYLE
 
 
 def _enable_windows_rounded_corners(menu: QMenu, radius: int) -> bool:
@@ -237,7 +244,7 @@ class ModernMenu(QMenu):
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self._rounded_style = _RoundedMenuStyle(metrics.control_radius, self.style().name())
+        self._rounded_style = _RoundedMenuStyle(metrics.control_radius, _base_style_name(self))
         self.setStyle(self._rounded_style)
 
     def showEvent(self, event) -> None:
