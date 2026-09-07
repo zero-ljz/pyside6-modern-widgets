@@ -92,7 +92,7 @@ def current_window_surface_policy() -> WindowSurfacePolicy:
 def button_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
     return f"""
     QPushButton {{ border: none; background-color: transparent; }}
-    QPushButton:hover {{
+    QPushButton:hover, QPushButton[nativeHover="true"] {{
         background-color: {theme.control_hover};
         border-radius: {metrics.control_radius}px;
     }}

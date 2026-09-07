@@ -55,6 +55,7 @@ from ._windows_window import (
     read_message,
     set_mouse_capture,
     set_native_frame,
+    set_native_shadow,
     start_system_move_or_resize,
     track_non_client_mouse_leave,
 )
@@ -465,6 +466,8 @@ class ModernWindow(QWidget):
         self._native_frame_enabled = enabled
         if not set_native_frame(int(self.winId()), enabled):
             self._native_frame_enabled = False
+            return
+        set_native_shadow(int(self.winId()), enabled)
 
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
@@ -671,9 +674,11 @@ class ModernWindow(QWidget):
         if self.titleBar is None:
             return
         button = self.titleBar.maximizeButton
-        if button.testAttribute(Qt.WidgetAttribute.WA_UnderMouse) == hovered:
+        if bool(button.property("nativeHover")) == hovered:
             return
-        button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, hovered)
+        button.setProperty("nativeHover", hovered)
+        button.style().unpolish(button)
+        button.style().polish(button)
         button.update()
 
     def _finish_native_maximize_button_press(
