@@ -38,6 +38,17 @@ def main() -> int:
     assert window.titleBar is not None
     title_bar = window.titleBar
 
+    if sys.platform == "win32" and app.platformName() == "windows":
+        import ctypes
+        from ctypes import wintypes
+
+        get_window_style = ctypes.windll.user32.GetWindowLongPtrW
+        get_window_style.argtypes = (wintypes.HWND, ctypes.c_int)
+        get_window_style.restype = ctypes.c_ssize_t
+        style = int(get_window_style(wintypes.HWND(int(window.winId())), -16))
+        assert style & 0x00C00000 == 0x00C00000  # WS_CAPTION
+        assert style & 0x00040000 == 0x00040000  # WS_THICKFRAME
+
     for _ in range(5):
         title_bar.maximizeButton.click()
         _wait(app)

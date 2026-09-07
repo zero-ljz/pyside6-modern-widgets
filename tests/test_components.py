@@ -164,6 +164,54 @@ def test_modern_window_accepts_qwidget_constructor_flags() -> None:
     assert popup.contentsMargins().top() == 0
 
 
+def test_windows_native_frame_tracks_snap_capable_window_flags(monkeypatch) -> None:
+    from pyside6_modern_widgets import modern_window
+
+    window = ModernWindow()
+    native_frame_states: list[bool] = []
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(
+        modern_window,
+        "set_native_frame",
+        lambda _hwnd, enabled: native_frame_states.append(enabled) or True,
+    )
+
+    window._sync_windows_native_frame()
+    window.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+
+    assert native_frame_states == [True, False]
+    assert not window._native_frame_enabled
+
+
+def test_windows_native_hit_test_preserves_custom_title_bar_controls() -> None:
+    from pyside6_modern_widgets._windows_window import (
+        HTCAPTION,
+        HTLEFT,
+        HTMAXBUTTON,
+    )
+
+    window = ModernWindow()
+    window.resize(640, 480)
+    window.show()
+    _application().processEvents()
+    assert window.titleBar is not None
+    title_bar = window.titleBar
+    window._native_frame_enabled = True
+
+    assert window._native_hit_test_at(QPoint(1, window.height() // 2)) == HTLEFT
+    assert (
+        window._native_hit_test_at(title_bar.pos() + title_bar.titleLabel.geometry().center())
+        == HTCAPTION
+    )
+    assert (
+        window._native_hit_test_at(title_bar.pos() + title_bar.maximizeButton.geometry().center())
+        == HTMAXBUTTON
+    )
+    assert window._native_hit_test_at(
+        title_bar.pos() + title_bar.minimizeButton.geometry().center()
+    ) is None
+
+
 def test_title_bar_menu_button_and_native_context_menu(monkeypatch) -> None:
     window = ModernWindow(theme=LIGHT_THEME)
     window.resize(640, 480)
@@ -596,30 +644,6 @@ def test_system_resize_tracking_clears_after_native_mouse_loop(monkeypatch) -> N
     window._poll_system_resize_state()
     assert not window._system_resize_active
     assert not window._system_resize_watch_timer.isActive()
-
-
-def test_native_system_menu_move_and_size_use_qt_system_operations(monkeypatch) -> None:
-    from pyside6_modern_widgets import _system_menu
-
-    window = ModernWindow()
-    window.setGeometry(100, 100, 640, 480)
-    monkeypatch.setattr(window, "grabMouse", lambda: None)
-    monkeypatch.setattr(window, "grabKeyboard", lambda: None)
-    monkeypatch.setattr(window, "releaseMouse", lambda: None)
-    monkeypatch.setattr(window, "releaseKeyboard", lambda: None)
-
-    assert window._handle_native_system_menu_command(_system_menu.SC_MOVE)
-    start_cursor = window._system_menu_start_cursor
-    window._update_system_menu_operation(start_cursor + QPoint(40, 25))
-    assert window.geometry() == QRect(140, 125, 640, 480)
-    window._finish_system_menu_operation(cancel=False)
-
-    assert window._handle_native_system_menu_command(_system_menu.SC_SIZE)
-    start_cursor = window._system_menu_start_cursor
-    window._update_system_menu_operation(start_cursor + QPoint(60, 35))
-    assert window.geometry() == QRect(140, 125, 700, 515)
-    window._finish_system_menu_operation(cancel=True)
-    assert window.geometry() == QRect(140, 125, 640, 480)
 
 
 def test_modern_window_does_not_overwrite_consumer_styles() -> None:

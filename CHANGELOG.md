@@ -36,6 +36,9 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restored native Windows window recognition for `ModernWindow`, including
+  edge snapping, system resizing and dragging, and Windows 11 Snap Layouts on
+  the custom maximize button, without changing the cross-platform fallback.
 - Unified the top-level surface policy used by `ModernWindow`, `ModernDialog`,
   and `ModernMessageBox`: Windows 10 uses opaque square corners to preserve
   responsive updates without translucent resize flicker, while Windows 11

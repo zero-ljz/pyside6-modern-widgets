@@ -26,6 +26,38 @@ from ._window_chrome import (
     current_window_surface_policy,
     uses_windows_window_state,
 )
+from ._windows_window import (
+    HTBOTTOM,
+    HTBOTTOMLEFT,
+    HTBOTTOMRIGHT,
+    HTCAPTION,
+    HTLEFT,
+    HTMAXBUTTON,
+    HTRIGHT,
+    HTTOP,
+    HTTOPLEFT,
+    HTTOPRIGHT,
+    WM_CAPTURECHANGED,
+    WM_ENTERSIZEMOVE,
+    WM_EXITSIZEMOVE,
+    WM_LBUTTONUP,
+    WM_MOUSEMOVE,
+    WM_NCCALCSIZE,
+    WM_NCHITTEST,
+    WM_NCLBUTTONDBLCLK,
+    WM_NCLBUTTONDOWN,
+    WM_NCLBUTTONUP,
+    WM_NCMOUSELEAVE,
+    WM_NCMOUSEMOVE,
+    WM_NCRBUTTONUP,
+    client_position_from_l_param,
+    constrain_maximized_client_area,
+    read_message,
+    set_mouse_capture,
+    set_native_frame,
+    start_system_move_or_resize,
+    track_non_client_mouse_leave,
+)
 from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
 from .theme import (
@@ -250,9 +282,8 @@ class ModernWindow(QWidget):
         self._surface_policy.apply_to(self)
         self.setMouseTracking(True)
         self._resize_cursor_active = False
-        self._system_menu_operation: str | None = None
-        self._system_menu_start_cursor = QPoint()
-        self._system_menu_start_geometry = QRect()
+        self._native_frame_enabled = False
+        self._native_maximize_button_pressed = False
         self._normal_geometry_before_maximize: QRect | None = None
         self._screen_change_window: QWindow | None = None
         self._screen_device_pixel_ratio: float | None = None
@@ -417,6 +448,23 @@ class ModernWindow(QWidget):
         top_margin = self.titleBar.height() if title_bar_visible else 0
         QWidget.setContentsMargins(self, 0, top_margin, 0, 0)
         self._layout_chrome()
+        self._sync_windows_native_frame()
+
+    def _sync_windows_native_frame(self) -> None:
+        if not self._uses_windows_window_state():
+            self._native_frame_enabled = False
+            return
+
+        flags = self.windowFlags()
+        window_type = flags & Qt.WindowType.WindowType_Mask
+        enabled = (
+            window_type == Qt.WindowType.Window
+            and bool(flags & Qt.WindowType.WindowSystemMenuHint)
+            and bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
+        )
+        self._native_frame_enabled = enabled
+        if not set_native_frame(int(self.winId()), enabled):
+            self._native_frame_enabled = False
 
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
@@ -468,11 +516,6 @@ class ModernWindow(QWidget):
 
     def _handle_native_system_menu_command(self, command: int) -> bool:
         command &= 0xFFF0
-        if command == _system_menu.SC_MOVE:
-            return self._start_system_menu_operation("move")
-        if command == _system_menu.SC_SIZE:
-            return self._start_system_menu_operation("size")
-
         handlers = {
             _system_menu.SC_MINIMIZE: self.showMinimized,
             _system_menu.SC_MAXIMIZE: self.showMaximized,
@@ -483,47 +526,6 @@ class ModernWindow(QWidget):
             return False
         handler()
         return True
-
-    def _start_system_menu_operation(self, operation: str) -> bool:
-        if self.isMaximized() or operation not in {"move", "size"}:
-            return False
-        self._system_menu_operation = operation
-        self._system_menu_start_cursor = QCursor.pos()
-        self._system_menu_start_geometry = self.geometry()
-        cursor = (
-            Qt.CursorShape.SizeAllCursor if operation == "move" else Qt.CursorShape.SizeFDiagCursor
-        )
-        self.setCursor(cursor)
-        self.grabMouse()
-        self.grabKeyboard()
-        return True
-
-    def _update_system_menu_operation(self, global_position: QPoint) -> None:
-        delta = global_position - self._system_menu_start_cursor
-        geometry = QRect(self._system_menu_start_geometry)
-        if self._system_menu_operation == "move":
-            geometry.translate(delta)
-        elif self._system_menu_operation == "size":
-            geometry.setWidth(
-                max(self.minimumWidth(), min(self.maximumWidth(), geometry.width() + delta.x()))
-            )
-            geometry.setHeight(
-                max(
-                    self.minimumHeight(),
-                    min(self.maximumHeight(), geometry.height() + delta.y()),
-                )
-            )
-        self.setGeometry(geometry)
-
-    def _finish_system_menu_operation(self, *, cancel: bool) -> None:
-        if self._system_menu_operation is None:
-            return
-        if cancel:
-            self.setGeometry(self._system_menu_start_geometry)
-        self._system_menu_operation = None
-        self.releaseMouse()
-        self.releaseKeyboard()
-        self.unsetCursor()
 
     def theme(self) -> ModernTheme:
         return self._theme
@@ -594,6 +596,141 @@ class ModernWindow(QWidget):
         ):
             self._sync_inactive_title_color()
         return handled
+
+    def nativeEvent(self, event_type, message):
+        if not self._uses_windows_window_state():
+            return super().nativeEvent(event_type, message)
+
+        try:
+            native_message = read_message(int(message))
+        except (TypeError, ValueError):
+            return super().nativeEvent(event_type, message)
+
+        if native_message.message == WM_NCCALCSIZE and getattr(
+            self, "_native_frame_enabled", False
+        ) and native_message.w_param:
+            constrain_maximized_client_area(int(self.winId()), native_message.l_param)
+            return True, 0
+        if native_message.message == WM_NCHITTEST and self._native_frame_enabled:
+            position = client_position_from_l_param(
+                int(self.winId()),
+                native_message.l_param,
+                self.width(),
+                self.height(),
+            )
+            if position is not None:
+                hit_test = self._native_hit_test_at(QPoint(round(position[0]), round(position[1])))
+                if hit_test is not None:
+                    return True, hit_test
+        elif native_message.message == WM_NCMOUSEMOVE:
+            hovered = native_message.w_param == HTMAXBUTTON
+            self._set_native_maximize_button_hovered(hovered)
+            if hovered:
+                track_non_client_mouse_leave(int(self.winId()))
+        elif native_message.message == WM_NCMOUSELEAVE:
+            self._set_native_maximize_button_hovered(False)
+        elif native_message.message == WM_NCLBUTTONDOWN and native_message.w_param == HTMAXBUTTON:
+            self._native_maximize_button_pressed = True
+            if self.titleBar is not None:
+                self.titleBar.maximizeButton.setDown(True)
+            set_mouse_capture(int(self.winId()), True)
+            return True, 0
+        elif native_message.message == WM_NCLBUTTONDOWN:
+            if start_system_move_or_resize(int(self.winId()), native_message.w_param):
+                return True, 0
+        elif native_message.message == WM_NCLBUTTONDBLCLK and native_message.w_param == HTCAPTION:
+            if self.titleBar is not None:
+                QTimer.singleShot(0, self.titleBar.changeMaximize)
+            return True, 0
+        elif native_message.message == WM_NCRBUTTONUP and native_message.w_param == HTCAPTION:
+            QTimer.singleShot(0, lambda: self.showSystemWindowMenu(QCursor.pos()))
+            return True, 0
+        elif native_message.message == WM_NCLBUTTONUP and self._native_maximize_button_pressed:
+            self._finish_native_maximize_button_press(native_message.w_param == HTMAXBUTTON)
+            return True, 0
+        elif native_message.message == WM_MOUSEMOVE and self._native_maximize_button_pressed:
+            if self.titleBar is not None:
+                self.titleBar.maximizeButton.setDown(
+                    self._native_hit_test_at(self.mapFromGlobal(QCursor.pos())) == HTMAXBUTTON
+                )
+        elif native_message.message == WM_LBUTTONUP and self._native_maximize_button_pressed:
+            self._finish_native_maximize_button_press(
+                self._native_hit_test_at(self.mapFromGlobal(QCursor.pos())) == HTMAXBUTTON
+            )
+            return True, 0
+        elif native_message.message == WM_CAPTURECHANGED and self._native_maximize_button_pressed:
+            self._finish_native_maximize_button_press(False, release_capture=False)
+        elif native_message.message == WM_ENTERSIZEMOVE:
+            self._begin_system_resize_tracking(poll_mouse_buttons=False)
+        elif native_message.message == WM_EXITSIZEMOVE:
+            self._finish_system_resize_tracking()
+            self._schedule_window_state_style_sync()
+        return super().nativeEvent(event_type, message)
+
+    def _set_native_maximize_button_hovered(self, hovered: bool) -> None:
+        if self.titleBar is None:
+            return
+        button = self.titleBar.maximizeButton
+        if button.testAttribute(Qt.WidgetAttribute.WA_UnderMouse) == hovered:
+            return
+        button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, hovered)
+        button.update()
+
+    def _finish_native_maximize_button_press(
+        self, activate: bool, *, release_capture: bool = True
+    ) -> None:
+        self._native_maximize_button_pressed = False
+        if self.titleBar is not None:
+            self.titleBar.maximizeButton.setDown(False)
+            if activate:
+                QTimer.singleShot(0, self.titleBar.changeMaximize)
+        if release_capture:
+            set_mouse_capture(int(self.winId()), False)
+
+    def _native_hit_test_at(self, position: QPoint) -> int | None:
+        if not self._native_frame_enabled:
+            return None
+
+        if not self.isMaximized():
+            left = position.x() < 8
+            right = position.x() >= self.width() - 8
+            top = position.y() < 8
+            bottom = position.y() >= self.height() - 8
+            if top and left:
+                return HTTOPLEFT
+            if top and right:
+                return HTTOPRIGHT
+            if bottom and left:
+                return HTBOTTOMLEFT
+            if bottom and right:
+                return HTBOTTOMRIGHT
+            if left:
+                return HTLEFT
+            if right:
+                return HTRIGHT
+            if top:
+                return HTTOP
+            if bottom:
+                return HTBOTTOM
+
+        title_bar = self.titleBar
+        if (
+            title_bar is None
+            or not title_bar.isVisible()
+            or not title_bar.geometry().contains(position)
+        ):
+            return None
+
+        title_position = title_bar.mapFrom(self, position)
+        if title_bar.maximizeButton.isVisible() and title_bar.maximizeButton.geometry().contains(
+            title_position
+        ):
+            return HTMAXBUTTON
+
+        child = title_bar.childAt(title_position)
+        if child is None or child in (title_bar.iconLabel, title_bar.titleLabel):
+            return HTCAPTION
+        return None
 
     def _connect_screen_change_signal(self) -> None:
         window_handle = self.windowHandle()
@@ -773,12 +910,13 @@ class ModernWindow(QWidget):
     def _has_pressed_mouse_buttons() -> bool:
         return QApplication.mouseButtons() != Qt.MouseButton.NoButton
 
-    def _begin_system_resize_tracking(self) -> None:
+    def _begin_system_resize_tracking(self, *, poll_mouse_buttons: bool = True) -> None:
         if self._system_resize_active:
             return
         self._system_resize_active = True
         self.frame.setLiveResize(True)
-        self._system_resize_watch_timer.start()
+        if poll_mouse_buttons:
+            self._system_resize_watch_timer.start()
 
     def _finish_system_resize_tracking(self) -> None:
         was_active = self._system_resize_active
@@ -802,27 +940,6 @@ class ModernWindow(QWidget):
             and not watched.hasMouseTracking()
         ):
             watched.setMouseTracking(True)
-
-        if (
-            self._system_menu_operation is not None
-            and isinstance(watched, QWidget)
-            and watched.window() is self
-        ):
-            event_type = event.type()
-            if event_type == QEvent.Type.MouseMove:
-                self._update_system_menu_operation(event.globalPosition().toPoint())
-                return True
-            if event_type == QEvent.Type.MouseButtonPress:
-                cancel = event.button() != Qt.MouseButton.LeftButton
-                self._finish_system_menu_operation(cancel=cancel)
-                return True
-            if event_type == QEvent.Type.KeyPress and event.key() in (
-                Qt.Key.Key_Escape,
-                Qt.Key.Key_Enter,
-                Qt.Key.Key_Return,
-            ):
-                self._finish_system_menu_operation(cancel=event.key() == Qt.Key.Key_Escape)
-                return True
 
         if isinstance(watched, QWidget) and watched.window() is self:
             event_type = event.type()
