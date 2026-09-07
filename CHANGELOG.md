@@ -18,6 +18,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Removed window theme switching and the standard and classic surfaces. The
+  remaining modern surface now follows desktop-wallpaper colors automatically,
+  using low-frequency metadata checks and file notifications.
 - Made `ModernWindow` use modern menus for its menu bar, title-bar menu, and
   cross-platform system-menu fallback.
 - Made `ModernWindow` accept the `QWidget(parent, f)` constructor shape and
@@ -28,8 +31,6 @@ All notable changes to this project are documented in this file.
 - Made automatic navigation overlay mode follow the current page's minimum
   width instead of fixed `NavigationView` width breakpoints, while restoring
   the user's sidebar toggle intent when returning to side-by-side mode.
-- Made a new neutral-gray standard theme the default while retaining the modern
-  and classic watercolor themes as selectable styles.
 - Extracted reusable window surfaces, overlays, and title-bar behavior from
   `ModernWindow` for use by other top-level widgets.
 

@@ -6,7 +6,7 @@ import sys
 from typing import cast
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QColor, QCursor, QIcon, QPalette, QPixmap, QWindow
+from PySide6.QtGui import QColor, QCursor, QIcon, QPalette, QPixmap, QWindow
 from PySide6.QtWidgets import (
     QApplication,
     QMenuBar,
@@ -31,10 +31,8 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
-    WatercolorStyle,
     palette_for_theme,
     theme_manager,
-    theme_with_watercolor_style,
     tinted_icon,
 )
 
@@ -121,22 +119,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 
     def _create_window_menu(self) -> ModernMenu:
         menu = ModernMenu(self, metrics=self._metrics)
-        self.watercolorMenu = menu.addMenu("主题风格")
-        self.watercolorActionGroup = QActionGroup(self)
-        self.watercolorActionGroup.setExclusive(True)
-        self.standardWatercolorAction = self.watercolorMenu.addAction("标准")
-        self.modernWatercolorAction = self.watercolorMenu.addAction("现代")
-        self.originalWatercolorAction = self.watercolorMenu.addAction("经典")
-        for action, style in (
-            (self.standardWatercolorAction, WatercolorStyle.STANDARD),
-            (self.modernWatercolorAction, WatercolorStyle.MODERN),
-            (self.originalWatercolorAction, WatercolorStyle.ORIGINAL),
-        ):
-            action.setCheckable(True)
-            action.setData(style)
-            self.watercolorActionGroup.addAction(action)
-        self.watercolorActionGroup.triggered.connect(self._select_watercolor_style)
-        menu.addSeparator()
         self.quitAction = menu.addAction(
             _resource_icon("shutdown.png", self._theme),
             "退出程序",
@@ -156,11 +138,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 
         self.quitAction.triggered.connect(confirm_exit)
         return menu
-
-    def _select_watercolor_style(self, action: QAction) -> None:
-        style = action.data()
-        if isinstance(style, WatercolorStyle):
-            self.parent_window.setWatercolorStyle(style)
 
     def showWindowMenu(self) -> None:
         position = self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height()))
@@ -196,9 +173,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 
     def setTheme(self, theme: ModernTheme) -> None:
         super().setTheme(theme)
-        self.standardWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.STANDARD)
-        self.modernWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.MODERN)
-        self.originalWatercolorAction.setChecked(theme.watercolor_style is WatercolorStyle.ORIGINAL)
         self.pinButton.setIcon(
             _resource_icon(
                 "push-pin.png" if self.pinButton.isChecked() else "pin.png",
@@ -618,19 +592,6 @@ class ModernWindow(QWidget):
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
         self.apply_window_style()
-
-    def watercolorStyle(self) -> WatercolorStyle:
-        return self._theme.watercolor_style
-
-    def setWatercolorStyle(self, style: WatercolorStyle) -> None:
-        theme = theme_with_watercolor_style(self._theme, style)
-        if theme is self._theme:
-            return
-        if self._uses_global_theme:
-            theme_manager().setWatercolorStyle(style)
-        else:
-            self._theme = theme
-            self.apply_window_style()
 
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
         if self._uses_global_theme:

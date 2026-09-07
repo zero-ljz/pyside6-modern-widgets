@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, replace
-from enum import Enum
+from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, Signal
+from PySide6.QtCore import QEvent, QFileSystemWatcher, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
 
-
-class WatercolorStyle(Enum):
-    """Built-in window surface style families."""
-
-    STANDARD = "standard"
-    MODERN = "modern"
-    ORIGINAL = "original"
+from ._wallpaper import desktop_wallpaper_path, wallpaper_colors, wallpaper_signature
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +37,6 @@ class ModernTheme:
     focus: str
     watercolor_base: str
     watercolor_spots: tuple[tuple[str, float, float, float], ...]
-    watercolor_style: WatercolorStyle = WatercolorStyle.MODERN
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,41 +110,77 @@ DARK_THEME = ModernTheme(
     ),
 )
 
-STANDARD_LIGHT_THEME = replace(
-    LIGHT_THEME,
-    watercolor_base="#F7F7F7",
-    watercolor_spots=(),
-    watercolor_style=WatercolorStyle.STANDARD,
-)
 
-STANDARD_DARK_THEME = replace(
-    DARK_THEME,
-    watercolor_base=DARK_THEME.surface,
-    watercolor_spots=(),
-    watercolor_style=WatercolorStyle.STANDARD,
-)
+def theme_from_wallpaper(
+    theme: ModernTheme,
+    path: str | os.PathLike[str] | None = None,
+) -> ModernTheme:
+    """Return a modern surface colored from the current desktop wallpaper."""
+    is_dark = QColor(theme.surface).lightness() < 128
+    colors = wallpaper_colors(path)
+    if not colors:
+        fallback = DARK_THEME if is_dark else LIGHT_THEME
+        return replace(
+            theme,
+            focus=fallback.focus,
+            watercolor_base=fallback.watercolor_base,
+            watercolor_spots=fallback.watercolor_spots,
+        )
+    alpha_values = (0x50, 0x48, 0x40) if is_dark else (0x66, 0x58, 0x50)
+    spots = tuple(
+        (
+            _wallpaper_spot_color(color, is_dark, alpha_values[index]),
+            ((0.08, 0.08, 0.52), (0.92, 0.18, 0.58), (0.22, 0.92, 0.48))[index],
+        )
+        for index, color in enumerate(colors[:3])
+    )
+    average = QColor(
+        sum(color.red() for color in colors) // len(colors),
+        sum(color.green() for color in colors) // len(colors),
+        sum(color.blue() for color in colors) // len(colors),
+    )
+    base = _blend_colors(QColor("#15191D" if is_dark else "#FAFAFA"), average, 0.1)
+    focus = _wallpaper_focus_color(colors[0], is_dark)
+    return replace(
+        theme,
+        focus=focus.name(QColor.NameFormat.HexRgb).upper(),
+        watercolor_base=base.name(QColor.NameFormat.HexRgb).upper(),
+        watercolor_spots=tuple((color, *geometry) for color, geometry in spots),
+    )
 
-ORIGINAL_LIGHT_THEME = replace(
-    LIGHT_THEME,
-    watercolor_base="#FFFCF5",
-    watercolor_spots=(
-        ("#78FFB7B2", 0.1, 0.1, 0.5),
-        ("#78C7CEEA", 0.9, 0.9, 0.6),
-        ("#78E2F0CB", 0.2, 0.9, 0.4),
-    ),
-    watercolor_style=WatercolorStyle.ORIGINAL,
-)
 
-ORIGINAL_DARK_THEME = replace(
-    DARK_THEME,
-    watercolor_base="#202020",
-    watercolor_spots=(
-        ("#503B3151", 0.1, 0.1, 0.5),
-        ("#50314759", 0.9, 0.9, 0.6),
-        ("#50314F45", 0.2, 0.9, 0.4),
-    ),
-    watercolor_style=WatercolorStyle.ORIGINAL,
-)
+def _wallpaper_spot_color(color: QColor, is_dark: bool, alpha: int) -> str:
+    hue = color.hslHueF()
+    saturation = color.hslSaturationF()
+    lightness = color.lightnessF()
+    saturation = min(0.78, max(0.24, saturation)) if saturation >= 0.08 else 0.0
+    lightness = (
+        min(0.62, max(0.34, lightness))
+        if is_dark
+        else min(0.78, max(0.52, lightness))
+    )
+    adjusted = QColor.fromHslF(max(0.0, hue), saturation, lightness, alpha / 255)
+    return adjusted.name(QColor.NameFormat.HexArgb).upper()
+
+
+def _wallpaper_focus_color(color: QColor, is_dark: bool) -> QColor:
+    hue = color.hslHueF()
+    saturation = color.hslSaturationF()
+    saturation = min(0.82, max(0.36, saturation)) if saturation >= 0.08 else 0.0
+    return QColor.fromHslF(max(0.0, hue), saturation, 0.68 if is_dark else 0.4)
+
+
+def _blend_colors(background: QColor, foreground: QColor, amount: float) -> QColor:
+    inverse = 1.0 - amount
+    return QColor(
+        round(background.red() * inverse + foreground.red() * amount),
+        round(background.green() * inverse + foreground.green() * amount),
+        round(background.blue() * inverse + foreground.blue() * amount),
+    )
+
+
+LIGHT_THEME = theme_from_wallpaper(LIGHT_THEME)
+DARK_THEME = theme_from_wallpaper(DARK_THEME)
 
 DEFAULT_METRICS = ModernMetrics()
 
@@ -158,33 +188,9 @@ DEFAULT_METRICS = ModernMetrics()
 def theme_for_palette(palette: QPalette) -> ModernTheme:
     """Choose the built-in theme matching an application palette."""
     return (
-        STANDARD_DARK_THEME
+        DARK_THEME
         if palette.color(QPalette.ColorRole.Window).lightness() < 128
-        else STANDARD_LIGHT_THEME
-    )
-
-
-def theme_with_watercolor_style(
-    theme: ModernTheme,
-    style: WatercolorStyle,
-) -> ModernTheme:
-    """Return ``theme`` with the selected window surface style applied."""
-    if theme.watercolor_style is style:
-        return theme
-    is_dark = QColor(theme.surface).lightness() < 128
-    reference = {
-        (False, WatercolorStyle.STANDARD): STANDARD_LIGHT_THEME,
-        (True, WatercolorStyle.STANDARD): STANDARD_DARK_THEME,
-        (False, WatercolorStyle.MODERN): LIGHT_THEME,
-        (True, WatercolorStyle.MODERN): DARK_THEME,
-        (False, WatercolorStyle.ORIGINAL): ORIGINAL_LIGHT_THEME,
-        (True, WatercolorStyle.ORIGINAL): ORIGINAL_DARK_THEME,
-    }[is_dark, style]
-    return replace(
-        theme,
-        watercolor_base=reference.watercolor_base,
-        watercolor_spots=reference.watercolor_spots,
-        watercolor_style=style,
+        else LIGHT_THEME
     )
 
 
@@ -230,15 +236,24 @@ def tinted_icon(icon: QIcon, color: str, size: int = 48) -> QIcon:
 class ThemeManager(QObject):
     """Publish one runtime theme to widgets that do not use a local override."""
 
+    WALLPAPER_POLL_INTERVAL_MS = 1000
+    WALLPAPER_REFRESH_DELAY_MS = 350
+
     themeChanged = Signal(object)
 
     def __init__(self) -> None:
         super().__init__()
-        self._theme = STANDARD_LIGHT_THEME
+        self._theme = LIGHT_THEME
         self._follows_system = False
         self._application: QApplication | None = None
+        self._wallpaper_path: Path | None = None
+        self._wallpaper_signature: tuple[str, int, int] | None = None
+        self._wallpaper_watcher: QFileSystemWatcher | None = None
+        self._wallpaper_poll_timer: QTimer | None = None
+        self._wallpaper_refresh_timer: QTimer | None = None
 
     def theme(self) -> ModernTheme:
+        self._ensure_wallpaper_monitor()
         return self._theme
 
     def setTheme(self, theme: ModernTheme) -> None:
@@ -248,14 +263,19 @@ class ThemeManager(QObject):
             application.setPalette(palette_for_theme(theme, application.palette()))
         self._set_theme(theme)
 
-    def setWatercolorStyle(self, style: WatercolorStyle) -> None:
-        """Change the window surface without replacing the application palette."""
-        self._set_theme(theme_with_watercolor_style(self._theme, style))
+    def refreshWallpaperTheme(self) -> None:
+        """Re-read the desktop wallpaper and publish its colors."""
+        path = desktop_wallpaper_path()
+        self._wallpaper_path = path
+        self._wallpaper_signature = wallpaper_signature(path)
+        self._sync_wallpaper_watch(path)
+        self._set_theme(theme_from_wallpaper(self._theme, path))
 
     def followsSystemTheme(self) -> bool:
         return self._follows_system
 
     def setFollowsSystemTheme(self, enabled: bool) -> None:
+        self._ensure_wallpaper_monitor()
         self._follows_system = enabled
         application = QApplication.instance()
         application = application if isinstance(application, QApplication) else None
@@ -266,24 +286,66 @@ class ThemeManager(QObject):
             if application is not None:
                 application.installEventFilter(self)
         if enabled and application is not None:
-            self._set_theme(
-                theme_with_watercolor_style(
-                    theme_for_palette(application.palette()),
-                    self._theme.watercolor_style,
-                )
-            )
+            self._set_theme(theme_from_wallpaper(theme_for_palette(application.palette())))
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if self._follows_system and event.type() == QEvent.Type.ApplicationPaletteChange:
             application = QApplication.instance()
             if isinstance(application, QApplication):
-                self._set_theme(
-                    theme_with_watercolor_style(
-                        theme_for_palette(application.palette()),
-                        self._theme.watercolor_style,
-                    )
-                )
+                self._set_theme(theme_from_wallpaper(theme_for_palette(application.palette())))
         return super().eventFilter(watched, event)
+
+    def _ensure_wallpaper_monitor(self) -> None:
+        application = QApplication.instance()
+        if not isinstance(application, QApplication) or self._wallpaper_poll_timer is not None:
+            return
+        self._wallpaper_watcher = QFileSystemWatcher(self)
+        self._wallpaper_watcher.fileChanged.connect(self._queue_wallpaper_refresh)
+
+        self._wallpaper_poll_timer = QTimer(self)
+        self._wallpaper_poll_timer.setInterval(self.WALLPAPER_POLL_INTERVAL_MS)
+        self._wallpaper_poll_timer.setTimerType(Qt.TimerType.VeryCoarseTimer)
+        self._wallpaper_poll_timer.timeout.connect(self._poll_wallpaper_update)
+
+        self._wallpaper_refresh_timer = QTimer(self)
+        self._wallpaper_refresh_timer.setSingleShot(True)
+        self._wallpaper_refresh_timer.setInterval(self.WALLPAPER_REFRESH_DELAY_MS)
+        self._wallpaper_refresh_timer.timeout.connect(self._refresh_changed_wallpaper)
+
+        self._wallpaper_path = desktop_wallpaper_path()
+        self._wallpaper_signature = wallpaper_signature(self._wallpaper_path)
+        self._sync_wallpaper_watch(self._wallpaper_path)
+        self._set_theme(theme_from_wallpaper(self._theme, self._wallpaper_path))
+        self._wallpaper_poll_timer.start()
+
+    def _queue_wallpaper_refresh(self, _path: str) -> None:
+        if self._wallpaper_refresh_timer is not None:
+            self._wallpaper_refresh_timer.start()
+
+    def _refresh_changed_wallpaper(self) -> None:
+        self._wallpaper_signature = None
+        self._poll_wallpaper_update()
+
+    def _poll_wallpaper_update(self) -> None:
+        path = desktop_wallpaper_path()
+        signature = wallpaper_signature(path)
+        self._sync_wallpaper_watch(path)
+        if signature == self._wallpaper_signature:
+            return
+        self._wallpaper_path = path
+        self._wallpaper_signature = signature
+        self._set_theme(theme_from_wallpaper(self._theme, path))
+
+    def _sync_wallpaper_watch(self, path: Path | None) -> None:
+        if self._wallpaper_watcher is None:
+            return
+        desired = str(path) if path is not None else None
+        watched = self._wallpaper_watcher.files()
+        obsolete = [entry for entry in watched if entry != desired]
+        if obsolete:
+            self._wallpaper_watcher.removePaths(obsolete)
+        if desired is not None and desired not in watched:
+            self._wallpaper_watcher.addPath(desired)
 
     def _set_theme(self, theme: ModernTheme) -> None:
         if theme == self._theme:

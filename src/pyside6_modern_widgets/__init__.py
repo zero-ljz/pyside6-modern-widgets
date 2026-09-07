@@ -12,26 +12,17 @@ from .theme import (
     DARK_THEME,
     DEFAULT_METRICS,
     LIGHT_THEME,
-    ORIGINAL_DARK_THEME,
-    ORIGINAL_LIGHT_THEME,
-    STANDARD_DARK_THEME,
-    STANDARD_LIGHT_THEME,
     ModernMetrics,
     ModernTheme,
     ThemeManager,
-    WatercolorStyle,
+    theme_from_wallpaper,
     theme_manager,
-    theme_with_watercolor_style,
 )
 
 __all__ = [
     "DARK_THEME",
     "DEFAULT_METRICS",
     "LIGHT_THEME",
-    "ORIGINAL_DARK_THEME",
-    "ORIGINAL_LIGHT_THEME",
-    "STANDARD_DARK_THEME",
-    "STANDARD_LIGHT_THEME",
     "ModernDialog",
     "ModernMenu",
     "ModernMenuBar",
@@ -44,9 +35,8 @@ __all__ = [
     "NavigationView",
     "TabView",
     "ThemeManager",
-    "WatercolorStyle",
+    "theme_from_wallpaper",
     "theme_manager",
-    "theme_with_watercolor_style",
 ]
 
 __version__ = "0.4.3"

@@ -184,4 +184,3 @@ def test_modern_window_uses_modern_menus() -> None:
     assert isinstance(menu_bar.addMenu("File"), ModernMenu)
     assert window.titleBar is not None
     assert isinstance(window.titleBar.windowMenu, ModernMenu)
-    assert isinstance(window.titleBar.watercolorMenu, ModernMenu)

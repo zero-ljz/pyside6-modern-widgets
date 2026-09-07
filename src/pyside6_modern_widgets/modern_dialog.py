@@ -13,10 +13,8 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
-    WatercolorStyle,
     palette_for_theme,
     theme_manager,
-    theme_with_watercolor_style,
 )
 
 
@@ -95,19 +93,6 @@ class ModernDialog(QDialog):
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
         self.apply_window_style()
-
-    def watercolorStyle(self) -> WatercolorStyle:
-        return self._theme.watercolor_style
-
-    def setWatercolorStyle(self, style: WatercolorStyle) -> None:
-        theme = theme_with_watercolor_style(self._theme, style)
-        if theme is self._theme:
-            return
-        if self._uses_global_theme:
-            theme_manager().setWatercolorStyle(style)
-        else:
-            self._theme = theme
-            self.apply_window_style()
 
     def setCornerRadius(self, radius: int) -> None:
         self._corner_radius = max(0, radius)

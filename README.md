@@ -20,7 +20,7 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 
 Supports Windows, macOS, and Linux with Python 3.10-3.12, PySide6 6.8.3, and
 the Fusion style. Window backgrounds, including the custom title bar, use the
-same Qt-painted standard or watercolor themes and behavior on every platform.
+same Qt-painted, wallpaper-colored theme behavior on every platform.
 
 Right-clicking the custom title bar opens the native Windows system menu. On
 platforms without an equivalent frameless-window API, a Qt menu provides the
@@ -143,25 +143,25 @@ menu.addMenu("Recent")
 
 ## Themes
 
-Widgets use a neutral light-gray standard theme through the process-wide theme
-manager by default. A theme change also updates the application palette so
-regular Qt content remains readable:
+Widgets use a modern theme colored from the current desktop wallpaper through
+the process-wide theme manager. Widgets following the global theme update
+automatically after a wallpaper change. The watcher responds directly to
+changes in the current image file and performs a lightweight path and metadata
+check every second for wallpaper switches; image sampling only runs after
+a change is detected.
 
 ```python
-from pyside6_modern_widgets import STANDARD_DARK_THEME, theme_manager
+from pyside6_modern_widgets import theme_manager
 
-theme_manager().setTheme(STANDARD_DARK_THEME)
+theme_manager().setFollowsSystemTheme(True)
 ```
 
-Use `theme_manager().setFollowsSystemTheme(True)` to select a built-in theme
-from application palette changes. Pass `theme=STANDARD_LIGHT_THEME` or
-`theme=STANDARD_DARK_THEME` to an individual widget for a local override;
-`LIGHT_THEME` and `DARK_THEME` select the modern watercolor surfaces. Layout
+Following the system theme switches the readable semantic colors between light
+and dark while retaining colors extracted from the wallpaper. If the wallpaper
+cannot be read, the surface falls back to its built-in modern colors. Layout
 metrics can be customized with `ModernMetrics` without modifying component
-internals.
-The Theme Style submenu in the upper-right window menu switches between the
-standard colorless surface and the modern or classic watercolor palettes while
-preserving the current light or dark mode and application accent color.
+internals. `theme_manager().refreshWallpaperTheme()` remains available for an
+immediate manual refresh when needed.
 
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is
