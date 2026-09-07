@@ -39,6 +39,22 @@ def test_modern_message_box_preserves_common_message_properties() -> None:
     )
 
 
+def test_modern_message_box_inherits_shared_surface_policy(monkeypatch) -> None:
+    from pyside6_modern_widgets import modern_dialog
+    from pyside6_modern_widgets._window_chrome import WindowSurfacePolicy
+
+    policy = WindowSurfacePolicy(opaque_surface=True, native_corners=False)
+    monkeypatch.setattr(modern_dialog, "current_window_surface_policy", lambda: policy)
+
+    box = ModernMessageBox(parent=None, theme=LIGHT_THEME)
+
+    assert box._surface_policy is policy
+    assert box.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+    assert not box.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    assert box._background_frame._corner_radius == 0
+    assert box._chrome_overlay._corner_radius == 0
+
+
 def test_modern_message_box_exec_returns_the_clicked_standard_button() -> None:
     box = ModernMessageBox(
         ModernMessageBox.Icon.Question,

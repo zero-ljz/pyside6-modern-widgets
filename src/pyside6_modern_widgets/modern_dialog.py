@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import sys
-
 from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtGui import QColor, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QMenuBar, QWidget
 
-from ._window_chrome import BackgroundFrame, WindowChromeOverlay, WindowTitleBar
+from ._window_chrome import (
+    BackgroundFrame,
+    WindowChromeOverlay,
+    WindowSurfacePolicy,
+    WindowTitleBar,
+    current_window_surface_policy,
+)
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -34,22 +38,19 @@ class ModernDialog(QDialog):
         self._metrics = metrics
         self._corner_radius = metrics.corner_radius
         self._resize_cursor_active = False
-        self._native_opaque_surface = self._supports_native_window_corners()
+        self._surface_policy: WindowSurfacePolicy = current_window_surface_policy()
 
         theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
-        if self._native_opaque_surface:
-            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-        else:
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._surface_policy.apply_to(self)
         self.setMouseTracking(True)
 
-        paint_radius = 0 if self._native_opaque_surface else self._corner_radius
+        paint_radius = self._surface_policy.paint_corner_radius(self._corner_radius)
         self._background_frame = BackgroundFrame(
             self,
             theme=self._theme,
             corner_radius=paint_radius,
-            opaque_surface=self._native_opaque_surface,
+            opaque_surface=self._surface_policy.opaque_surface,
         )
         self._background_frame.setObjectName("backgroundFrame")
         self._background_frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -75,17 +76,6 @@ class ModernDialog(QDialog):
             application.installEventFilter(self)
         self.apply_window_style()
 
-    @staticmethod
-    def _uses_windows_window_state() -> bool:
-        return sys.platform == "win32" and QApplication.platformName() == "windows"
-
-    @classmethod
-    def _supports_native_window_corners(cls) -> bool:
-        if not cls._uses_windows_window_state():
-            return False
-        get_windows_version = getattr(sys, "getwindowsversion", None)
-        return get_windows_version is not None and get_windows_version().build >= 22000
-
     def theme(self) -> ModernTheme:
         return self._theme
 
@@ -101,7 +91,7 @@ class ModernDialog(QDialog):
     def apply_window_style(self) -> None:
         """Apply the current theme without changing QDialog behavior."""
         radius = 0 if self.isMaximized() else self._corner_radius
-        paint_radius = 0 if self._native_opaque_surface else radius
+        paint_radius = self._surface_policy.paint_corner_radius(radius)
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self._background_frame.setTheme(self._theme)
         self._background_frame.setCornerRadius(paint_radius)
@@ -195,29 +185,7 @@ class ModernDialog(QDialog):
         probe.deleteLater()
 
     def _set_native_corner_preference(self, rounded: bool) -> None:
-        if not self._native_opaque_surface or self.windowHandle() is None:
-            return
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            preference = ctypes.c_int(2 if rounded else 1)
-            set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
-            set_window_attribute.argtypes = [
-                wintypes.HWND,
-                wintypes.DWORD,
-                ctypes.c_void_p,
-                wintypes.DWORD,
-            ]
-            set_window_attribute.restype = ctypes.c_long
-            set_window_attribute(
-                wintypes.HWND(int(self.winId())),
-                33,
-                ctypes.byref(preference),
-                ctypes.sizeof(preference),
-            )
-        except (AttributeError, OSError):
-            return
+        self._surface_policy.apply_native_corner_preference(self, rounded)
 
     def _install_resize_filters(self, widget: QWidget) -> None:
         widget.setMouseTracking(True)

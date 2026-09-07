@@ -90,6 +90,22 @@ def test_modern_dialog_lays_out_chrome_around_user_content() -> None:
     assert image.pixelColor(1, 1).alpha() < 128
 
 
+def test_modern_dialog_uses_shared_opaque_square_windows_10_surface(monkeypatch) -> None:
+    from pyside6_modern_widgets import modern_dialog
+    from pyside6_modern_widgets._window_chrome import WindowSurfacePolicy
+
+    policy = WindowSurfacePolicy(opaque_surface=True, native_corners=False)
+    monkeypatch.setattr(modern_dialog, "current_window_surface_policy", lambda: policy)
+
+    dialog = ModernDialog(theme=LIGHT_THEME)
+
+    assert dialog._surface_policy is policy
+    assert dialog.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+    assert not dialog.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    assert dialog._background_frame._corner_radius == 0
+    assert dialog._chrome_overlay._corner_radius == 0
+
+
 def test_modern_dialog_resize_edges_respect_fixed_dimensions() -> None:
     dialog = ModernDialog(theme=LIGHT_THEME)
     dialog.resize(420, 240)

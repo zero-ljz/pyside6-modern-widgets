@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
@@ -17,6 +19,7 @@ from PySide6.QtGui import (
     QRadialGradient,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -28,6 +31,62 @@ from PySide6.QtWidgets import (
 from .theme import ModernMetrics, ModernTheme, palette_for_theme
 
 WindowWidget = TypeVar("WindowWidget", bound=QWidget)
+
+
+def uses_windows_window_state() -> bool:
+    return sys.platform == "win32" and QApplication.platformName() == "windows"
+
+
+@dataclass(frozen=True)
+class WindowSurfacePolicy:
+    opaque_surface: bool
+    native_corners: bool
+
+    def apply_to(self, widget: QWidget) -> None:
+        widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, self.opaque_surface)
+        widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, not self.opaque_surface)
+
+    def paint_corner_radius(self, radius: int) -> int:
+        return 0 if self.opaque_surface else max(0, radius)
+
+    def apply_native_corner_preference(self, widget: QWidget, rounded: bool) -> None:
+        if not self.native_corners or widget.windowHandle() is None:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            preference = ctypes.c_int(2 if rounded else 1)
+            set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+            set_window_attribute.argtypes = [
+                wintypes.HWND,
+                wintypes.DWORD,
+                ctypes.c_void_p,
+                wintypes.DWORD,
+            ]
+            set_window_attribute.restype = ctypes.c_long
+            set_window_attribute(
+                wintypes.HWND(int(widget.winId())),
+                33,  # DWMWA_WINDOW_CORNER_PREFERENCE
+                ctypes.byref(preference),
+                ctypes.sizeof(preference),
+            )
+        except (AttributeError, OSError):
+            return
+
+
+def current_window_surface_policy() -> WindowSurfacePolicy:
+    native_windows = uses_windows_window_state()
+    get_windows_version = getattr(sys, "getwindowsversion", None)
+    native_corners = (
+        native_windows
+        and get_windows_version is not None
+        and get_windows_version().build >= 22000
+    )
+    return WindowSurfacePolicy(
+        opaque_surface=native_windows,
+        native_corners=native_corners,
+    )
 
 
 def button_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
@@ -129,11 +188,16 @@ class BackgroundFrame(QFrame):
             painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
+        watercolor = self._ensure_watercolor_cache()
+        if self._corner_radius <= 0:
+            painter.drawPixmap(self.rect(), watercolor)
+            return
+
         border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         path = QPainterPath()
         path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
         painter.setClipPath(path)
-        painter.drawPixmap(self.rect(), self._ensure_watercolor_cache())
+        painter.drawPixmap(self.rect(), watercolor)
 
 
 class WindowChromeOverlay(QWidget):
@@ -179,56 +243,6 @@ class WindowChromeOverlay(QWidget):
         painter.setPen(QPen(QColor(self._theme.border), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(border_path)
-
-
-class LiveResizeOverlay(QWidget):
-    """Freeze window content at its original size during translucent resizing."""
-
-    def __init__(self, parent: QWidget, theme: ModernTheme, corner_radius: int) -> None:
-        super().__init__(parent)
-        self._theme = theme
-        self._corner_radius = corner_radius
-        self._snapshot: QPixmap | None = None
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.hide()
-
-    def begin(self, snapshot: QPixmap, theme: ModernTheme, corner_radius: int) -> None:
-        self._snapshot = snapshot
-        self._theme = theme
-        self._corner_radius = corner_radius
-        self.show()
-        self.raise_()
-        self.update()
-
-    def finish(self) -> None:
-        self.hide()
-        self._snapshot = None
-
-    def setCornerRadius(self, corner_radius: int) -> None:
-        self._corner_radius = corner_radius
-        self.update()
-
-    def paintEvent(self, _event) -> None:
-        if self._snapshot is None:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-
-        border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        path = QPainterPath()
-        path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
-        painter.setClipPath(path)
-        painter.fillPath(path, QColor(self._theme.watercolor_base))
-        painter.drawPixmap(0, 0, self._snapshot)
-        painter.setClipping(False)
-        painter.setPen(QPen(QColor(self._theme.border), 1))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(path)
 
 
 class WindowTitleBar(QWidget, Generic[WindowWidget]):

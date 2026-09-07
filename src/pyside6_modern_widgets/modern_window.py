@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from typing import cast
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
@@ -20,10 +19,12 @@ from PySide6.QtWidgets import (
 from . import _resources, _system_menu  # noqa: F401
 from ._window_chrome import (
     BackgroundFrame,
-    LiveResizeOverlay,
     WindowChromeOverlay,
+    WindowSurfacePolicy,
     WindowTitleBar,
     button_style,
+    current_window_surface_policy,
+    uses_windows_window_state,
 )
 from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
@@ -228,8 +229,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 class ModernWindow(QWidget):
     """Cross-platform frameless shell with themeable modern chrome."""
 
-    DEFERRED_RESIZE_SYNC_INTERVAL_MS = 120
-
     def __init__(
         self,
         parent: QWidget | None = None,
@@ -247,14 +246,8 @@ class ModernWindow(QWidget):
         self._metrics = metrics
         theme_manager().themeChanged.connect(self._on_global_theme_changed)
         QWidget.setWindowFlag(self, Qt.WindowType.FramelessWindowHint, True)
-        self._native_opaque_surface = self._supports_native_window_corners()
-        self._deferred_live_resize = (
-            self._uses_windows_window_state() and not self._native_opaque_surface
-        )
-        if self._native_opaque_surface:
-            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-        else:
-            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._surface_policy: WindowSurfacePolicy = current_window_surface_policy()
+        self._surface_policy.apply_to(self)
         self.setMouseTracking(True)
         self._resize_cursor_active = False
         self._system_menu_operation: str | None = None
@@ -266,19 +259,9 @@ class ModernWindow(QWidget):
         self._normal_logical_size = QSize(self.size())
         self._screen_change_in_progress = False
         self._system_resize_active = False
-        self._system_resize_edges = Qt.Edge(0)
-        self._hover_resize_edges = Qt.Edge(0)
-        self._system_resize_previous_width: int | None = None
-        self._pending_resize_snapshot: QPixmap | None = None
         self._system_resize_watch_timer = QTimer(self)
         self._system_resize_watch_timer.setInterval(50)
         self._system_resize_watch_timer.timeout.connect(self._poll_system_resize_state)
-        self._deferred_resize_sync_timer = QTimer(self)
-        self._deferred_resize_sync_timer.setInterval(self.DEFERRED_RESIZE_SYNC_INTERVAL_MS)
-        self._deferred_resize_sync_timer.timeout.connect(self._refresh_deferred_resize_snapshot)
-        self._resize_snapshot_prepare_timer = QTimer(self)
-        self._resize_snapshot_prepare_timer.setSingleShot(True)
-        self._resize_snapshot_prepare_timer.timeout.connect(self._prepare_deferred_resize_snapshot)
         self._screen_resize_correction_timer = QTimer(self)
         self._screen_resize_correction_timer.setSingleShot(True)
         self._screen_resize_correction_timer.timeout.connect(self._correct_screen_change_size)
@@ -305,16 +288,7 @@ class ModernWindow(QWidget):
 
     @staticmethod
     def _uses_windows_window_state() -> bool:
-        return sys.platform == "win32" and QApplication.platformName() == "windows"
-
-    @staticmethod
-    def _supports_native_window_corners() -> bool:
-        if not ModernWindow._uses_windows_window_state():
-            return False
-        get_windows_version = getattr(sys, "getwindowsversion", None)
-        if get_windows_version is None:
-            return False
-        return get_windows_version().build >= 22000
+        return uses_windows_window_state()
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
         QWidget.setWindowFlags(self, flags | Qt.WindowType.FramelessWindowHint)
@@ -400,8 +374,8 @@ class ModernWindow(QWidget):
         self.frame = BackgroundFrame(
             self,
             theme=self._theme,
-            corner_radius=0 if self._native_opaque_surface else self.cornerRadius,
-            opaque_surface=self._native_opaque_surface,
+            corner_radius=self._surface_policy.paint_corner_radius(self.cornerRadius),
+            opaque_surface=self._surface_policy.opaque_surface,
         )
         self.frame.setObjectName("backgroundFrame")
         self.frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -420,11 +394,6 @@ class ModernWindow(QWidget):
         self.chromeOverlay.setGeometry(self.rect())
         self.chromeOverlay.show()
         self.chromeOverlay.raise_()
-        self._live_resize_overlay = LiveResizeOverlay(
-            self,
-            self._theme,
-            self.cornerRadius,
-        )
         self._sync_chrome_with_window_flags()
         self._layout_chrome()
         self._install_resize_filters(self)
@@ -440,9 +409,6 @@ class ModernWindow(QWidget):
             self.titleBar.raise_()
         self.chromeOverlay.setGeometry(self.rect())
         self.chromeOverlay.raise_()
-        self._live_resize_overlay.setGeometry(self.rect())
-        if self._live_resize_overlay.isVisible():
-            self._live_resize_overlay.raise_()
 
     def _sync_chrome_with_window_flags(self) -> None:
         if self.titleBar is None:
@@ -455,7 +421,7 @@ class ModernWindow(QWidget):
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
         corner_radius = 0 if self.isMaximized() else max(0, self.cornerRadius)
-        paint_corner_radius = 0 if self._native_opaque_surface else corner_radius
+        paint_corner_radius = self._surface_policy.paint_corner_radius(corner_radius)
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self.frame.setTheme(self._theme)
         self.frame.setCornerRadius(paint_corner_radius)
@@ -464,10 +430,6 @@ class ModernWindow(QWidget):
             self.chromeOverlay.setCornerRadius(paint_corner_radius)
             self.chromeOverlay.raise_()
         self._set_native_corner_preference(corner_radius > 0)
-        if hasattr(self, "_live_resize_overlay"):
-            self._live_resize_overlay.setCornerRadius(corner_radius)
-            if self._live_resize_overlay.isVisible():
-                self._live_resize_overlay.raise_()
         if hasattr(self, "titleBar") and self.titleBar:
             self.titleBar.setTheme(self._theme)
             self._sync_inactive_title_color()
@@ -477,29 +439,7 @@ class ModernWindow(QWidget):
         self.update()
 
     def _set_native_corner_preference(self, rounded: bool) -> None:
-        if not self._native_opaque_surface or self.windowHandle() is None:
-            return
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            preference = ctypes.c_int(2 if rounded else 1)
-            set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
-            set_window_attribute.argtypes = [
-                wintypes.HWND,
-                wintypes.DWORD,
-                ctypes.c_void_p,
-                wintypes.DWORD,
-            ]
-            set_window_attribute.restype = ctypes.c_long
-            set_window_attribute(
-                wintypes.HWND(int(self.winId())),
-                33,  # DWMWA_WINDOW_CORNER_PREFERENCE
-                ctypes.byref(preference),
-                ctypes.sizeof(preference),
-            )
-        except (AttributeError, OSError):
-            return
+        self._surface_policy.apply_native_corner_preference(self, rounded)
 
     def showSystemWindowMenu(self, position: QPoint) -> None:
         if _system_menu.show_native_system_menu(
@@ -821,10 +761,8 @@ class ModernWindow(QWidget):
             and not self.isMinimized()
         ):
             self._normal_logical_size = QSize(event.size())
-        if hasattr(self, "_live_resize_overlay"):
+        if hasattr(self, "chromeOverlay"):
             self._layout_chrome()
-        if self._system_resize_active and self._deferred_live_resize:
-            self._update_deferred_resize_state(event.size().width())
 
     def moveEvent(self, event) -> None:
         super().moveEvent(event)
@@ -835,106 +773,19 @@ class ModernWindow(QWidget):
     def _has_pressed_mouse_buttons() -> bool:
         return QApplication.mouseButtons() != Qt.MouseButton.NoButton
 
-    @staticmethod
-    def _has_horizontal_resize_edge(edges: Qt.Edge) -> bool:
-        return bool(edges & (Qt.Edge.LeftEdge | Qt.Edge.RightEdge))
-
-    def _queue_deferred_resize_snapshot(self, edges: Qt.Edge) -> None:
-        if not self._deferred_live_resize or self._system_resize_active:
-            return
-        self._hover_resize_edges = edges
-        if self._has_horizontal_resize_edge(edges):
-            if self._pending_resize_snapshot is None:
-                self._resize_snapshot_prepare_timer.start(0)
-        else:
-            self._resize_snapshot_prepare_timer.stop()
-            self._pending_resize_snapshot = None
-
-    def _prepare_deferred_resize_snapshot(self) -> None:
-        if (
-            self._system_resize_active
-            or not self._deferred_live_resize
-            or not self._has_horizontal_resize_edge(self._hover_resize_edges)
-        ):
-            return
-        self._pending_resize_snapshot = self.grab()
-
-    def _begin_system_resize_tracking(self, edges: Qt.Edge | None = None) -> None:
+    def _begin_system_resize_tracking(self) -> None:
         if self._system_resize_active:
             return
         self._system_resize_active = True
-        self._system_resize_edges = edges if edges is not None else Qt.Edge(0)
-        self._system_resize_previous_width = self.width()
         self.frame.setLiveResize(True)
-        self._resize_snapshot_prepare_timer.stop()
-        if not self._has_horizontal_resize_edge(self._system_resize_edges):
-            self._pending_resize_snapshot = None
         self._system_resize_watch_timer.start()
-
-    def _update_deferred_resize_state(self, width: int) -> None:
-        previous_width = self._system_resize_previous_width
-        self._system_resize_previous_width = width
-        if previous_width is None:
-            return
-        if not self._has_horizontal_resize_edge(self._system_resize_edges):
-            self._pending_resize_snapshot = None
-            if self._live_resize_overlay.isVisible():
-                self._stop_deferred_resize_overlay()
-            return
-        if width < previous_width:
-            self._start_deferred_resize_overlay()
-        elif width > previous_width:
-            self._pending_resize_snapshot = None
-            if self._live_resize_overlay.isVisible():
-                self._stop_deferred_resize_overlay()
-        elif not self._live_resize_overlay.isVisible():
-            self._pending_resize_snapshot = None
-
-    def _start_deferred_resize_overlay(self) -> None:
-        if self._live_resize_overlay.isVisible():
-            return
-        snapshot = self._pending_resize_snapshot or self.grab()
-        self._pending_resize_snapshot = None
-        self._live_resize_overlay.setGeometry(self.rect())
-        self._live_resize_overlay.begin(snapshot, self._theme, self.cornerRadius)
-        self.frame.setUpdatesEnabled(False)
-        self._deferred_resize_sync_timer.start()
-
-    def _stop_deferred_resize_overlay(self) -> None:
-        if not self._live_resize_overlay.isVisible():
-            return
-        self._deferred_resize_sync_timer.stop()
-        self.frame.setUpdatesEnabled(True)
-        self.frame.update()
-        self._live_resize_overlay.finish()
-        self._schedule_surface_refresh()
-
-    def _refresh_deferred_resize_snapshot(self) -> None:
-        if (
-            not self._system_resize_active
-            or not self._deferred_live_resize
-            or not self._live_resize_overlay.isVisible()
-        ):
-            return
-
-        self.frame.setUpdatesEnabled(True)
-        self._live_resize_overlay.hide()
-        snapshot = self.grab()
-        self.frame.setUpdatesEnabled(False)
-        self._live_resize_overlay.begin(snapshot, self._theme, self.cornerRadius)
 
     def _finish_system_resize_tracking(self) -> None:
         was_active = self._system_resize_active
         self._system_resize_active = False
-        self._system_resize_edges = Qt.Edge(0)
-        self._system_resize_previous_width = None
-        self._pending_resize_snapshot = None
         self._system_resize_watch_timer.stop()
-        self._deferred_resize_sync_timer.stop()
         if was_active:
             self.frame.setLiveResize(False)
-            if self._deferred_live_resize:
-                self._stop_deferred_resize_overlay()
 
     def _poll_system_resize_state(self) -> None:
         if not self._has_pressed_mouse_buttons():
@@ -978,7 +829,6 @@ class ModernWindow(QWidget):
             if event_type == QEvent.Type.MouseMove:
                 position = watched.mapTo(self, event.position().toPoint())
                 edges = self._resize_edges_at(position)
-                self._queue_deferred_resize_snapshot(edges)
                 self._set_resize_cursor(edges)
             elif event_type == QEvent.Type.MouseButtonPress:
                 position = watched.mapTo(self, event.position().toPoint())
@@ -986,7 +836,7 @@ class ModernWindow(QWidget):
                 if event.button() == Qt.MouseButton.LeftButton and edges:
                     handle = self.windowHandle()
                     if handle is not None and handle.startSystemResize(edges):
-                        self._begin_system_resize_tracking(edges)
+                        self._begin_system_resize_tracking()
                         self._screen_change_in_progress = False
                         self._screen_resize_correction_timer.stop()
                         return True

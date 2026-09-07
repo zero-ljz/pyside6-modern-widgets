@@ -36,6 +36,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Unified the top-level surface policy used by `ModernWindow`, `ModernDialog`,
+  and `ModernMessageBox`: Windows 10 uses opaque square corners to preserve
+  responsive updates without translucent resize flicker, while Windows 11
+  keeps native DWM rounding.
 - Prevented menu-bar style sheets from overriding `ModernMenu` palette and
   drawing behavior in `ModernMenuBar` drop-downs.
 - Matched the native Windows acrylic backdrop to rounded menu corners and made
