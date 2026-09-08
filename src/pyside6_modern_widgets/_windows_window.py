@@ -89,15 +89,6 @@ class _MonitorInfo(ctypes.Structure):
     )
 
 
-class _Margins(ctypes.Structure):
-    _fields_ = (
-        ("cxLeftWidth", ctypes.c_int),
-        ("cxRightWidth", ctypes.c_int),
-        ("cyTopHeight", ctypes.c_int),
-        ("cyBottomHeight", ctypes.c_int),
-    )
-
-
 def read_message(address: int) -> WindowsMessage:
     message = ctypes.cast(address, ctypes.POINTER(wintypes.MSG)).contents
     return WindowsMessage(
@@ -273,39 +264,5 @@ def set_native_frame(hwnd: int, enabled: bool) -> bool:
                 swp_nomove | swp_nosize | swp_nozorder | swp_noactivate | swp_framechanged,
             )
         )
-    except (AttributeError, OSError, TypeError, ValueError):
-        return False
-
-
-def set_native_shadow(hwnd: int, enabled: bool) -> bool:
-    """Ask DWM to render the standard shadow around a frameless window."""
-    try:
-        dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
-        dwmapi.DwmSetWindowAttribute.argtypes = (
-            wintypes.HWND,
-            wintypes.DWORD,
-            ctypes.c_void_p,
-            wintypes.DWORD,
-        )
-        dwmapi.DwmSetWindowAttribute.restype = ctypes.c_long
-        dwmapi.DwmExtendFrameIntoClientArea.argtypes = (
-            wintypes.HWND,
-            ctypes.POINTER(_Margins),
-        )
-        dwmapi.DwmExtendFrameIntoClientArea.restype = ctypes.c_long
-
-        policy = ctypes.c_int(2 if enabled else 1)  # DWMNCRP_ENABLED / DWMNCRP_DISABLED
-        policy_result = dwmapi.DwmSetWindowAttribute(
-            wintypes.HWND(hwnd),
-            2,  # DWMWA_NCRENDERING_POLICY
-            ctypes.byref(policy),
-            ctypes.sizeof(policy),
-        )
-        extent = 1 if enabled else 0
-        margins = _Margins(extent, extent, extent, extent)
-        frame_result = dwmapi.DwmExtendFrameIntoClientArea(
-            wintypes.HWND(hwnd), ctypes.byref(margins)
-        )
-        return policy_result >= 0 and frame_result >= 0
     except (AttributeError, OSError, TypeError, ValueError):
         return False

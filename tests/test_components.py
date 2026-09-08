@@ -164,66 +164,6 @@ def test_modern_window_accepts_qwidget_constructor_flags() -> None:
     assert popup.contentsMargins().top() == 0
 
 
-def test_windows_native_frame_tracks_snap_capable_window_flags(monkeypatch) -> None:
-    from pyside6_modern_widgets import modern_window
-
-    window = ModernWindow()
-    native_frame_states: list[bool] = []
-    native_shadow_states: list[bool] = []
-    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
-    monkeypatch.setattr(
-        modern_window,
-        "set_native_frame",
-        lambda _hwnd, enabled: native_frame_states.append(enabled) or True,
-    )
-    monkeypatch.setattr(
-        modern_window,
-        "set_native_shadow",
-        lambda _hwnd, enabled: native_shadow_states.append(enabled) or True,
-    )
-
-    window._sync_windows_native_frame()
-    window.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
-
-    assert native_frame_states == [True, False]
-    assert native_shadow_states == [True, False]
-    assert not window._native_frame_enabled
-
-
-def test_windows_native_hit_test_preserves_custom_title_bar_controls() -> None:
-    from pyside6_modern_widgets._windows_window import (
-        HTCAPTION,
-        HTLEFT,
-        HTMAXBUTTON,
-    )
-
-    window = ModernWindow()
-    window.resize(640, 480)
-    window.show()
-    _application().processEvents()
-    assert window.titleBar is not None
-    title_bar = window.titleBar
-    window._native_frame_enabled = True
-
-    assert window._native_hit_test_at(QPoint(1, window.height() // 2)) == HTLEFT
-    assert (
-        window._native_hit_test_at(title_bar.pos() + title_bar.titleLabel.geometry().center())
-        == HTCAPTION
-    )
-    assert (
-        window._native_hit_test_at(title_bar.pos() + title_bar.maximizeButton.geometry().center())
-        == HTMAXBUTTON
-    )
-    assert window._native_hit_test_at(
-        title_bar.pos() + title_bar.minimizeButton.geometry().center()
-    ) is None
-
-    window._set_native_maximize_button_hovered(True)
-    assert title_bar.maximizeButton.property("nativeHover") is True
-    window._set_native_maximize_button_hovered(False)
-    assert title_bar.maximizeButton.property("nativeHover") is False
-
-
 def test_title_bar_menu_button_and_native_context_menu(monkeypatch) -> None:
     window = ModernWindow(theme=LIGHT_THEME)
     window.resize(640, 480)

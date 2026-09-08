@@ -55,7 +55,6 @@ from ._windows_window import (
     read_message,
     set_mouse_capture,
     set_native_frame,
-    set_native_shadow,
     start_system_move_or_resize,
     track_non_client_mouse_leave,
 )
@@ -290,6 +289,7 @@ class ModernWindow(QWidget):
         self._screen_device_pixel_ratio: float | None = None
         self._normal_logical_size = QSize(self.size())
         self._screen_change_in_progress = False
+        self._system_move_active = False
         self._system_resize_active = False
         self._system_resize_watch_timer = QTimer(self)
         self._system_resize_watch_timer.setInterval(50)
@@ -466,8 +466,6 @@ class ModernWindow(QWidget):
         self._native_frame_enabled = enabled
         if not set_native_frame(int(self.winId()), enabled):
             self._native_frame_enabled = False
-            return
-        set_native_shadow(int(self.winId()), enabled)
 
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
@@ -640,6 +638,9 @@ class ModernWindow(QWidget):
             return True, 0
         elif native_message.message == WM_NCLBUTTONDOWN:
             if start_system_move_or_resize(int(self.winId()), native_message.w_param):
+                self._system_move_active = native_message.w_param == HTCAPTION
+                if self._system_move_active:
+                    self._normal_logical_size = QSize(self.size())
                 return True, 0
         elif native_message.message == WM_NCLBUTTONDBLCLK and native_message.w_param == HTCAPTION:
             if self.titleBar is not None:
@@ -664,8 +665,10 @@ class ModernWindow(QWidget):
         elif native_message.message == WM_CAPTURECHANGED and self._native_maximize_button_pressed:
             self._finish_native_maximize_button_press(False, release_capture=False)
         elif native_message.message == WM_ENTERSIZEMOVE:
-            self._begin_system_resize_tracking(poll_mouse_buttons=False)
+            if not self._system_move_active:
+                self._begin_system_resize_tracking(poll_mouse_buttons=False)
         elif native_message.message == WM_EXITSIZEMOVE:
+            self._system_move_active = False
             self._finish_system_resize_tracking()
             self._schedule_window_state_style_sync()
         return super().nativeEvent(event_type, message)
@@ -899,6 +902,7 @@ class ModernWindow(QWidget):
         super().resizeEvent(event)
         if (
             not self._screen_change_in_progress
+            and not self._system_move_active
             and not self.isMaximized()
             and not self.isMinimized()
         ):
@@ -935,6 +939,7 @@ class ModernWindow(QWidget):
             self._finish_system_resize_tracking()
 
     def hideEvent(self, event) -> None:
+        self._system_move_active = False
         self._finish_system_resize_tracking()
         super().hideEvent(event)
 

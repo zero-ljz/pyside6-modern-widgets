@@ -39,8 +39,10 @@ All notable changes to this project are documented in this file.
 - Restored native Windows window recognition for `ModernWindow`, including
   edge snapping, system resizing and dragging, and Windows 11 Snap Layouts on
   the custom maximize button, without changing the cross-platform fallback.
-- Restored the native DWM window shadow and the custom maximize button's hover
-  feedback while Windows handles its non-client interactions.
+- Restored custom maximize-button hover feedback during native Windows
+  non-client interactions.
+- Preserved a window's logical size when native title-bar dragging crosses
+  monitors with different display scaling.
 - Unified the top-level surface policy used by `ModernWindow`, `ModernDialog`,
   and `ModernMessageBox`: Windows 10 uses opaque square corners to preserve
   responsive updates without translucent resize flicker, while Windows 11

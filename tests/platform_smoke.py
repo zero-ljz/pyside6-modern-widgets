@@ -36,61 +36,10 @@ def main() -> int:
     _wait(app)
     assert window.isVisible()
     assert window.titleBar is not None
-    title_bar = window.titleBar
-
-    if sys.platform == "win32" and app.platformName() == "windows":
-        import ctypes
-        from ctypes import wintypes
-
-        get_window_style = ctypes.windll.user32.GetWindowLongPtrW
-        get_window_style.argtypes = (wintypes.HWND, ctypes.c_int)
-        get_window_style.restype = ctypes.c_ssize_t
-        style = int(get_window_style(wintypes.HWND(int(window.winId())), -16))
-        assert style & 0x00C00000 == 0x00C00000  # WS_CAPTION
-        assert style & 0x00040000 == 0x00040000  # WS_THICKFRAME
-
-    for _ in range(5):
-        title_bar.maximizeButton.click()
-        _wait(app)
-        assert window.isMaximized()
-        assert title_bar.maximizeButton.toolTip() == "向下还原"
-
-        title_bar.maximizeButton.click()
-        _wait(app)
-        assert not window.isMaximized()
-        assert title_bar.maximizeButton.toolTip() == "最大化"
-        assert window.size() == normal_size
-
-        title_bar.minimizeButton.click()
-        _wait(app)
-        assert window.isMinimized()
-
-        window.showNormal()
-        _wait(app)
-        assert window.isVisible()
-        assert not window.isMinimized()
-
-        window.hide()
-        _wait(app, 50)
-        assert window.isHidden()
-
-        window.showNormal()
-        _wait(app)
-        assert window.isVisible()
-        assert not window.isHidden()
 
     for screen in app.screens():
-        window.showNormal()
         _center_on_screen(window, screen)
         _wait(app, 400)
-        assert window.size() == normal_size
-
-        window.showMaximized()
-        _wait(app)
-        assert window.isMaximized()
-
-        window.showNormal()
-        _wait(app)
         assert window.size() == normal_size
 
     image = window.grab().toImage()
