@@ -612,11 +612,12 @@ class ModernWindow(QWidget):
             and getattr(self, "_native_frame_enabled", False)
             and native_message.w_param
         ):
-            constrain_maximized_client_area(int(self.winId()), native_message.l_param)
+            # winId() can recreate the HWND and re-enter WM_NCCALCSIZE here.
+            constrain_maximized_client_area(native_message.hwnd, native_message.l_param)
             return True, 0
         if native_message.message == WM_NCHITTEST and self._native_frame_enabled:
             position = client_position_from_l_param(
-                int(self.winId()),
+                native_message.hwnd,
                 native_message.l_param,
                 self.width(),
                 self.height(),
@@ -629,17 +630,17 @@ class ModernWindow(QWidget):
             hovered = native_message.w_param == HTMAXBUTTON
             self._set_native_maximize_button_hovered(hovered)
             if hovered:
-                track_non_client_mouse_leave(int(self.winId()))
+                track_non_client_mouse_leave(native_message.hwnd)
         elif native_message.message == WM_NCMOUSELEAVE:
             self._set_native_maximize_button_hovered(False)
         elif native_message.message == WM_NCLBUTTONDOWN and native_message.w_param == HTMAXBUTTON:
             self._native_maximize_button_pressed = True
             if self.titleBar is not None:
                 self.titleBar.maximizeButton.setDown(True)
-            set_mouse_capture(int(self.winId()), True)
+            set_mouse_capture(native_message.hwnd, True)
             return True, 0
         elif native_message.message == WM_NCLBUTTONDOWN:
-            if start_system_move_or_resize(int(self.winId()), native_message.w_param):
+            if start_system_move_or_resize(native_message.hwnd, native_message.w_param):
                 self._system_move_active = native_message.w_param == HTCAPTION
                 if self._system_move_active:
                     self._normal_logical_size = QSize(self.size())

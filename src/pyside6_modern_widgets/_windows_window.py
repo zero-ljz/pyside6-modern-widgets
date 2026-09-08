@@ -25,6 +25,7 @@ WM_ENTERSIZEMOVE = 0x0231
 WM_EXITSIZEMOVE = 0x0232
 WM_NCMOUSELEAVE = 0x02A2
 
+HTTRANSPARENT = -1
 HTCAPTION = 2
 HTMAXBUTTON = 9
 HTLEFT = 10
@@ -50,6 +51,7 @@ _RESIZE_COMMANDS = {
 
 @dataclass(frozen=True)
 class WindowsMessage:
+    hwnd: int
     message: int
     w_param: int
     l_param: int
@@ -92,6 +94,7 @@ class _MonitorInfo(ctypes.Structure):
 def read_message(address: int) -> WindowsMessage:
     message = ctypes.cast(address, ctypes.POINTER(wintypes.MSG)).contents
     return WindowsMessage(
+        hwnd=int(message.hWnd or 0),
         message=int(message.message),
         w_param=int(message.wParam),
         l_param=int(message.lParam),

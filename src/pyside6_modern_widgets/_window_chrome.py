@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._windows_window import HTTRANSPARENT, WM_NCHITTEST, read_message
 from .theme import ModernMetrics, ModernTheme, palette_for_theme
 
 WindowWidget = TypeVar("WindowWidget", bound=QWidget)
@@ -133,6 +134,15 @@ class BackgroundFrame(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, not opaque_surface)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, opaque_surface)
 
+    def nativeEvent(self, event_type, message):
+        if (
+            uses_windows_window_state()
+            and self.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            and read_message(int(message)).message == WM_NCHITTEST
+        ):
+            return True, HTTRANSPARENT
+        return super().nativeEvent(event_type, message)
+
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
         self._invalidate_watercolor_cache()
@@ -216,6 +226,13 @@ class WindowChromeOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+    def nativeEvent(self, event_type, message):
+        # Native siblings can give this overlay an HWND. Qt's mouse attribute alone
+        # does not make Windows pass input through that native child window.
+        if uses_windows_window_state() and read_message(int(message)).message == WM_NCHITTEST:
+            return True, HTTRANSPARENT
+        return super().nativeEvent(event_type, message)
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
