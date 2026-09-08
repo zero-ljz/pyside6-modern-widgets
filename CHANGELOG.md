@@ -42,6 +42,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept the cursor anchored to the same title-bar position when dragging a
+  maximized `ModernWindow` back to its restored size.
 - Consumed native Windows maximize-button press and release messages in the
   custom title bar, preventing a fallback system button from appearing and
   ensuring the visible maximize control performs maximize and restore itself.

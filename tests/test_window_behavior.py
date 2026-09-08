@@ -4,12 +4,13 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtWidgets import QApplication
 
 from pyside6_modern_widgets import ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
 from pyside6_modern_widgets._windows_window import (
+    HTCAPTION,
     HTCLIENT,
     HTMAXBUTTON,
     WM_NCLBUTTONDOWN,
@@ -111,6 +112,57 @@ def test_native_maximize_release_outside_only_cancels_press(monkeypatch) -> None
     _APP.processEvents()
     assert calls == []
     assert not window.titleBar.maximizeButton.isDown()
+    window.close()
+
+
+def test_maximized_caption_press_starts_restore_drag(monkeypatch) -> None:
+    window = ModernWindow()
+    message = WindowsMessage(hwnd=1, message=WM_NCLBUTTONDOWN, w_param=HTCAPTION, l_param=0)
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(modern_window_module, "read_message", lambda _message: message)
+    monkeypatch.setattr(window, "isMaximized", lambda: True)
+    monkeypatch.setattr(modern_window_module, "set_mouse_capture", lambda *_args: None)
+    window._native_frame_enabled = True
+
+    assert window.nativeEvent(b"windows_generic_MSG", 0) == (True, 0)
+    assert window._native_caption_press_position is not None
+    window.close()
+
+
+def test_caption_restore_drag_keeps_cursor_anchor(monkeypatch) -> None:
+    window = ModernWindow()
+    positions = iter((QPoint(1200, 20), QPoint(1210, 30), QPoint(1230, 50)))
+    capture_calls: list[tuple[int, bool]] = []
+    monkeypatch.setattr(
+        modern_window_module,
+        "QCursor",
+        type("CursorProbe", (), {"pos": staticmethod(lambda: next(positions))}),
+    )
+    monkeypatch.setattr(window, "mapFromGlobal", lambda _position: QPoint(1200, 20))
+    monkeypatch.setattr(window, "width", lambda: 1600)
+    monkeypatch.setattr(window, "normalGeometry", lambda: QRect(200, 100, 800, 600))
+    monkeypatch.setattr(window, "showNormal", lambda: None)
+    monkeypatch.setattr(
+        window,
+        "frameGeometry",
+        lambda: QRect(window.geometry()),
+    )
+    monkeypatch.setattr(
+        modern_window_module,
+        "set_mouse_capture",
+        lambda hwnd, captured: capture_calls.append((hwnd, captured)),
+    )
+    monkeypatch.setattr(modern_window_module, "start_system_move", lambda _hwnd: False)
+
+    window._begin_native_caption_drag(1)
+    window._continue_native_caption_drag(1)
+    first_anchor = QPoint(1210, 30) - window.geometry().topLeft()
+    window._continue_native_caption_drag(1)
+    second_anchor = QPoint(1230, 50) - window.geometry().topLeft()
+
+    assert first_anchor == QPoint(600, 20)
+    assert second_anchor == first_anchor
+    assert capture_calls == [(1, True), (1, False), (1, True)]
     window.close()
 
 

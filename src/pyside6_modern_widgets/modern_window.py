@@ -68,6 +68,7 @@ from ._windows_window import (
     screen_position_from_l_param,
     set_mouse_capture,
     set_native_frame,
+    start_system_move,
     track_non_client_mouse_leave,
 )
 from .modern_menu import ModernMenu
@@ -827,7 +828,6 @@ class ModernWindow(QWidget):
         )
 
         self._native_caption_press_position = None
-        set_mouse_capture(hwnd, False)
         self.showNormal()
         self.setGeometry(
             restored_top_left.x(),
@@ -836,9 +836,11 @@ class ModernWindow(QWidget):
             restored_height,
         )
 
-        handle = self.windowHandle()
-        if handle is not None and handle.startSystemMove():
+        set_mouse_capture(hwnd, False)
+        if start_system_move(hwnd):
             return
+
+        # Preserve dragging if the platform rejects the native move operation.
         self._native_caption_manual_move_offset = position - self.frameGeometry().topLeft()
         set_mouse_capture(hwnd, True)
 

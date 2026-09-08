@@ -128,6 +128,30 @@ def set_mouse_capture(hwnd: int, captured: bool) -> None:
         return
 
 
+def start_system_move(hwnd: int) -> bool:
+    """Start a Win32 caption move after the current native message returns."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+        user32.SetForegroundWindow.restype = wintypes.BOOL
+        user32.ReleaseCapture.argtypes = ()
+        user32.ReleaseCapture.restype = wintypes.BOOL
+        user32.PostMessageW.argtypes = (
+            wintypes.HWND,
+            wintypes.UINT,
+            wintypes.WPARAM,
+            wintypes.LPARAM,
+        )
+        user32.PostMessageW.restype = wintypes.BOOL
+
+        window_handle = wintypes.HWND(hwnd)
+        user32.SetForegroundWindow(window_handle)
+        user32.ReleaseCapture()
+        return bool(user32.PostMessageW(window_handle, 0x0112, 0xF010 | HTCAPTION, 0))
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+
+
 def constrain_maximized_client_area(hwnd: int, l_param: int) -> None:
     """Keep a borderless maximized client area inside the monitor work area."""
     try:
