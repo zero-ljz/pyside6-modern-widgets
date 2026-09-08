@@ -14,6 +14,7 @@ SC_SIZE = 0xF000
 SC_MOVE = 0xF010
 SC_MINIMIZE = 0xF020
 SC_MAXIMIZE = 0xF030
+SC_CLOSE = 0xF060
 SC_RESTORE = 0xF120
 
 
@@ -23,6 +24,10 @@ def show_native_system_menu(
     *,
     is_minimized: bool,
     is_maximized: bool,
+    can_resize: bool = True,
+    can_minimize: bool = True,
+    can_maximize: bool = True,
+    can_close: bool = True,
     command_handler: Callable[[int], bool] | None = None,
 ) -> bool:
     """Show the owning window's native system menu when the platform provides one."""
@@ -86,6 +91,7 @@ def show_native_system_menu(
         sc_move = SC_MOVE
         sc_minimize = SC_MINIMIZE
         sc_maximize = SC_MAXIMIZE
+        sc_close = SC_CLOSE
         sc_restore = SC_RESTORE
 
         def set_enabled(command: int, enabled: bool) -> None:
@@ -95,9 +101,10 @@ def show_native_system_menu(
         is_normal = not is_minimized and not is_maximized
         set_enabled(sc_restore, not is_normal)
         set_enabled(sc_move, is_normal)
-        set_enabled(sc_size, is_normal)
-        set_enabled(sc_minimize, not is_minimized)
-        set_enabled(sc_maximize, not is_maximized)
+        set_enabled(sc_size, is_normal and can_resize)
+        set_enabled(sc_minimize, can_minimize and not is_minimized)
+        set_enabled(sc_maximize, can_maximize and not is_maximized)
+        set_enabled(sc_close, can_close)
 
         tpm_rightbutton = 0x0002
         tpm_returncmd = 0x0100

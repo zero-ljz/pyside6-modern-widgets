@@ -201,8 +201,14 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             regular_window and bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
         )
         self.closeButton.setVisible(bool(flags & Qt.WindowType.WindowCloseButtonHint))
+        self._sync_pin_state(bool(flags & Qt.WindowType.WindowStaysOnTopHint))
         self.setVisible(title_bar_visible)
         return title_bar_visible
+
+    def _sync_pin_state(self, on_top: bool) -> None:
+        self.pinButton.setChecked(on_top)
+        self.pinButton.setIcon(_resource_icon("push-pin.png" if on_top else "pin.png", self._theme))
+        self.pinButton.setToolTip("取消置顶" if on_top else "置顶")
 
     def setTheme(self, theme: ModernTheme) -> None:
         super().setTheme(theme)
@@ -491,11 +497,22 @@ class ModernWindow(QWidget):
         self._surface_policy.apply_native_corner_preference(self, rounded)
 
     def showSystemWindowMenu(self, position: QPoint) -> None:
+        flags = self.windowFlags()
+        can_resize = (
+            self.minimumWidth() < self.maximumWidth() or self.minimumHeight() < self.maximumHeight()
+        )
+        can_minimize = bool(flags & Qt.WindowType.WindowMinimizeButtonHint)
+        can_maximize = bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
+        can_close = bool(flags & Qt.WindowType.WindowCloseButtonHint)
         if _system_menu.show_native_system_menu(
             int(self.winId()),
             self.mapFromGlobal(position),
             is_minimized=self.isMinimized(),
             is_maximized=self.isMaximized(),
+            can_resize=can_resize,
+            can_minimize=can_minimize,
+            can_maximize=can_maximize,
+            can_close=can_close,
             command_handler=self._handle_native_system_menu_command,
         ):
             return
@@ -506,12 +523,13 @@ class ModernWindow(QWidget):
         minimize_action = menu.addAction("最小化", self.showMinimized)
         maximize_action = menu.addAction("最大化", self.showMaximized)
         menu.addSeparator()
-        menu.addAction("关闭", self.close)
+        close_action = menu.addAction("关闭", self.close)
 
         is_normal = not self.isMinimized() and not self.isMaximized()
         restore_action.setEnabled(not is_normal)
-        minimize_action.setEnabled(not self.isMinimized())
-        maximize_action.setEnabled(not self.isMaximized())
+        minimize_action.setEnabled(can_minimize and not self.isMinimized())
+        maximize_action.setEnabled(can_maximize and not self.isMaximized())
+        close_action.setEnabled(can_close)
         self._portable_system_menu = menu
         menu.popup(position)
 

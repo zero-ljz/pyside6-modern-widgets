@@ -175,9 +175,6 @@ def _blend_colors(background: QColor, foreground: QColor, amount: float) -> QCol
     )
 
 
-LIGHT_THEME = theme_from_wallpaper(LIGHT_THEME)
-DARK_THEME = theme_from_wallpaper(DARK_THEME)
-
 DEFAULT_METRICS = ModernMetrics()
 
 
@@ -278,13 +275,23 @@ class ThemeManager(QObject):
             if application is not None:
                 application.installEventFilter(self)
         if enabled and application is not None:
-            self._set_theme(theme_from_wallpaper(theme_for_palette(application.palette())))
+            self._set_theme(
+                theme_from_wallpaper(
+                    theme_for_palette(application.palette()),
+                    self._wallpaper_path,
+                )
+            )
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if self._follows_system and event.type() == QEvent.Type.ApplicationPaletteChange:
             application = QApplication.instance()
             if isinstance(application, QApplication):
-                self._set_theme(theme_from_wallpaper(theme_for_palette(application.palette())))
+                self._set_theme(
+                    theme_from_wallpaper(
+                        theme_for_palette(application.palette()),
+                        self._wallpaper_path,
+                    )
+                )
         return super().eventFilter(watched, event)
 
     def _ensure_wallpaper_monitor(self) -> None:

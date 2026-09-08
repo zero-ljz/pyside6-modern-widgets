@@ -378,7 +378,6 @@ class NavigationSidebar(QWidget):
         changed = index != self._current_index
         self._current_index = index
         self._items[index].setChecked(True)
-        self.itemActivated.emit(index)
         if changed:
             self.currentChanged.emit(index)
 
@@ -535,3 +534,4 @@ class NavigationSidebar(QWidget):
         except ValueError:
             return
         self.setCurrentIndex(index)
+        self.itemActivated.emit(index)

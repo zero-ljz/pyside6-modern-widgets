@@ -303,11 +303,11 @@ class _ModernTabBar(QTabBar):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), QColor(self._theme.tab_bar))
 
-        scroll_buttons = [
-            button
-            for object_name in ("ScrollLeftButton", "ScrollRightButton")
-            if (button := self.findChild(QToolButton, object_name)) is not None
-        ]
+        scroll_buttons: list[QToolButton] = []
+        for object_name in ("ScrollLeftButton", "ScrollRightButton"):
+            button = self.findChild(QToolButton, object_name)
+            if button is not None:
+                scroll_buttons.append(button)
         overflowed = self.count() > 0 and (
             self.tabRect(0).left() < 0 or self.tabRect(self.count() - 1).right() >= self.width()
         )

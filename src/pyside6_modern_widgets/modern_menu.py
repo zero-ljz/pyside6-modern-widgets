@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sys
-from typing import overload
+from typing import Protocol, cast, overload
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,6 +24,12 @@ _MENU_ITEM_EXTRA_HEIGHT = 4
 _MENU_VERTICAL_MARGIN = 2
 _OUTLINE_ALPHA = 30
 _SEPARATOR_ALPHA = 20
+
+
+class _MenuItemOption(Protocol):
+    menuItemType: QStyleOptionMenuItem.MenuItemType
+    palette: QPalette
+    rect: QRect
 
 
 def _soft_line_color(palette: QPalette, alpha: int) -> QColor:
@@ -154,12 +160,12 @@ class _RoundedMenuStyle(QProxyStyle):
 
     def sizeFromContents(self, content_type, option, size, widget=None):
         result = super().sizeFromContents(content_type, option, size, widget)
-        if (
-            content_type == QStyle.ContentsType.CT_MenuItem
-            and isinstance(option, QStyleOptionMenuItem)
-            and option.menuItemType != QStyleOptionMenuItem.MenuItemType.Separator
+        if content_type == QStyle.ContentsType.CT_MenuItem and isinstance(
+            option, QStyleOptionMenuItem
         ):
-            result.setHeight(result.height() + _MENU_ITEM_EXTRA_HEIGHT)
+            menu_option = cast(_MenuItemOption, option)
+            if menu_option.menuItemType != QStyleOptionMenuItem.MenuItemType.Separator:
+                result.setHeight(result.height() + _MENU_ITEM_EXTRA_HEIGHT)
         return result
 
     def pixelMetric(self, metric, option=None, widget=None) -> int:
@@ -185,15 +191,25 @@ class _RoundedMenuStyle(QProxyStyle):
         super().drawPrimitive(element, option, painter, widget)
 
     def drawControl(self, element, option, painter, widget=None) -> None:
+        if element == QStyle.ControlElement.CE_MenuItem and isinstance(
+            option, QStyleOptionMenuItem
+        ):
+            menu_option = cast(_MenuItemOption, option)
+        else:
+            menu_option = None
         if (
-            element == QStyle.ControlElement.CE_MenuItem
-            and isinstance(option, QStyleOptionMenuItem)
-            and option.menuItemType == QStyleOptionMenuItem.MenuItemType.Separator
+            menu_option is not None
+            and menu_option.menuItemType == QStyleOptionMenuItem.MenuItemType.Separator
         ):
             painter.save()
-            painter.setPen(QPen(_soft_line_color(option.palette, _SEPARATOR_ALPHA), 1))
-            y = option.rect.center().y()
-            painter.drawLine(option.rect.left() + 12, y, option.rect.right() - 12, y)
+            painter.setPen(QPen(_soft_line_color(menu_option.palette, _SEPARATOR_ALPHA), 1))
+            y = menu_option.rect.center().y()
+            painter.drawLine(
+                menu_option.rect.left() + 12,
+                y,
+                menu_option.rect.right() - 12,
+                y,
+            )
             painter.restore()
             return
         if (

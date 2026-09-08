@@ -28,7 +28,6 @@ classifiers = [
 dev = [
     "mypy>=1.13",
     "pyinstaller>=6.11",
-    "pytest>=8.3",
     "ruff>=0.9",
     "types-pyinstaller>=6.11",
 ]
@@ -49,10 +48,6 @@ pyside6_modern_widgets = [
     "resources.qrc",
     "resources/icons/*.png",
 ]
-
-[tool.pytest.ini_options]
-addopts = "-q"
-testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100

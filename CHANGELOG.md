@@ -18,6 +18,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Deferred wallpaper discovery and color extraction until the global theme is
+  first used, keeping package imports free of wallpaper I/O and external
+  process calls.
 - Removed window theme switching and the standard and classic surfaces. The
   remaining modern surface now follows desktop-wallpaper colors automatically,
   using low-frequency metadata checks and file notifications.
@@ -36,6 +39,13 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Kept the native and fallback system menus aligned with each window's resize,
+  minimize, maximize, and close capabilities.
+- Kept the title-bar pin button synchronized with externally supplied
+  `WindowStaysOnTopHint` flags.
+- Emitted navigation item activation only for user interaction and prevented
+  duplicate activation while removing the current page.
+- Restored clean type checking for the package's inline `py.typed` annotations.
 - Restored native Windows window recognition for `ModernWindow`, including
   edge snapping, system resizing and dragging, and Windows 11 Snap Layouts on
   the custom maximize button, without changing the cross-platform fallback.
