@@ -21,12 +21,17 @@ WM_NCLBUTTONDOWN = 0x00A1
 WM_NCLBUTTONUP = 0x00A2
 WM_NCLBUTTONDBLCLK = 0x00A3
 WM_NCRBUTTONUP = 0x00A5
+WM_DISPLAYCHANGE = 0x007E
+WM_DPICHANGED = 0x02E0
+WM_MOUSEMOVE = 0x0200
+WM_LBUTTONUP = 0x0202
 WM_CAPTURECHANGED = 0x0215
 WM_ENTERSIZEMOVE = 0x0231
 WM_EXITSIZEMOVE = 0x0232
 WM_NCMOUSELEAVE = 0x02A2
 
 HTTRANSPARENT = -1
+HTCLIENT = 1
 HTCAPTION = 2
 HTMAXBUTTON = 9
 HTLEFT = 10
@@ -107,6 +112,22 @@ def track_non_client_mouse_leave(hwnd: int) -> None:
         return
 
 
+def set_mouse_capture(hwnd: int, captured: bool) -> None:
+    """Capture or release mouse input for a custom non-client interaction."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        if captured:
+            user32.SetCapture.argtypes = (wintypes.HWND,)
+            user32.SetCapture.restype = wintypes.HWND
+            user32.SetCapture(wintypes.HWND(hwnd))
+        else:
+            user32.ReleaseCapture.argtypes = ()
+            user32.ReleaseCapture.restype = wintypes.BOOL
+            user32.ReleaseCapture()
+    except (AttributeError, OSError, TypeError, ValueError):
+        return
+
+
 def constrain_maximized_client_area(hwnd: int, l_param: int) -> None:
     """Keep a borderless maximized client area inside the monitor work area."""
     try:
@@ -153,10 +174,31 @@ def client_position_from_l_param(
 
 def screen_position_from_l_param(l_param: int) -> tuple[int, int]:
     """Extract signed physical screen coordinates from a native LPARAM."""
-    return (
+    packed_position = (
         ctypes.c_short(l_param & 0xFFFF).value,
         ctypes.c_short((l_param >> 16) & 0xFFFF).value,
     )
+    cursor_position = _cursor_screen_position()
+    if cursor_position is not None and (
+        cursor_position[0] & 0xFFFF == l_param & 0xFFFF
+        and cursor_position[1] & 0xFFFF == (l_param >> 16) & 0xFFFF
+    ):
+        return cursor_position
+    return packed_position
+
+
+def _cursor_screen_position() -> tuple[int, int] | None:
+    """Return full-width cursor coordinates when Win32 is available."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
+        user32.GetCursorPos.restype = wintypes.BOOL
+        position = wintypes.POINT()
+        if user32.GetCursorPos(ctypes.byref(position)):
+            return position.x, position.y
+    except (AttributeError, OSError, TypeError, ValueError):
+        pass
+    return None
 
 
 def screen_position_from_client(
@@ -210,6 +252,7 @@ def set_native_frame(
     system_menu: bool = True,
     minimizable: bool = True,
     maximizable: bool = True,
+    force_refresh: bool = False,
 ) -> bool:
     """Synchronize the native frame styles that drive Windows window behavior."""
     try:
@@ -252,13 +295,14 @@ def set_native_frame(
             updated_style = style & ~(
                 WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
             )
-        if updated_style == style:
+        if updated_style == style and not force_refresh:
             return True
 
-        ctypes.set_last_error(0)
-        previous_style = user32.SetWindowLongPtrW(window_handle, GWL_STYLE, updated_style)
-        if not previous_style and ctypes.get_last_error():
-            return False
+        if updated_style != style:
+            ctypes.set_last_error(0)
+            previous_style = user32.SetWindowLongPtrW(window_handle, GWL_STYLE, updated_style)
+            if not previous_style and ctypes.get_last_error():
+                return False
 
         swp_nomove = 0x0002
         swp_nosize = 0x0001
@@ -278,3 +322,30 @@ def set_native_frame(
         )
     except (AttributeError, OSError, TypeError, ValueError):
         return False
+
+
+def redraw_native_window(hwnd: int) -> None:
+    """Invalidate a complete Win32 window after DPI or display metric changes."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.RedrawWindow.argtypes = (
+            wintypes.HWND,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            wintypes.UINT,
+        )
+        user32.RedrawWindow.restype = wintypes.BOOL
+        rdw_invalidate = 0x0001
+        rdw_erase = 0x0004
+        rdw_allchildren = 0x0080
+        rdw_updatenow = 0x0100
+        rdw_erasenow = 0x0200
+        rdw_frame = 0x0400
+        user32.RedrawWindow(
+            wintypes.HWND(hwnd),
+            None,
+            None,
+            rdw_invalidate | rdw_erase | rdw_allchildren | rdw_updatenow | rdw_erasenow | rdw_frame,
+        )
+    except (AttributeError, OSError, TypeError, ValueError):
+        return

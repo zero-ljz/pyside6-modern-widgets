@@ -22,6 +22,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
+      - name: Run component tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run pytest
+
       - name: Run lint checks
         run: uv run ruff check .
 
@@ -33,3 +38,13 @@ jobs:
 
       - name: Build package
         run: uv build
+
+      - name: Run Linux platform smoke
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run python tests/platform_smoke.py
+
+      - name: Run native platform smoke
+        if: runner.os != 'Linux'
+        run: uv run python tests/platform_smoke.py

@@ -42,6 +42,23 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Consumed native Windows maximize-button press and release messages in the
+  custom title bar, preventing a fallback system button from appearing and
+  ensuring the visible maximize control performs maximize and restore itself.
+- Cleared and repainted the complete Windows backing surface after display
+  resolution, work-area, or DPI changes, preventing stale title-bar button
+  pixels after the window geometry is recomputed.
+- Kept fixed-size and partially constrained windows from exposing native or
+  custom maximize actions, and resynchronized Win32 frame capabilities when
+  minimum or maximum sizes change at runtime.
+- Removed rounded transparent corners and resize hit targets while modern
+  windows and dialogs are full screen.
+- Kept `ModernDialog` frameless chrome synchronized after window-flag changes
+  and accepted the standard `(parent, flags)` constructor form.
+- Made cached menu bars, status bars, and central widgets recover safely after
+  external deletion, and allowed `setCentralWidget(None)` to clear content.
+- Added manual window move and resize fallbacks when a non-Wayland Qt platform
+  plugin declines the native system operation.
 - Kept the native and fallback system menus aligned with each window's resize,
   minimize, maximize, and close capabilities.
 - Kept the title-bar pin button synchronized with externally supplied

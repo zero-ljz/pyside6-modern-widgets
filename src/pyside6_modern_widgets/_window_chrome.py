@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from PySide6.QtCore import QRectF, QSize, Qt
+from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -44,8 +44,9 @@ class WindowSurfacePolicy:
     native_corners: bool
 
     def apply_to(self, widget: QWidget) -> None:
-        widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, self.opaque_surface)
+        widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
         widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, not self.opaque_surface)
+        widget.setAutoFillBackground(self.opaque_surface)
 
     def paint_corner_radius(self, radius: int) -> int:
         return 0 if self.opaque_surface else max(0, radius)
@@ -97,6 +98,35 @@ def button_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
     }}
     QPushButton:pressed {{ background-color: {theme.control_pressed}; }}
     """
+
+
+def manual_resize_geometry(
+    widget: QWidget,
+    start_geometry: QRect,
+    edges: Qt.Edge,
+    delta: QPoint,
+) -> QRect:
+    """Return constrained geometry for a client-side resize fallback."""
+    geometry = QRect(start_geometry)
+    if edges & Qt.Edge.LeftEdge:
+        width = max(widget.minimumWidth(), min(widget.maximumWidth(), geometry.width() - delta.x()))
+        geometry.setX(geometry.x() + geometry.width() - width)
+        geometry.setWidth(width)
+    elif edges & Qt.Edge.RightEdge:
+        geometry.setWidth(
+            max(widget.minimumWidth(), min(widget.maximumWidth(), geometry.width() + delta.x()))
+        )
+    if edges & Qt.Edge.TopEdge:
+        height = max(
+            widget.minimumHeight(), min(widget.maximumHeight(), geometry.height() - delta.y())
+        )
+        geometry.setY(geometry.y() + geometry.height() - height)
+        geometry.setHeight(height)
+    elif edges & Qt.Edge.BottomEdge:
+        geometry.setHeight(
+            max(widget.minimumHeight(), min(widget.maximumHeight(), geometry.height() + delta.y()))
+        )
+    return geometry
 
 
 def paint_watercolor(
@@ -165,6 +195,11 @@ class BackgroundFrame(QFrame):
     def _invalidate_watercolor_cache(self) -> None:
         self._watercolor_cache = None
         self._watercolor_cache_signature = None
+
+    def invalidateSurfaceCache(self) -> None:
+        """Discard device-dependent pixels after a screen metric change."""
+        self._invalidate_watercolor_cache()
+        self.update()
 
     def _ensure_watercolor_cache(self) -> QPixmap:
         dpr = self.devicePixelRatioF()
@@ -278,6 +313,7 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self._theme = theme
         self._metrics = metrics
         self._allows_maximize = allows_maximize
+        self._manual_move_offset: QPoint | None = None
         self.setObjectName("CustomTitleBar")
         self.setAutoFillBackground(False)
         self._init_ui()
@@ -362,7 +398,33 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
     def setTitle(self, title: str) -> None:
         self.titleLabel.setText(title)
 
+    def syncWindowFlags(self, flags: Qt.WindowType) -> bool:
+        """Synchronize the controls shared by simple frameless windows."""
+        window_type = flags & Qt.WindowType.WindowType_Mask
+        title_bar_visible = window_type not in {
+            Qt.WindowType.Popup,
+            Qt.WindowType.ToolTip,
+            Qt.WindowType.SplashScreen,
+        }
+        self.closeButton.setVisible(
+            title_bar_visible and bool(flags & Qt.WindowType.WindowCloseButtonHint)
+        )
+        self.setVisible(title_bar_visible)
+        return title_bar_visible
+
+    def _can_maximize(self) -> bool:
+        flags = self.parent_window.windowFlags()
+        return (
+            self._allows_maximize
+            and bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
+            and not self.parent_window.isFullScreen()
+            and self.parent_window.minimumWidth() < self.parent_window.maximumWidth()
+            and self.parent_window.minimumHeight() < self.parent_window.maximumHeight()
+        )
+
     def _toggle_maximize(self) -> None:
+        if not self._can_maximize():
+            return
         if self.parent_window.isMaximized():
             self.parent_window.showNormal()
         else:
@@ -377,13 +439,36 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
             if not bool(getattr(self.parent_window, "_native_frame_enabled", False)):
                 handle = self.parent_window.windowHandle()
                 if handle is not None and handle.startSystemMove():
+                    self._manual_move_offset = None
+                    event.accept()
+                    return
+                if (
+                    not QApplication.platformName().startswith("wayland")
+                    and not self.parent_window.isMaximized()
+                    and not self.parent_window.isFullScreen()
+                ):
+                    self._manual_move_offset = (
+                        event.globalPosition().toPoint()
+                        - self.parent_window.frameGeometry().topLeft()
+                    )
                     event.accept()
                     return
         super().mousePressEvent(event)
 
+    def mouseMoveEvent(self, event) -> None:
+        if self._manual_move_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.parent_window.move(event.globalPosition().toPoint() - self._manual_move_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._manual_move_offset = None
+        super().mouseReleaseEvent(event)
+
     def mouseDoubleClickEvent(self, event) -> None:
         if (
-            self._allows_maximize
+            self._can_maximize()
             and not bool(getattr(self.parent_window, "_native_frame_enabled", False))
             and event.button() == Qt.MouseButton.LeftButton
         ):
