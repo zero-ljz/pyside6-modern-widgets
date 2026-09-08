@@ -725,10 +725,14 @@ def test_collapsed_navigation_shows_scrollbar_when_items_overflow() -> None:
     assert (min(active_x_positions), max(active_x_positions)) == (0, 35)
     assert (min(active_y_positions), max(active_y_positions)) == (0, 31)
 
-    viewport_right = sidebar.scrollArea.viewport().mapTo(
-        sidebar,
-        QPoint(sidebar.scrollArea.viewport().width(), 0),
-    ).x()
+    viewport_right = (
+        sidebar.scrollArea.viewport()
+        .mapTo(
+            sidebar,
+            QPoint(sidebar.scrollArea.viewport().width(), 0),
+        )
+        .x()
+    )
     scrollbar_left = scrollbar.mapTo(sidebar, QPoint(0, 0)).x()
     assert scrollbar_left < viewport_right
 
@@ -751,10 +755,14 @@ def test_expanded_navigation_scrollbar_does_not_cover_active_corners() -> None:
 
     scrollbar = sidebar.scrollArea.verticalScrollBar()
     assert scrollbar.isVisible()
-    viewport_right = sidebar.scrollArea.viewport().mapTo(
-        sidebar,
-        QPoint(sidebar.scrollArea.viewport().width(), 0),
-    ).x()
+    viewport_right = (
+        sidebar.scrollArea.viewport()
+        .mapTo(
+            sidebar,
+            QPoint(sidebar.scrollArea.viewport().width(), 0),
+        )
+        .x()
+    )
     scrollbar_left = scrollbar.mapTo(sidebar, QPoint(0, 0)).x()
     assert scrollbar_left >= viewport_right
 
@@ -764,10 +772,13 @@ def test_expanded_navigation_scrollbar_does_not_cover_active_corners() -> None:
     image = button.grab().toImage()
     background_right = button.width() - 1
     assert image.pixelColor(background_right, 1) != active_background
-    assert image.pixelColor(
-        background_right,
-        button.height() // 2,
-    ) == active_background
+    assert (
+        image.pixelColor(
+            background_right,
+            button.height() // 2,
+        )
+        == active_background
+    )
     active_x_positions = [
         x
         for x in range(image.width())
@@ -822,10 +833,14 @@ def test_navigation_does_not_compress_bottom_items_when_height_is_limited() -> N
         previous = bottom_buttons[index - 1]
         current = bottom_buttons[index]
         assert previous.geometry().bottom() < current.geometry().top()
-    bottom_button_bottom = bottom_buttons[-1].mapTo(
-        sidebar,
-        bottom_buttons[-1].rect().bottomLeft(),
-    ).y()
+    bottom_button_bottom = (
+        bottom_buttons[-1]
+        .mapTo(
+            sidebar,
+            bottom_buttons[-1].rect().bottomLeft(),
+        )
+        .y()
+    )
     assert sidebar.height() - bottom_button_bottom - 1 == 4
 
     required_height = sidebar.minimumSizeHint().height()
@@ -871,13 +886,13 @@ def test_navigation_visible_outer_spacing_is_balanced() -> None:
         if bottom_image.pixelColor(bottom_x, y) == active_background
     ]
 
-    visible_top_spacing = (
-        sidebar.toggleButton.mapTo(sidebar, QPoint(0, 0)).y()
-        + min(toggle_background_y)
+    visible_top_spacing = sidebar.toggleButton.mapTo(sidebar, QPoint(0, 0)).y() + min(
+        toggle_background_y
     )
-    visible_bottom_spacing = sidebar.height() - 1 - (
-        bottom_button.mapTo(sidebar, QPoint(0, 0)).y()
-        + max(bottom_background_y)
+    visible_bottom_spacing = (
+        sidebar.height()
+        - 1
+        - (bottom_button.mapTo(sidebar, QPoint(0, 0)).y() + max(bottom_background_y))
     )
     assert visible_top_spacing == visible_bottom_spacing == 8
 
@@ -1007,9 +1022,7 @@ def test_navigation_focus_is_borderless_and_keeps_toggle_icon_centered() -> None
     _application().processEvents()
     assert sidebar.toggleButton.width() == DEFAULT_METRICS.navigation_collapsed_width - 12
     toggle_image = sidebar.toggleButton.grab().toImage()
-    assert toggle_image.pixelColor(
-        sidebar.toggleButton.width() // 2, 0
-    ) == QColor(focus_background)
+    assert toggle_image.pixelColor(sidebar.toggleButton.width() // 2, 0) == QColor(focus_background)
     middle_y = sidebar.toggleButton.height() // 2
     background_x_positions = [
         x
@@ -1195,9 +1208,7 @@ def test_navigation_view_overlay_sidebar_does_not_move_content() -> None:
 
     view.setSidebarOverlay(False)
     _application().processEvents()
-    assert view.contentContainer.geometry().x() == (
-        DEFAULT_METRICS.navigation_expanded_width
-    )
+    assert view.contentContainer.geometry().x() == (DEFAULT_METRICS.navigation_expanded_width)
 
 
 def test_navigation_view_overlay_sidebar_preserves_watercolor_surface() -> None:
@@ -1226,9 +1237,7 @@ def test_navigation_view_overlay_sidebar_preserves_watercolor_surface() -> None:
     view_image = view.grab().toImage()
     sidebar_edge_x = view.sidebar.width()
     sidebar_edge_y = view.height() // 2
-    assert view_image.pixelColor(sidebar_edge_x - 1, sidebar_edge_y) == QColor(
-        LIGHT_THEME.border
-    )
+    assert view_image.pixelColor(sidebar_edge_x - 1, sidebar_edge_y) == QColor(LIGHT_THEME.border)
     assert view_image.pixelColor(sidebar_edge_x + 1, sidebar_edge_y) == QColor(
         LIGHT_THEME.navigation_content
     )
@@ -1240,9 +1249,7 @@ def test_navigation_view_overlay_sidebar_preserves_watercolor_surface() -> None:
     assert collapsed_image.pixelColor(collapsed_edge - 1, sidebar_edge_y) != QColor(
         LIGHT_THEME.border
     )
-    assert collapsed_image.pixelColor(collapsed_edge, sidebar_edge_y) == QColor(
-        LIGHT_THEME.border
-    )
+    assert collapsed_image.pixelColor(collapsed_edge, sidebar_edge_y) == QColor(LIGHT_THEME.border)
 
 
 def test_navigation_view_expanded_overlay_rounds_right_corners() -> None:
@@ -1345,8 +1352,7 @@ def test_navigation_view_switches_overlay_mode_automatically_with_hysteresis() -
     view = NavigationView()
     view.addPage(MinimumWidthPage(), "Page")
     required_width = (
-        DEFAULT_METRICS.navigation_expanded_width
-        + view.contentContainer.minimumSizeHint().width()
+        DEFAULT_METRICS.navigation_expanded_width + view.contentContainer.minimumSizeHint().width()
     )
     exit_width = required_width + view.SIDEBAR_OVERLAY_HYSTERESIS
     view.resize(exit_width + 20, 420)
@@ -1404,8 +1410,7 @@ def test_navigation_view_starts_collapsed_when_first_shown_in_overlay_mode() -> 
     view = NavigationView()
     view.addPage(MinimumWidthPage(), "Page")
     view.resize(
-        DEFAULT_METRICS.navigation_expanded_width
-        + view.contentContainer.minimumSizeHint().width(),
+        DEFAULT_METRICS.navigation_expanded_width + view.contentContainer.minimumSizeHint().width(),
         420,
     )
 
@@ -1540,6 +1545,31 @@ def test_tab_view_keyboard_disabled_state_and_page_moves() -> None:
     tabs.tabBar().moveTab(2, 0)
     assert tabs.widget(0) is pages[2]
     assert tabs.currentWidget() is current_page
+
+
+def test_tab_view_recovers_after_inserting_a_deleted_page() -> None:
+    from shiboken6 import delete
+
+    tabs = TabView()
+    first = QLabel("first")
+    second = QLabel("second")
+    tabs.addTab(first, "First")
+    tabs.addTab(second, "Second")
+    deleted_page = QLabel("deleted")
+    delete(deleted_page)
+
+    with pytest.raises(RuntimeError, match="already deleted"):
+        tabs.insertTab(1, deleted_page, "Deleted")
+
+    assert tabs.count() == tabs.tabBar().count() == 2
+    observed: list[int] = []
+    tabs.currentChanged.connect(observed.append)
+    tabs.setCurrentIndex(1)
+    assert tabs.currentWidget() is second
+    assert observed == [1]
+    tabs.removeTab(1)
+    assert tabs.currentWidget() is first
+    assert observed == [1, 0]
 
 
 def test_tab_view_middle_click_requests_tab_close() -> None:

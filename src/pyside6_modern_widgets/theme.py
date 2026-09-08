@@ -154,11 +154,7 @@ def _wallpaper_spot_color(color: QColor, is_dark: bool, alpha: int) -> str:
     saturation = color.hslSaturationF()
     lightness = color.lightnessF()
     saturation = min(0.78, max(0.24, saturation)) if saturation >= 0.08 else 0.0
-    lightness = (
-        min(0.62, max(0.34, lightness))
-        if is_dark
-        else min(0.78, max(0.52, lightness))
-    )
+    lightness = min(0.62, max(0.34, lightness)) if is_dark else min(0.78, max(0.52, lightness))
     adjusted = QColor.fromHslF(max(0.0, hue), saturation, lightness, alpha / 255)
     return adjusted.name(QColor.NameFormat.HexArgb).upper()
 
@@ -187,11 +183,7 @@ DEFAULT_METRICS = ModernMetrics()
 
 def theme_for_palette(palette: QPalette) -> ModernTheme:
     """Choose the built-in theme matching an application palette."""
-    return (
-        DARK_THEME
-        if palette.color(QPalette.ColorRole.Window).lightness() < 128
-        else LIGHT_THEME
-    )
+    return DARK_THEME if palette.color(QPalette.ColorRole.Window).lightness() < 128 else LIGHT_THEME
 
 
 def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPalette:

@@ -6,13 +6,11 @@ from enum import Enum
 
 from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import (
-    QBrush,
     QColor,
     QIcon,
     QPainter,
     QPainterPath,
     QPen,
-    QRadialGradient,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -29,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import _resources  # noqa: F401
+from ._window_chrome import paint_watercolor
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -437,20 +436,9 @@ class NavigationSidebar(QWidget):
 
         painter.setClipPath(self._overlay_surface_path())
 
-        painter.fillRect(self.rect(), QColor(self._theme.watercolor_base))
         parent = self.parentWidget()
         surface_width = parent.width() if parent is not None else self.width()
-        for color, x, y, radius in self._theme.watercolor_spots:
-            gradient = QRadialGradient(
-                surface_width * x,
-                self.height() * y,
-                surface_width * radius,
-            )
-            gradient.setColorAt(0, QColor(color))
-            gradient.setColorAt(1, QColor(255, 255, 255, 0))
-            painter.setBrush(QBrush(gradient))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRect(self.rect())
+        paint_watercolor(painter, QRectF(self.rect()), self._theme, surface_width)
 
         if not self._collapsed:
             border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)

@@ -79,9 +79,7 @@ def current_window_surface_policy() -> WindowSurfacePolicy:
     native_windows = uses_windows_window_state()
     get_windows_version = getattr(sys, "getwindowsversion", None)
     native_corners = (
-        native_windows
-        and get_windows_version is not None
-        and get_windows_version().build >= 22000
+        native_windows and get_windows_version is not None and get_windows_version().build >= 22000
     )
     return WindowSurfacePolicy(
         opaque_surface=native_windows,
@@ -98,6 +96,19 @@ def button_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
     }}
     QPushButton:pressed {{ background-color: {theme.control_pressed}; }}
     """
+
+
+def paint_watercolor(
+    painter: QPainter, rect: QRectF, theme: ModernTheme, surface_width: int
+) -> None:
+    painter.fillRect(rect, QColor(theme.watercolor_base))
+    for color, x, y, radius in theme.watercolor_spots:
+        gradient = QRadialGradient(surface_width * x, rect.height() * y, surface_width * radius)
+        gradient.setColorAt(0, QColor(color))
+        gradient.setColorAt(1, QColor(255, 255, 255, 0))
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRect(rect)
 
 
 class BackgroundFrame(QFrame):
@@ -163,18 +174,7 @@ class BackgroundFrame(QFrame):
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         logical_rect = QRectF(0, 0, logical_size.width(), logical_size.height())
-        painter.fillRect(logical_rect, QColor(self._theme.watercolor_base))
-        for color, x, y, radius in self._theme.watercolor_spots:
-            gradient = QRadialGradient(
-                logical_size.width() * x,
-                logical_size.height() * y,
-                logical_size.width() * radius,
-            )
-            gradient.setColorAt(0, QColor(color))
-            gradient.setColorAt(1, QColor(255, 255, 255, 0))
-            painter.setBrush(QBrush(gradient))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRect(logical_rect)
+        paint_watercolor(painter, logical_rect, self._theme, logical_size.width())
         painter.end()
         self._watercolor_cache = pixmap
         self._watercolor_cache_signature = signature

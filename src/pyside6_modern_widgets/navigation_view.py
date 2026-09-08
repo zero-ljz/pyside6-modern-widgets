@@ -86,9 +86,7 @@ class NavigationView(QWidget):
         self._root_layout.addWidget(self.contentContainer, 1)
 
         self.sidebar.currentChanged.connect(self.stackedWidget.setCurrentIndex)
-        self.sidebar.collapseIntentChanged.connect(
-            self._on_sidebar_collapse_intent_changed
-        )
+        self.sidebar.collapseIntentChanged.connect(self._on_sidebar_collapse_intent_changed)
         self.sidebar.collapsedChanged.connect(self._sync_outside_click_filter)
         self.stackedWidget.currentChanged.connect(self.stackedWidget.updateGeometry)
         self.stackedWidget.currentChanged.connect(self._on_current_changed)
@@ -111,9 +109,7 @@ class NavigationView(QWidget):
             return
         self._sidebar_overlay = overlay
         self._sidebar_host.setFixedWidth(
-            self._metrics.navigation_collapsed_width
-            if overlay
-            else self.sidebar.width()
+            self._metrics.navigation_collapsed_width if overlay else self.sidebar.width()
         )
         self.sidebar.setOverlaySurface(overlay)
         self._position_sidebar_layer()
@@ -129,9 +125,7 @@ class NavigationView(QWidget):
     def _update_automatic_sidebar_overlay(self) -> None:
         if not self._auto_sidebar_overlay:
             return
-        required_width = (
-            self._metrics.navigation_expanded_width + self._minimum_content_width()
-        )
+        required_width = self._metrics.navigation_expanded_width + self._minimum_content_width()
         if self.width() <= required_width:
             self.setSidebarOverlay(True)
             if not self.sidebar.isCollapsed():
@@ -161,13 +155,8 @@ class NavigationView(QWidget):
             self._sync_sidebar_minimum_height()
         elif watched is self.stackedWidget and event.type() == QEvent.Type.LayoutRequest:
             self._update_automatic_sidebar_overlay()
-        elif (
-            self._outside_click_filter_installed
-            and event.type() == QEvent.Type.MouseButtonPress
-        ):
-            position = self.sidebar.mapFromGlobal(
-                event.globalPosition().toPoint()
-            )
+        elif self._outside_click_filter_installed and event.type() == QEvent.Type.MouseButtonPress:
+            position = self.sidebar.mapFromGlobal(event.globalPosition().toPoint())
             if not self.sidebar.rect().contains(position):
                 self.sidebar.setCollapsed(True)
         return super().eventFilter(watched, event)
@@ -255,16 +244,17 @@ class NavigationView(QWidget):
     def setTheme(self, theme: ModernTheme | None) -> None:
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
-        self.setPalette(palette_for_theme(self._theme, self.palette()))
-        self.sidebar.setTheme(self._theme)
-        self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
+        self._apply_theme()
 
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
         if self._uses_global_theme:
             self._theme = theme
-            self.setPalette(palette_for_theme(theme, self.palette()))
-            self.sidebar.setTheme(theme)
-            self.contentContainer.setStyleSheet(navigation_content_style(theme))
+            self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        self.setPalette(palette_for_theme(self._theme, self.palette()))
+        self.sidebar.setTheme(self._theme)
+        self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
 
     def _on_current_changed(self, index: int) -> None:
         if index >= 0 and self.sidebar.currentIndex() != index:

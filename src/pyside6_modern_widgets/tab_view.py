@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import cast
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
@@ -545,17 +547,16 @@ class TabView(QWidget):
         icon, label = self._parse_tab_arguments(icon_or_text, text)
         index = max(0, min(index, self.count()))
         old_widget = self.currentWidget()
-        self._syncing = True
-        page_index = self._stack.insertWidget(index, widget)
-        tab_index = self._tab_bar.insertTab(index, icon, label)
-        self._tab_bar.setTabToolTip(tab_index, label)
-        if old_widget is not None:
-            self._stack.setCurrentWidget(old_widget)
-            self._tab_bar.setCurrentIndex(self._stack.currentIndex())
-        else:
-            self._stack.setCurrentIndex(tab_index)
-            self._tab_bar.setCurrentIndex(tab_index)
-        self._syncing = False
+        with self._suspend_sync():
+            page_index = self._stack.insertWidget(index, widget)
+            tab_index = self._tab_bar.insertTab(index, icon, label)
+            self._tab_bar.setTabToolTip(tab_index, label)
+            if old_widget is not None:
+                self._stack.setCurrentWidget(old_widget)
+                self._tab_bar.setCurrentIndex(self._stack.currentIndex())
+            else:
+                self._stack.setCurrentIndex(tab_index)
+                self._tab_bar.setCurrentIndex(tab_index)
         return page_index
 
     def removeTab(self, index: int) -> None:
@@ -564,12 +565,11 @@ class TabView(QWidget):
             return
         old_index = self.currentIndex()
         old_widget = self.currentWidget()
-        self._syncing = True
-        self._tab_bar.removeTab(index)
-        self._stack.removeWidget(page)
-        new_index = self._tab_bar.currentIndex()
-        self._stack.setCurrentIndex(new_index)
-        self._syncing = False
+        with self._suspend_sync():
+            self._tab_bar.removeTab(index)
+            self._stack.removeWidget(page)
+            new_index = self._tab_bar.currentIndex()
+            self._stack.setCurrentIndex(new_index)
         if old_index != new_index or old_widget is not self.currentWidget():
             self.currentChanged.emit(new_index)
 
@@ -682,12 +682,20 @@ class TabView(QWidget):
                 self.setCurrentIndex(index)
                 return
 
+    @contextmanager
+    def _suspend_sync(self) -> Iterator[None]:
+        was_syncing = self._syncing
+        self._syncing = True
+        try:
+            yield
+        finally:
+            self._syncing = was_syncing
+
     def _tab_current_changed(self, index: int) -> None:
         if self._syncing:
             return
-        self._syncing = True
-        self._stack.setCurrentIndex(index)
-        self._syncing = False
+        with self._suspend_sync():
+            self._stack.setCurrentIndex(index)
         self.currentChanged.emit(index)
 
     def _stack_current_changed(self, index: int) -> None:
@@ -700,12 +708,11 @@ class TabView(QWidget):
         current_page = self.currentWidget()
         if page is None:
             return
-        self._syncing = True
-        self._stack.removeWidget(page)
-        self._stack.insertWidget(new_index, page)
-        if current_page is not None:
-            self._stack.setCurrentWidget(current_page)
-        self._syncing = False
+        with self._suspend_sync():
+            self._stack.removeWidget(page)
+            self._stack.insertWidget(new_index, page)
+            if current_page is not None:
+                self._stack.setCurrentWidget(current_page)
 
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
         if self._uses_global_theme:

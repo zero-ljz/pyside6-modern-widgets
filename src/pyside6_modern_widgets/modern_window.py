@@ -607,9 +607,11 @@ class ModernWindow(QWidget):
         except (TypeError, ValueError):
             return super().nativeEvent(event_type, message)
 
-        if native_message.message == WM_NCCALCSIZE and getattr(
-            self, "_native_frame_enabled", False
-        ) and native_message.w_param:
+        if (
+            native_message.message == WM_NCCALCSIZE
+            and getattr(self, "_native_frame_enabled", False)
+            and native_message.w_param
+        ):
             constrain_maximized_client_area(int(self.winId()), native_message.l_param)
             return True, 0
         if native_message.message == WM_NCHITTEST and self._native_frame_enabled:

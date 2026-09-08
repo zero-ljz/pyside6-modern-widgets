@@ -103,8 +103,7 @@ dialog.setWindowTitle("Settings")
 layout = QVBoxLayout(dialog)
 layout.addWidget(QLabel("Dialog content"))
 buttons = QDialogButtonBox(
-    QDialogButtonBox.StandardButton.Ok
-    | QDialogButtonBox.StandardButton.Cancel
+    QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
 )
 buttons.accepted.connect(dialog.accept)
 buttons.rejected.connect(dialog.reject)
