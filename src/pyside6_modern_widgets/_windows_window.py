@@ -10,6 +10,9 @@ GWL_STYLE = -16
 
 WS_CAPTION = 0x00C00000
 WS_THICKFRAME = 0x00040000
+WS_SYSMENU = 0x00080000
+WS_MINIMIZEBOX = 0x00020000
+WS_MAXIMIZEBOX = 0x00010000
 
 WM_NCCALCSIZE = 0x0083
 WM_NCHITTEST = 0x0084
@@ -18,8 +21,6 @@ WM_NCLBUTTONDOWN = 0x00A1
 WM_NCLBUTTONUP = 0x00A2
 WM_NCLBUTTONDBLCLK = 0x00A3
 WM_NCRBUTTONUP = 0x00A5
-WM_MOUSEMOVE = 0x0200
-WM_LBUTTONUP = 0x0202
 WM_CAPTURECHANGED = 0x0215
 WM_ENTERSIZEMOVE = 0x0231
 WM_EXITSIZEMOVE = 0x0232
@@ -36,17 +37,6 @@ HTTOPRIGHT = 14
 HTBOTTOM = 15
 HTBOTTOMLEFT = 16
 HTBOTTOMRIGHT = 17
-
-_RESIZE_COMMANDS = {
-    HTLEFT: 1,
-    HTRIGHT: 2,
-    HTTOP: 3,
-    HTTOPLEFT: 4,
-    HTTOPRIGHT: 5,
-    HTBOTTOM: 6,
-    HTBOTTOMLEFT: 7,
-    HTBOTTOMRIGHT: 8,
-}
 
 
 @dataclass(frozen=True)
@@ -117,53 +107,6 @@ def track_non_client_mouse_leave(hwnd: int) -> None:
         return
 
 
-def set_mouse_capture(hwnd: int, captured: bool) -> None:
-    try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        if captured:
-            user32.SetCapture.argtypes = (wintypes.HWND,)
-            user32.SetCapture.restype = wintypes.HWND
-            user32.SetCapture(wintypes.HWND(hwnd))
-        else:
-            user32.ReleaseCapture.argtypes = ()
-            user32.ReleaseCapture.restype = wintypes.BOOL
-            user32.ReleaseCapture()
-    except (AttributeError, OSError, TypeError, ValueError):
-        return
-
-
-def start_system_move_or_resize(hwnd: int, hit_test: int) -> bool:
-    """Enter the native Windows move/resize loop for a non-client hit target."""
-    if hit_test == HTCAPTION:
-        command = 0xF010 | HTCAPTION  # SC_MOVE
-    elif hit_test in _RESIZE_COMMANDS:
-        command = 0xF000 | _RESIZE_COMMANDS[hit_test]  # SC_SIZE
-    else:
-        return False
-
-    try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
-        user32.SetForegroundWindow.restype = wintypes.BOOL
-        user32.ReleaseCapture.argtypes = ()
-        user32.ReleaseCapture.restype = wintypes.BOOL
-        user32.PostMessageW.argtypes = (
-            wintypes.HWND,
-            wintypes.UINT,
-            wintypes.WPARAM,
-            wintypes.LPARAM,
-        )
-        user32.PostMessageW.restype = wintypes.BOOL
-        # Handling WM_NCLBUTTONDOWN ourselves bypasses the default activation
-        # path. Activate synchronously so an inactive window cannot be dragged
-        # underneath the current foreground window.
-        user32.SetForegroundWindow(wintypes.HWND(hwnd))
-        user32.ReleaseCapture()
-        return bool(user32.PostMessageW(wintypes.HWND(hwnd), 0x0112, command, 0))
-    except (AttributeError, OSError, TypeError, ValueError):
-        return False
-
-
 def constrain_maximized_client_area(hwnd: int, l_param: int) -> None:
     """Keep a borderless maximized client area inside the monitor work area."""
     try:
@@ -195,35 +138,80 @@ def client_position_from_l_param(
     logical_height: int,
 ) -> tuple[float, float] | None:
     """Convert the physical screen position in LPARAM to Qt client coordinates."""
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    user32.GetClientRect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
-    user32.GetClientRect.restype = wintypes.BOOL
-    user32.ClientToScreen.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.POINT))
-    user32.ClientToScreen.restype = wintypes.BOOL
-
-    rect = wintypes.RECT()
-    origin = wintypes.POINT()
-    window_handle = wintypes.HWND(hwnd)
-    if not user32.GetClientRect(window_handle, ctypes.byref(rect)) or not user32.ClientToScreen(
-        window_handle, ctypes.byref(origin)
-    ):
+    screen_position = screen_position_from_l_param(l_param)
+    client_metrics = _client_metrics(hwnd)
+    if client_metrics is None:
         return None
-
-    physical_width = rect.right - rect.left
-    physical_height = rect.bottom - rect.top
+    origin_x, origin_y, physical_width, physical_height = client_metrics
     if physical_width <= 0 or physical_height <= 0:
         return None
-
-    screen_x = ctypes.c_short(l_param & 0xFFFF).value
-    screen_y = ctypes.c_short((l_param >> 16) & 0xFFFF).value
     return (
-        (screen_x - origin.x) * logical_width / physical_width,
-        (screen_y - origin.y) * logical_height / physical_height,
+        (screen_position[0] - origin_x) * logical_width / physical_width,
+        (screen_position[1] - origin_y) * logical_height / physical_height,
     )
 
 
-def set_native_frame(hwnd: int, enabled: bool) -> bool:
-    """Expose standard resizable-window styles without drawing native chrome."""
+def screen_position_from_l_param(l_param: int) -> tuple[int, int]:
+    """Extract signed physical screen coordinates from a native LPARAM."""
+    return (
+        ctypes.c_short(l_param & 0xFFFF).value,
+        ctypes.c_short((l_param >> 16) & 0xFFFF).value,
+    )
+
+
+def screen_position_from_client(
+    hwnd: int,
+    logical_x: float,
+    logical_y: float,
+    logical_width: int,
+    logical_height: int,
+) -> tuple[int, int] | None:
+    """Map Qt client coordinates to Win32 physical screen coordinates."""
+    client_metrics = _client_metrics(hwnd)
+    if client_metrics is None or logical_width <= 0 or logical_height <= 0:
+        return None
+    origin_x, origin_y, physical_width, physical_height = client_metrics
+    return (
+        origin_x + round(logical_x * physical_width / logical_width),
+        origin_y + round(logical_y * physical_height / logical_height),
+    )
+
+
+def _client_metrics(hwnd: int) -> tuple[int, int, int, int] | None:
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetClientRect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
+        user32.GetClientRect.restype = wintypes.BOOL
+        user32.ClientToScreen.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.POINT))
+        user32.ClientToScreen.restype = wintypes.BOOL
+
+        rect = wintypes.RECT()
+        origin = wintypes.POINT()
+        window_handle = wintypes.HWND(hwnd)
+        if not user32.GetClientRect(window_handle, ctypes.byref(rect)):
+            return None
+        if not user32.ClientToScreen(window_handle, ctypes.byref(origin)):
+            return None
+        return (
+            origin.x,
+            origin.y,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+        )
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
+def set_native_frame(
+    hwnd: int,
+    enabled: bool,
+    *,
+    resizable: bool = True,
+    system_menu: bool = True,
+    minimizable: bool = True,
+    maximizable: bool = True,
+) -> bool:
+    """Synchronize the native frame styles that drive Windows window behavior."""
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         user32.GetWindowLongPtrW.argtypes = (wintypes.HWND, ctypes.c_int)
@@ -247,8 +235,23 @@ def set_native_frame(hwnd: int, enabled: bool) -> bool:
 
         window_handle = wintypes.HWND(hwnd)
         style = int(user32.GetWindowLongPtrW(window_handle, GWL_STYLE))
-        native_frame = WS_CAPTION | WS_THICKFRAME
-        updated_style = style | native_frame if enabled else style & ~native_frame
+        if enabled:
+            updated_style = style | WS_CAPTION
+            capabilities = (
+                (WS_THICKFRAME, resizable),
+                (WS_SYSMENU, system_menu),
+                (WS_MINIMIZEBOX, minimizable),
+                (WS_MAXIMIZEBOX, maximizable),
+            )
+            for style_bit, active in capabilities:
+                if active:
+                    updated_style |= style_bit
+                else:
+                    updated_style &= ~style_bit
+        else:
+            updated_style = style & ~(
+                WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+            )
         if updated_style == style:
             return True
 

@@ -36,6 +36,9 @@ All notable changes to this project are documented in this file.
   the user's sidebar toggle intent when returning to side-by-side mode.
 - Extracted reusable window surfaces, overlays, and title-bar behavior from
   `ModernWindow` for use by other top-level widgets.
+- Reworked the Windows frameless-window boundary so Qt exclusively owns window
+  state while the default Windows procedure owns activation, moving, resizing,
+  caption double-clicks, and system-command transitions.
 
 ### Fixed
 
@@ -46,13 +49,21 @@ All notable changes to this project are documented in this file.
 - Emitted navigation item activation only for user interaction and prevented
   duplicate activation while removing the current page.
 - Restored clean type checking for the package's inline `py.typed` annotations.
-- Restored native Windows window recognition for `ModernWindow`, including
-  edge snapping, system resizing and dragging, and Windows 11 Snap Layouts on
-  the custom maximize button, without changing the cross-platform fallback.
+- Restored complete native Windows styles for `ModernWindow`, including the
+  system menu and minimize, maximize, and resize capabilities, while keeping
+  the standard caption outside the client area.
+- Restored native Windows dragging, edge resizing, Aero Snap, and Windows 11
+  Snap Layouts through non-client hit testing instead of synthetic move and
+  maximize commands.
 - Restored custom maximize-button hover feedback during native Windows
   non-client interactions.
-- Preserved a window's logical size when native title-bar dragging crosses
-  monitors with different display scaling.
+- Kept native system-menu placement and hit testing stable across mixed-DPI
+  monitors by converting through the HWND's physical client geometry.
+- Positioned the native system menu's Move command at the horizontal and
+  vertical center of the custom title bar instead of the removed native frame.
+- Removed delayed logical-size restoration after mixed-DPI screen changes so
+  Qt and Windows can complete their native DPI transition without a competing
+  resize.
 - Unified the top-level surface policy used by `ModernWindow`, `ModernDialog`,
   and `ModernMessageBox`: Windows 10 uses opaque square corners to preserve
   responsive updates without translucent resize flicker, while Windows 11

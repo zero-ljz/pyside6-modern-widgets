@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QCursor, QIcon, QPalette, QPixmap, QWindow
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPalette, QPixmap, QWindow
 from PySide6.QtWidgets import (
     QApplication,
     QMenuBar,
@@ -40,11 +40,8 @@ from ._windows_window import (
     WM_CAPTURECHANGED,
     WM_ENTERSIZEMOVE,
     WM_EXITSIZEMOVE,
-    WM_LBUTTONUP,
-    WM_MOUSEMOVE,
     WM_NCCALCSIZE,
     WM_NCHITTEST,
-    WM_NCLBUTTONDBLCLK,
     WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP,
     WM_NCMOUSELEAVE,
@@ -53,9 +50,9 @@ from ._windows_window import (
     client_position_from_l_param,
     constrain_maximized_client_area,
     read_message,
-    set_mouse_capture,
+    screen_position_from_client,
+    screen_position_from_l_param,
     set_native_frame,
-    start_system_move_or_resize,
     track_non_client_mouse_leave,
 )
 from .modern_menu import ModernMenu
@@ -231,18 +228,15 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             button.setStyleSheet(button_style(theme, self._metrics))
 
     def toggleOnTop(self) -> None:
-        was_maximized = self.parent_window.isMaximized()
-        stored_rect = self.parent_window.normalGeometry()
+        was_visible = self.parent_window.isVisible()
+        window_state = self.parent_window.windowState()
         on_top = self.pinButton.isChecked()
         self.parent_window.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, on_top)
         self.pinButton.setIcon(_resource_icon("push-pin.png" if on_top else "pin.png", self._theme))
         self.pinButton.setToolTip("取消置顶" if on_top else "置顶")
-        if was_maximized:
-            self.parent_window.showNormal()
-            self.parent_window.setGeometry(stored_rect)
-            self.parent_window.showMaximized()
-        else:
-            self.parent_window.showNormal()
+        self.parent_window.setWindowState(window_state)
+        if was_visible:
+            self.parent_window.show()
         self.parent_window.apply_window_style()
 
     def updateMaximizeIcon(self, isMaximized: bool) -> None:
@@ -259,9 +253,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             self.parent_window.showNormal()
         else:
             self.parent_window.showMaximized()
-
-    def _sync_maximize_icon(self) -> None:
-        self.updateMaximizeIcon(self.parent_window.isMaximized())
 
 
 class ModernWindow(QWidget):
@@ -289,30 +280,20 @@ class ModernWindow(QWidget):
         self.setMouseTracking(True)
         self._resize_cursor_active = False
         self._native_frame_enabled = False
-        self._native_maximize_button_pressed = False
-        self._normal_geometry_before_maximize: QRect | None = None
         self._screen_change_window: QWindow | None = None
-        self._screen_device_pixel_ratio: float | None = None
-        self._normal_logical_size = QSize(self.size())
-        self._screen_change_in_progress = False
-        self._system_move_active = False
         self._system_resize_active = False
         self._system_resize_watch_timer = QTimer(self)
         self._system_resize_watch_timer.setInterval(50)
         self._system_resize_watch_timer.timeout.connect(self._poll_system_resize_state)
-        self._screen_resize_correction_timer = QTimer(self)
-        self._screen_resize_correction_timer.setSingleShot(True)
-        self._screen_resize_correction_timer.timeout.connect(self._correct_screen_change_size)
+        self._native_frame_sync_timer = QTimer(self)
+        self._native_frame_sync_timer.setSingleShot(True)
+        self._native_frame_sync_timer.timeout.connect(self._sync_windows_native_frame)
         self._surface_refresh_timer = QTimer(self)
         self._surface_refresh_timer.setSingleShot(True)
         self._surface_refresh_timer.timeout.connect(self._refresh_window_surface)
         self._surface_settle_timer = QTimer(self)
         self._surface_settle_timer.setSingleShot(True)
         self._surface_settle_timer.timeout.connect(self._refresh_window_surface)
-        self._window_state_settle_timer = QTimer(self)
-        self._window_state_settle_timer.setSingleShot(True)
-        self._window_state_settle_timer.timeout.connect(self._sync_window_state_style)
-
         self.cornerRadius = metrics.corner_radius
         self._menu_bar: ModernMenuBar | None = None
         self._status_bar: QStatusBar | None = None
@@ -339,74 +320,12 @@ class ModernWindow(QWidget):
         if hasattr(self, "titleBar"):
             self._sync_chrome_with_window_flags()
 
-    def isMaximized(self) -> bool:
-        qt_maximized = QWidget.isMaximized(self)
-        if not self._uses_windows_window_state():
-            return qt_maximized
-        if QWidget.isMinimized(self):
-            return qt_maximized or self._is_native_maximized()
-        return self._is_native_maximized()
-
-    def showMaximized(self) -> None:
-        if not self._uses_windows_window_state():
-            QWidget.showMaximized(self)
-            return
-        if self._normal_geometry_before_maximize is None and not self.isMaximized():
-            normal_geometry = self.geometry()
-            if normal_geometry.isValid():
-                self._normal_geometry_before_maximize = QRect(normal_geometry)
-        if self.isHidden():
-            QWidget.show(self)
-        self._show_native_window(3)  # SW_MAXIMIZE
-        self._schedule_window_state_style_sync()
-
-    def showNormal(self) -> None:
-        if not self._uses_windows_window_state():
-            self._normal_geometry_before_maximize = None
-            QWidget.showNormal(self)
-            return
-        normal_geometry = self._normal_geometry_before_maximize
-        qt_state = QWidget.windowState(self)
-        if normal_geometry is None and qt_state & Qt.WindowState.WindowMaximized:
-            normal_geometry = QRect(self.normalGeometry())
-        if self.isHidden():
-            QWidget.show(self)
-        self._show_native_window(9)  # SW_RESTORE
-        if normal_geometry is not None and normal_geometry.isValid():
-            self.setGeometry(normal_geometry)
-        self._normal_geometry_before_maximize = None
-        self._schedule_window_state_style_sync()
-
-    def _show_native_window(self, command: int) -> None:
-        import ctypes
-        from ctypes import wintypes
-
-        show_window = ctypes.windll.user32.ShowWindow
-        show_window.argtypes = [wintypes.HWND, ctypes.c_int]
-        show_window.restype = wintypes.BOOL
-        show_window(wintypes.HWND(int(self.winId())), command)
-        if self.titleBar is not None:
-            self.titleBar.updateMaximizeIcon(self.isMaximized())
-
-    def _schedule_window_state_style_sync(self) -> None:
-        self._sync_window_state_style()
-        self._window_state_settle_timer.start(50)
-
     def _sync_window_state_style(self) -> None:
         is_maximized = self.isMaximized()
         if self.titleBar is not None:
             self.titleBar.updateMaximizeIcon(is_maximized)
         if not self.isMinimized():
             self.apply_window_style()
-
-    def _is_native_maximized(self) -> bool:
-        import ctypes
-        from ctypes import wintypes
-
-        is_zoomed = ctypes.windll.user32.IsZoomed
-        is_zoomed.argtypes = [wintypes.HWND]
-        is_zoomed.restype = wintypes.BOOL
-        return bool(is_zoomed(wintypes.HWND(int(self.winId()))))
 
     def initWindow(self) -> None:
         self.frame = BackgroundFrame(
@@ -455,7 +374,11 @@ class ModernWindow(QWidget):
         top_margin = self.titleBar.height() if title_bar_visible else 0
         QWidget.setContentsMargins(self, 0, top_margin, 0, 0)
         self._layout_chrome()
-        self._sync_windows_native_frame()
+        self._schedule_native_frame_sync()
+
+    def _schedule_native_frame_sync(self) -> None:
+        if hasattr(self, "_native_frame_sync_timer"):
+            self._native_frame_sync_timer.start(0)
 
     def _sync_windows_native_frame(self) -> None:
         if not self._uses_windows_window_state():
@@ -464,14 +387,30 @@ class ModernWindow(QWidget):
 
         flags = self.windowFlags()
         window_type = flags & Qt.WindowType.WindowType_Mask
-        enabled = (
-            window_type == Qt.WindowType.Window
-            and bool(flags & Qt.WindowType.WindowSystemMenuHint)
-            and bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
-        )
-        self._native_frame_enabled = enabled
-        if not set_native_frame(int(self.winId()), enabled):
+        enabled = window_type == Qt.WindowType.Window
+        window_handle = self.windowHandle()
+        if window_handle is None:
             self._native_frame_enabled = False
+            return
+        # Set this before SWP_FRAMECHANGED synchronously delivers WM_NCCALCSIZE.
+        self._native_frame_enabled = enabled
+        applied = set_native_frame(
+            int(window_handle.winId()),
+            enabled,
+            resizable=self._is_resizable(),
+            system_menu=bool(flags & Qt.WindowType.WindowSystemMenuHint),
+            minimizable=bool(flags & Qt.WindowType.WindowMinimizeButtonHint),
+            maximizable=bool(flags & Qt.WindowType.WindowMaximizeButtonHint),
+        )
+        self._native_frame_enabled = enabled and applied
+        if self._native_frame_enabled and self._resize_cursor_active:
+            self.unsetCursor()
+            self._resize_cursor_active = False
+
+    def _is_resizable(self) -> bool:
+        return (
+            self.minimumWidth() < self.maximumWidth() or self.minimumHeight() < self.maximumHeight()
+        )
 
     def apply_window_style(self) -> None:
         """Apply the same Qt-painted watercolor style on every platform."""
@@ -498,24 +437,52 @@ class ModernWindow(QWidget):
 
     def showSystemWindowMenu(self, position: QPoint) -> None:
         flags = self.windowFlags()
-        can_resize = (
-            self.minimumWidth() < self.maximumWidth() or self.minimumHeight() < self.maximumHeight()
+        if not flags & Qt.WindowType.WindowSystemMenuHint:
+            return
+        local_position = self.mapFromGlobal(position)
+        native_position = screen_position_from_client(
+            int(self.winId()),
+            local_position.x(),
+            local_position.y(),
+            self.width(),
+            self.height(),
         )
+        if native_position is not None and self._show_native_system_menu(native_position):
+            return
+        self._show_portable_system_menu(position)
+
+    def _show_native_system_menu(self, screen_position: tuple[int, int]) -> bool:
+        flags = self.windowFlags()
+        if not flags & Qt.WindowType.WindowSystemMenuHint:
+            return False
+        window_id = int(self.winId())
+        move_position = None
+        if self.titleBar is not None and self.titleBar.isVisible():
+            title_center = QPoint(self.width() // 2, self.titleBar.geometry().center().y())
+            move_position = screen_position_from_client(
+                window_id,
+                title_center.x(),
+                title_center.y(),
+                self.width(),
+                self.height(),
+            )
+        return _system_menu.show_native_system_menu(
+            window_id,
+            screen_position,
+            move_position=move_position,
+            is_minimized=self.isMinimized(),
+            is_maximized=self.isMaximized(),
+            can_resize=self._is_resizable(),
+            can_minimize=bool(flags & Qt.WindowType.WindowMinimizeButtonHint),
+            can_maximize=bool(flags & Qt.WindowType.WindowMaximizeButtonHint),
+            can_close=bool(flags & Qt.WindowType.WindowCloseButtonHint),
+        )
+
+    def _show_portable_system_menu(self, position: QPoint) -> None:
+        flags = self.windowFlags()
         can_minimize = bool(flags & Qt.WindowType.WindowMinimizeButtonHint)
         can_maximize = bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
         can_close = bool(flags & Qt.WindowType.WindowCloseButtonHint)
-        if _system_menu.show_native_system_menu(
-            int(self.winId()),
-            self.mapFromGlobal(position),
-            is_minimized=self.isMinimized(),
-            is_maximized=self.isMaximized(),
-            can_resize=can_resize,
-            can_minimize=can_minimize,
-            can_maximize=can_maximize,
-            can_close=can_close,
-            command_handler=self._handle_native_system_menu_command,
-        ):
-            return
 
         menu = ModernMenu(self, metrics=self._metrics)
         menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -532,19 +499,6 @@ class ModernWindow(QWidget):
         close_action.setEnabled(can_close)
         self._portable_system_menu = menu
         menu.popup(position)
-
-    def _handle_native_system_menu_command(self, command: int) -> bool:
-        command &= 0xFFF0
-        handlers = {
-            _system_menu.SC_MINIMIZE: self.showMinimized,
-            _system_menu.SC_MAXIMIZE: self.showMaximized,
-            _system_menu.SC_RESTORE: self.showNormal,
-        }
-        handler = handlers.get(command)
-        if handler is None:
-            return False
-        handler()
-        return True
 
     def theme(self) -> ModernTheme:
         return self._theme
@@ -600,13 +554,19 @@ class ModernWindow(QWidget):
         super().showEvent(event)
         self._connect_screen_change_signal()
         self._sync_chrome_with_window_flags()
+        self._sync_windows_native_frame()
         if not event.spontaneous():
             self.apply_window_style()
         self._schedule_surface_refresh()
 
     def event(self, event) -> bool:
         handled = super().event(event)
-        if event.type() == QEvent.Type.DevicePixelRatioChange:
+        if event.type() in (
+            QEvent.Type.WinIdChange,
+            QEvent.Type.PlatformSurface,
+        ):
+            self._schedule_native_frame_sync()
+        elif event.type() == QEvent.Type.DevicePixelRatioChange:
             self._schedule_surface_refresh()
         elif event.type() in (
             QEvent.Type.ApplicationPaletteChange,
@@ -625,13 +585,9 @@ class ModernWindow(QWidget):
         except (TypeError, ValueError):
             return super().nativeEvent(event_type, message)
 
-        if (
-            native_message.message == WM_NCCALCSIZE
-            and getattr(self, "_native_frame_enabled", False)
-            and native_message.w_param
-        ):
-            # winId() can recreate the HWND and re-enter WM_NCCALCSIZE here.
-            constrain_maximized_client_area(native_message.hwnd, native_message.l_param)
+        if native_message.message == WM_NCCALCSIZE and self._native_frame_enabled:
+            if native_message.w_param:
+                constrain_maximized_client_area(native_message.hwnd, native_message.l_param)
             return True, 0
         if native_message.message == WM_NCHITTEST and self._native_frame_enabled:
             position = client_position_from_l_param(
@@ -652,46 +608,18 @@ class ModernWindow(QWidget):
         elif native_message.message == WM_NCMOUSELEAVE:
             self._set_native_maximize_button_hovered(False)
         elif native_message.message == WM_NCLBUTTONDOWN and native_message.w_param == HTMAXBUTTON:
-            self._native_maximize_button_pressed = True
-            if self.titleBar is not None:
-                self.titleBar.maximizeButton.setDown(True)
-            set_mouse_capture(native_message.hwnd, True)
-            return True, 0
-        elif native_message.message == WM_NCLBUTTONDOWN:
-            if start_system_move_or_resize(native_message.hwnd, native_message.w_param):
-                self._system_move_active = native_message.w_param == HTCAPTION
-                if self._system_move_active:
-                    self._normal_logical_size = QSize(self.size())
-                return True, 0
-        elif native_message.message == WM_NCLBUTTONDBLCLK and native_message.w_param == HTCAPTION:
-            if self.titleBar is not None:
-                QTimer.singleShot(0, self.titleBar.changeMaximize)
-            return True, 0
+            self._set_native_maximize_button_down(True)
         elif native_message.message == WM_NCRBUTTONUP and native_message.w_param == HTCAPTION:
-            QTimer.singleShot(0, lambda: self.showSystemWindowMenu(QCursor.pos()))
-            return True, 0
-        elif native_message.message == WM_NCLBUTTONUP and self._native_maximize_button_pressed:
-            self._finish_native_maximize_button_press(native_message.w_param == HTMAXBUTTON)
-            return True, 0
-        elif native_message.message == WM_MOUSEMOVE and self._native_maximize_button_pressed:
-            if self.titleBar is not None:
-                self.titleBar.maximizeButton.setDown(
-                    self._native_hit_test_at(self.mapFromGlobal(QCursor.pos())) == HTMAXBUTTON
-                )
-        elif native_message.message == WM_LBUTTONUP and self._native_maximize_button_pressed:
-            self._finish_native_maximize_button_press(
-                self._native_hit_test_at(self.mapFromGlobal(QCursor.pos())) == HTMAXBUTTON
-            )
-            return True, 0
-        elif native_message.message == WM_CAPTURECHANGED and self._native_maximize_button_pressed:
-            self._finish_native_maximize_button_press(False, release_capture=False)
+            screen_position = screen_position_from_l_param(native_message.l_param)
+            if self._show_native_system_menu(screen_position):
+                return True, 0
+        elif native_message.message in (WM_NCLBUTTONUP, WM_CAPTURECHANGED):
+            self._set_native_maximize_button_down(False)
         elif native_message.message == WM_ENTERSIZEMOVE:
-            if not self._system_move_active:
-                self._begin_system_resize_tracking(poll_mouse_buttons=False)
+            self._begin_system_resize_tracking(poll_mouse_buttons=False)
         elif native_message.message == WM_EXITSIZEMOVE:
-            self._system_move_active = False
             self._finish_system_resize_tracking()
-            self._schedule_window_state_style_sync()
+            self._sync_window_state_style()
         return super().nativeEvent(event_type, message)
 
     def _set_native_maximize_button_hovered(self, hovered: bool) -> None:
@@ -705,26 +633,21 @@ class ModernWindow(QWidget):
         button.style().polish(button)
         button.update()
 
-    def _finish_native_maximize_button_press(
-        self, activate: bool, *, release_capture: bool = True
-    ) -> None:
-        self._native_maximize_button_pressed = False
+    def _set_native_maximize_button_down(self, down: bool) -> None:
         if self.titleBar is not None:
-            self.titleBar.maximizeButton.setDown(False)
-            if activate:
-                QTimer.singleShot(0, self.titleBar.changeMaximize)
-        if release_capture:
-            set_mouse_capture(int(self.winId()), False)
+            self.titleBar.maximizeButton.setDown(down)
 
     def _native_hit_test_at(self, position: QPoint) -> int | None:
         if not self._native_frame_enabled:
             return None
 
         if not self.isMaximized():
-            left = position.x() < 8
-            right = position.x() >= self.width() - 8
-            top = position.y() < 8
-            bottom = position.y() >= self.height() - 8
+            horizontal_resize = self.minimumWidth() < self.maximumWidth()
+            vertical_resize = self.minimumHeight() < self.maximumHeight()
+            left = horizontal_resize and position.x() < 8
+            right = horizontal_resize and position.x() >= self.width() - 8
+            top = vertical_resize and position.y() < 8
+            bottom = vertical_resize and position.y() >= self.height() - 8
             if top and left:
                 return HTTOPLEFT
             if top and right:
@@ -751,8 +674,11 @@ class ModernWindow(QWidget):
             return None
 
         title_position = title_bar.mapFrom(self, position)
-        if title_bar.maximizeButton.isVisible() and title_bar.maximizeButton.geometry().contains(
-            title_position
+        flags = self.windowFlags()
+        if (
+            flags & Qt.WindowType.WindowMaximizeButtonHint
+            and title_bar.maximizeButton.isVisible()
+            and title_bar.maximizeButton.geometry().contains(title_position)
         ):
             return HTMAXBUTTON
 
@@ -766,40 +692,10 @@ class ModernWindow(QWidget):
         if window_handle is None or window_handle is self._screen_change_window:
             return
         self._screen_change_window = window_handle
-        screen = window_handle.screen()
-        self._screen_device_pixel_ratio = screen.devicePixelRatio() if screen else None
         window_handle.screenChanged.connect(self._handle_screen_changed)
 
-    def _handle_screen_changed(self, screen) -> None:
-        previous_dpr = self._screen_device_pixel_ratio
-        current_dpr = screen.devicePixelRatio()
-        self._screen_device_pixel_ratio = current_dpr
-        if (
-            self._uses_windows_window_state()
-            and previous_dpr
-            and current_dpr
-            and previous_dpr != current_dpr
-            and not self.isMaximized()
-            and not self.isMinimized()
-            and not self._system_resize_active
-        ):
-            self._screen_change_in_progress = True
-            self._screen_resize_correction_timer.start(250)
+    def _handle_screen_changed(self, _screen) -> None:
         self._schedule_surface_refresh()
-
-    def _correct_screen_change_size(self) -> None:
-        if not self._screen_change_in_progress:
-            return
-        self._screen_change_in_progress = False
-        if (
-            not self._uses_windows_window_state()
-            or self.isMaximized()
-            or self.isMinimized()
-            or self._system_resize_active
-        ):
-            return
-        if self.size() != self._normal_logical_size:
-            self.resize(self._normal_logical_size)
 
     def _schedule_surface_refresh(self) -> None:
         if not hasattr(self, "_surface_refresh_timer"):
@@ -917,17 +813,10 @@ class ModernWindow(QWidget):
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
-            self._schedule_window_state_style_sync()
+            self._sync_window_state_style()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if (
-            not self._screen_change_in_progress
-            and not self._system_move_active
-            and not self.isMaximized()
-            and not self.isMinimized()
-        ):
-            self._normal_logical_size = QSize(event.size())
         if hasattr(self, "chromeOverlay"):
             self._layout_chrome()
 
@@ -960,7 +849,6 @@ class ModernWindow(QWidget):
             self._finish_system_resize_tracking()
 
     def hideEvent(self, event) -> None:
-        self._system_move_active = False
         self._finish_system_resize_tracking()
         super().hideEvent(event)
 
@@ -972,7 +860,11 @@ class ModernWindow(QWidget):
         ):
             watched.setMouseTracking(True)
 
-        if isinstance(watched, QWidget) and watched.window() is self:
+        if (
+            not self._native_frame_enabled
+            and isinstance(watched, QWidget)
+            and watched.window() is self
+        ):
             event_type = event.type()
             if event_type == QEvent.Type.MouseMove:
                 position = watched.mapTo(self, event.position().toPoint())
@@ -985,8 +877,6 @@ class ModernWindow(QWidget):
                     handle = self.windowHandle()
                     if handle is not None and handle.startSystemResize(edges):
                         self._begin_system_resize_tracking()
-                        self._screen_change_in_progress = False
-                        self._screen_resize_correction_timer.stop()
                         return True
             elif event_type == QEvent.Type.MouseButtonRelease:
                 self._finish_system_resize_tracking()
@@ -1004,14 +894,16 @@ class ModernWindow(QWidget):
 
         border_width = 8
         edges = Qt.Edge(0)
-        if position.x() < border_width:
-            edges |= Qt.Edge.LeftEdge
-        elif position.x() >= self.width() - border_width:
-            edges |= Qt.Edge.RightEdge
-        if position.y() < border_width:
-            edges |= Qt.Edge.TopEdge
-        elif position.y() >= self.height() - border_width:
-            edges |= Qt.Edge.BottomEdge
+        if self.minimumWidth() < self.maximumWidth():
+            if position.x() < border_width:
+                edges |= Qt.Edge.LeftEdge
+            elif position.x() >= self.width() - border_width:
+                edges |= Qt.Edge.RightEdge
+        if self.minimumHeight() < self.maximumHeight():
+            if position.y() < border_width:
+                edges |= Qt.Edge.TopEdge
+            elif position.y() >= self.height() - border_width:
+                edges |= Qt.Edge.BottomEdge
         return edges
 
     def _set_resize_cursor(self, edges: Qt.Edge) -> None:

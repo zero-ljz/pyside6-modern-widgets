@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from PySide6.QtCore import QPoint, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QRectF, QSize, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -278,10 +278,6 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self._theme = theme
         self._metrics = metrics
         self._allows_maximize = allows_maximize
-        self.drag_start_pos: QPoint | None = None
-        self.m_is_pressed = False
-        self.m_start_pos: QPoint | None = None
-        self.m_window_pos: QPoint | None = None
         self.setObjectName("CustomTitleBar")
         self.setAutoFillBackground(False)
         self._init_ui()
@@ -366,9 +362,6 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
     def setTitle(self, title: str) -> None:
         self.titleLabel.setText(title)
 
-    def _sync_maximize_icon(self) -> None:
-        pass
-
     def _toggle_maximize(self) -> None:
         if self.parent_window.isMaximized():
             self.parent_window.showNormal()
@@ -381,48 +374,19 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
             if isinstance(child, QPushButton):
                 super().mousePressEvent(event)
                 return
-            self.drag_start_pos = event.globalPosition().toPoint()
-            event.accept()
-        else:
-            super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if event.buttons() & Qt.MouseButton.LeftButton:
-            current_pos = event.globalPosition().toPoint()
-            if self._allows_maximize and self.parent_window.isMaximized() and self.drag_start_pos:
-                delta = current_pos - self.drag_start_pos
-                if delta.manhattanLength() > 5:
-                    local_x = event.position().x()
-                    local_y = event.position().y()
-                    percent_x = local_x / max(1, self.parent_window.width())
-                    width_after = self.parent_window.normalGeometry().width()
-                    self.parent_window.showNormal()
-                    new_x = current_pos.x() - int(width_after * percent_x)
-                    new_y = current_pos.y() - int(local_y)
-                    self.parent_window.move(new_x, new_y)
-                    self.m_is_pressed = True
-                    self.m_start_pos = current_pos
-                    self.m_window_pos = QPoint(new_x, new_y)
-                    self.drag_start_pos = None
-            elif self.m_is_pressed and self.m_start_pos and self.m_window_pos:
-                self.parent_window.move(self.m_window_pos + current_pos - self.m_start_pos)
-                event.accept()
-            elif self.drag_start_pos:
-                delta = current_pos - self.drag_start_pos
-                if delta.manhattanLength() > 5:
-                    handle = self.parent_window.windowHandle()
-                    if handle and handle.startSystemMove():
-                        self.drag_start_pos = None
-                        QTimer.singleShot(100, self._sync_maximize_icon)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        self.m_is_pressed = False
-        self.drag_start_pos = None
-        super().mouseReleaseEvent(event)
+            if not bool(getattr(self.parent_window, "_native_frame_enabled", False)):
+                handle = self.parent_window.windowHandle()
+                if handle is not None and handle.startSystemMove():
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:
-        if self._allows_maximize and event.button() == Qt.MouseButton.LeftButton:
+        if (
+            self._allows_maximize
+            and not bool(getattr(self.parent_window, "_native_frame_enabled", False))
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
             child = self.childAt(event.position().toPoint())
             if not isinstance(child, QPushButton):
                 self._toggle_maximize()

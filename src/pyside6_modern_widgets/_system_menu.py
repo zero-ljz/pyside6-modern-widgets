@@ -3,12 +3,6 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from PySide6.QtCore import QPoint
-
 
 SC_SIZE = 0xF000
 SC_MOVE = 0xF010
@@ -20,15 +14,15 @@ SC_RESTORE = 0xF120
 
 def show_native_system_menu(
     hwnd: int,
-    client_position: QPoint,
+    screen_position: tuple[int, int],
     *,
+    move_position: tuple[int, int] | None = None,
     is_minimized: bool,
     is_maximized: bool,
     can_resize: bool = True,
     can_minimize: bool = True,
     can_maximize: bool = True,
     can_close: bool = True,
-    command_handler: Callable[[int], bool] | None = None,
 ) -> bool:
     """Show the owning window's native system menu when the platform provides one."""
     if sys.platform != "win32":
@@ -55,10 +49,8 @@ def show_native_system_menu(
         user32.TrackPopupMenu.restype = wintypes.UINT
         user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
         user32.SetForegroundWindow.restype = wintypes.BOOL
-        user32.GetDpiForWindow.argtypes = (wintypes.HWND,)
-        user32.GetDpiForWindow.restype = wintypes.UINT
-        user32.ClientToScreen.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.POINT))
-        user32.ClientToScreen.restype = wintypes.BOOL
+        user32.SetCursorPos.argtypes = (ctypes.c_int, ctypes.c_int)
+        user32.SetCursorPos.restype = wintypes.BOOL
         user32.PostMessageW.argtypes = (
             wintypes.HWND,
             wintypes.UINT,
@@ -68,20 +60,8 @@ def show_native_system_menu(
         user32.PostMessageW.restype = wintypes.BOOL
 
         window_handle = wintypes.HWND(hwnd)
-        # Qt can leave a stale system-menu handle after applying frameless/layered styles.
-        # Reverting first asks Windows to create a fresh standard menu for this HWND.
-        user32.GetSystemMenu(window_handle, True)
         menu_handle = user32.GetSystemMenu(window_handle, False)
         if not menu_handle:
-            return False
-
-        dpi = user32.GetDpiForWindow(window_handle) or 96
-        scale = dpi / 96
-        screen_position = wintypes.POINT(
-            round(client_position.x() * scale),
-            round(client_position.y() * scale),
-        )
-        if not user32.ClientToScreen(window_handle, ctypes.byref(screen_position)):
             return False
 
         mf_bycommand = 0x0000
@@ -115,16 +95,21 @@ def show_native_system_menu(
         command = user32.TrackPopupMenu(
             menu_handle,
             tpm_rightbutton | tpm_returncmd,
-            screen_position.x,
-            screen_position.y,
+            screen_position[0],
+            screen_position[1],
             0,
             window_handle,
             None,
         )
         if not command and ctypes.get_last_error():
             return False
-        if command and not (command_handler and command_handler(command)):
-            user32.PostMessageW(window_handle, wm_syscommand, command, 0)
+        if command:
+            command_position = 0
+            if command & 0xFFF0 == SC_MOVE and move_position is not None:
+                user32.SetCursorPos(move_position[0], move_position[1])
+                command |= 2  # HTCAPTION selects native mouse-driven movement.
+                command_position = (move_position[0] & 0xFFFF) | ((move_position[1] & 0xFFFF) << 16)
+            user32.PostMessageW(window_handle, wm_syscommand, command, command_position)
         user32.PostMessageW(window_handle, wm_null, 0, 0)
         return True
     except (AttributeError, OSError, TypeError, ValueError):

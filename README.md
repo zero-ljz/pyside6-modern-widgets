@@ -22,9 +22,12 @@ Supports Windows, macOS, and Linux with Python 3.10-3.12, PySide6 6.8.3, and
 the Fusion style. Window backgrounds, including the custom title bar, use the
 same Qt-painted, wallpaper-colored theme behavior on every platform.
 
-Right-clicking the custom title bar opens the native Windows system menu. On
-platforms without an equivalent frameless-window API, a Qt menu provides the
-available restore, minimize, maximize, and close commands.
+On Windows, the custom chrome retains native activation, moving, resizing,
+minimize/maximize/restore transitions, Aero Snap, shadows, and the system menu.
+Windows 11 additionally provides DWM-rounded corners and Snap Layouts from the
+custom maximize button; Windows 10 uses an opaque square-corner surface. On
+platforms without equivalent frameless-window APIs, Qt supplies system moving,
+resizing, and a menu with the available window commands.
 
 ## Installation
 
