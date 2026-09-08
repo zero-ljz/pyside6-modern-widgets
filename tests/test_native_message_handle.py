@@ -8,7 +8,40 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from pyside6_modern_widgets import ModernWindow
-from pyside6_modern_widgets._windows_window import WM_NCCALCSIZE, WM_NCHITTEST
+from pyside6_modern_widgets._windows_window import (
+    HTCAPTION,
+    WM_NCCALCSIZE,
+    WM_NCHITTEST,
+    start_system_move_or_resize,
+)
+
+
+class _NativeFunction:
+    def __init__(self, callback) -> None:
+        self._callback = callback
+        self.argtypes = None
+        self.restype = None
+
+    def __call__(self, *args):
+        return self._callback(*args)
+
+
+class _MoveUser32:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[int, ...]]] = []
+        self.SetForegroundWindow = _NativeFunction(
+            lambda hwnd: self._record("activate", int(hwnd.value))
+        )
+        self.ReleaseCapture = _NativeFunction(lambda: self._record("release"))
+        self.PostMessageW = _NativeFunction(
+            lambda hwnd, message, command, l_param: self._record(
+                "post", int(hwnd.value), message, command, l_param
+            )
+        )
+
+    def _record(self, name: str, *args: int) -> bool:
+        self.calls.append((name, args))
+        return True
 
 
 def test_native_frame_calculation_does_not_recreate_the_window_handle(monkeypatch) -> None:
@@ -39,6 +72,18 @@ def test_native_frame_calculation_does_not_recreate_the_window_handle(monkeypatc
     assert observed == [(12345, 67890)]
     window.deleteLater()
     app.processEvents()
+
+
+def test_system_move_activates_window_before_starting_native_move(monkeypatch) -> None:
+    user32 = _MoveUser32()
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: user32)
+
+    assert start_system_move_or_resize(12345, HTCAPTION)
+    assert user32.calls == [
+        ("activate", (12345,)),
+        ("release", ()),
+        ("post", (12345, 0x0112, 0xF012, 0)),
+    ]
 
 
 @pytest.mark.parametrize("surface_name", ["chromeOverlay", "frame"])

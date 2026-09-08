@@ -143,6 +143,8 @@ def start_system_move_or_resize(hwnd: int, hit_test: int) -> bool:
 
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+        user32.SetForegroundWindow.restype = wintypes.BOOL
         user32.ReleaseCapture.argtypes = ()
         user32.ReleaseCapture.restype = wintypes.BOOL
         user32.PostMessageW.argtypes = (
@@ -152,6 +154,10 @@ def start_system_move_or_resize(hwnd: int, hit_test: int) -> bool:
             wintypes.LPARAM,
         )
         user32.PostMessageW.restype = wintypes.BOOL
+        # Handling WM_NCLBUTTONDOWN ourselves bypasses the default activation
+        # path. Activate synchronously so an inactive window cannot be dragged
+        # underneath the current foreground window.
+        user32.SetForegroundWindow(wintypes.HWND(hwnd))
         user32.ReleaseCapture()
         return bool(user32.PostMessageW(wintypes.HWND(hwnd), 0x0112, command, 0))
     except (AttributeError, OSError, TypeError, ValueError):
