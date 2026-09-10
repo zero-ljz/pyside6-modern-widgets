@@ -67,6 +67,7 @@ from ._windows_window import (
     WM_SYSCOMMAND,
     client_position_from_l_param,
     constrain_maximized_client_area,
+    is_window_maximized,
     read_message,
     redraw_native_window,
     screen_position_from_client,
@@ -730,7 +731,8 @@ class ModernWindow(QWidget):
         ):
             self._cancel_native_caption_drag(native_message.hwnd)
             if self._can_maximize():
-                QTimer.singleShot(0, self.showNormal if self.isMaximized() else self.showMaximized)
+                is_maximized = self._is_maximized_for_native_event(native_message.hwnd)
+                QTimer.singleShot(0, self.showNormal if is_maximized else self.showMaximized)
             return True, 0
 
         if native_message.message == WM_SYSCOMMAND and self._native_frame_enabled:
@@ -761,10 +763,16 @@ class ModernWindow(QWidget):
                 self.height(),
             )
             if position is not None:
-                hit_test = self._native_hit_test_at(QPoint(round(position[0]), round(position[1])))
+                hit_test = self._native_hit_test_at(
+                    QPoint(round(position[0]), round(position[1])),
+                    is_maximized=self._is_maximized_for_native_event(native_message.hwnd),
+                )
                 if hit_test is not None:
                     return True, hit_test
         elif native_message.message == WM_NCMOUSEMOVE:
+            if self._native_caption_press_position is not None:
+                self._continue_native_caption_drag(native_message.hwnd)
+                return True, 0
             hovered = native_message.w_param == HTMAXBUTTON
             self._set_native_maximize_button_hovered(hovered)
             if hovered:
@@ -779,7 +787,7 @@ class ModernWindow(QWidget):
         elif (
             native_message.message == WM_NCLBUTTONDOWN
             and native_message.w_param == HTCAPTION
-            and self.isMaximized()
+            and self._is_maximized_for_native_event(native_message.hwnd)
         ):
             self._begin_native_caption_drag(native_message.hwnd, native_message.l_param)
             return True, 0
@@ -818,6 +826,9 @@ class ModernWindow(QWidget):
             self._finish_system_resize_tracking()
             self._sync_window_state_style()
         return super().nativeEvent(event_type, message)
+
+    def _is_maximized_for_native_event(self, hwnd: int) -> bool:
+        return self.isMaximized() or is_window_maximized(hwnd)
 
     def _restore_from_native_command(self) -> None:
         if self.isMinimized():
@@ -904,6 +915,7 @@ class ModernWindow(QWidget):
             restored_width,
             restored_height,
         )
+        self._set_native_corner_preference(self.cornerRadius > 0)
 
         set_mouse_capture(hwnd, False)
         if start_system_move(hwnd):
@@ -921,13 +933,17 @@ class ModernWindow(QWidget):
         self._native_caption_press_position = None
         self._native_caption_manual_move_offset = None
 
-    def _native_hit_test_at(self, position: QPoint) -> int | None:
+    def _native_hit_test_at(
+        self, position: QPoint, *, is_maximized: bool | None = None
+    ) -> int | None:
         if not self._native_frame_enabled:
             return None
         if self.isFullScreen():
             return HTCLIENT
 
-        if not self.isMaximized():
+        if is_maximized is None:
+            is_maximized = self.isMaximized()
+        if not is_maximized:
             horizontal_resize = self.minimumWidth() < self.maximumWidth()
             vertical_resize = self.minimumHeight() < self.maximumHeight()
             left = horizontal_resize and position.x() < 8

@@ -42,6 +42,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Made maximized title-bar dragging use the native Windows maximize state when
+  Qt state updates lag, and restored rounded corners immediately on drag-restore.
 - Kept the cursor anchored to the same title-bar position when dragging a
   maximized `ModernWindow` back to its restored size.
 - Consumed native Windows maximize-button press and release messages in the

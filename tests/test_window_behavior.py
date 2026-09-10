@@ -20,6 +20,7 @@ from pyside6_modern_widgets._windows_window import (
     WM_NCLBUTTONDBLCLK,
     WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP,
+    WM_NCMOUSEMOVE,
     WM_SYSCOMMAND,
     WindowsMessage,
 )
@@ -404,17 +405,47 @@ def test_native_maximize_release_outside_only_cancels_press(monkeypatch) -> None
     window.close()
 
 
-def test_maximized_caption_press_starts_restore_drag(monkeypatch) -> None:
+@pytest.mark.parametrize(("qt_maximized", "native_maximized"), [(True, False), (False, True)])
+def test_maximized_caption_press_starts_restore_drag(
+    monkeypatch, qt_maximized, native_maximized
+) -> None:
     window = ModernWindow()
     message = WindowsMessage(hwnd=1, message=WM_NCLBUTTONDOWN, w_param=HTCAPTION, l_param=0)
     monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
     monkeypatch.setattr(modern_window_module, "read_message", lambda _message: message)
-    monkeypatch.setattr(window, "isMaximized", lambda: True)
+    monkeypatch.setattr(window, "isMaximized", lambda: qt_maximized)
+    monkeypatch.setattr(modern_window_module, "is_window_maximized", lambda hwnd: native_maximized)
     monkeypatch.setattr(modern_window_module, "set_mouse_capture", lambda *_args: None)
     window._native_frame_enabled = True
 
     assert window.nativeEvent(b"windows_generic_MSG", 0) == (True, 0)
     assert window._native_caption_press_position is not None
+    window.close()
+
+
+def test_native_maximize_state_disables_top_resize_hit_test() -> None:
+    window = ModernWindow()
+    window.resize(800, 500)
+    window.show()
+    _APP.processEvents()
+    window._native_frame_enabled = True
+
+    assert window._native_hit_test_at(QPoint(400, 1), is_maximized=True) == HTCAPTION
+    window.close()
+
+
+def test_non_client_move_continues_pending_caption_drag(monkeypatch) -> None:
+    window = ModernWindow()
+    message = WindowsMessage(hwnd=1, message=WM_NCMOUSEMOVE, w_param=HTCAPTION, l_param=0)
+    calls: list[int] = []
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(modern_window_module, "read_message", lambda _message: message)
+    monkeypatch.setattr(window, "_continue_native_caption_drag", calls.append)
+    window._native_frame_enabled = True
+    window._native_caption_press_position = QPoint(100, 20)
+
+    assert window.nativeEvent(b"windows_generic_MSG", 0) == (True, 0)
+    assert calls == [1]
     window.close()
 
 
@@ -429,6 +460,7 @@ def test_caption_restore_drag_keeps_cursor_anchor(
     window = ModernWindow()
     positions = iter((QPoint(press_x, 20), QPoint(press_x + 10, 30), QPoint(press_x + 30, 50)))
     capture_calls: list[tuple[int, bool]] = []
+    corner_calls: list[bool] = []
     monkeypatch.setattr(
         modern_window_module,
         "QCursor",
@@ -449,6 +481,7 @@ def test_caption_restore_drag_keeps_cursor_anchor(
         "set_mouse_capture",
         lambda hwnd, captured: capture_calls.append((hwnd, captured)),
     )
+    monkeypatch.setattr(window, "_set_native_corner_preference", corner_calls.append)
 
     def start_move(hwnd: int) -> bool:
         assert hwnd == 1
@@ -462,6 +495,7 @@ def test_caption_restore_drag_keeps_cursor_anchor(
     window._continue_native_caption_drag(1)
     first_anchor = QPoint(press_x + 10, 30) - window.geometry().topLeft()
     assert first_anchor == QPoint(anchor_x, 20)
+    assert corner_calls == [True]
     if native_move_started:
         assert window._native_caption_manual_move_offset is None
         assert capture_calls == [(1, True), (1, False)]

@@ -97,6 +97,17 @@ def read_message(address: int) -> WindowsMessage:
     )
 
 
+def is_window_maximized(hwnd: int) -> bool:
+    """Return the Win32 maximize state when Qt's state has not caught up yet."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.IsZoomed.argtypes = (wintypes.HWND,)
+        user32.IsZoomed.restype = wintypes.BOOL
+        return bool(user32.IsZoomed(wintypes.HWND(hwnd)))
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+
+
 def track_non_client_mouse_leave(hwnd: int) -> None:
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)

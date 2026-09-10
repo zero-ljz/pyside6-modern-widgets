@@ -36,6 +36,16 @@ class _MoveUser32:
         return True
 
 
+@pytest.mark.parametrize("zoomed", [False, True])
+def test_native_maximize_state(monkeypatch, zoomed) -> None:
+    class User32:
+        IsZoomed = _NativeFunction(lambda hwnd: int(hwnd.value == 12345 and zoomed))
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())
+
+    assert _windows_window.is_window_maximized(12345) is zoomed
+
+
 def test_l_param_coordinates_use_full_width_cursor_position_when_available(monkeypatch) -> None:
     x, y = 70_000, -40_000
     l_param = (x & 0xFFFF) | ((y & 0xFFFF) << 16)
