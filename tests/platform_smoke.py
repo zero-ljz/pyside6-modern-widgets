@@ -12,11 +12,15 @@ from PySide6.QtWidgets import QApplication
 
 from pyside6_modern_widgets import ModernWindow
 from pyside6_modern_widgets._windows_window import (
+    HTCAPTION,
     HTMAXBUTTON,
+    WM_NCLBUTTONDBLCLK,
     WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP,
+    WM_SYSCOMMAND,
     WS_MAXIMIZEBOX,
     WS_THICKFRAME,
+    _client_metrics,
 )
 
 
@@ -65,6 +69,30 @@ def main() -> int:
         assert send_message(hwnd, WM_NCLBUTTONUP, HTMAXBUTTON, 0) == 0
         _wait(app)
         assert not window.isMaximized()
+
+        normal_geometry = window.geometry()
+        normal_client = _client_metrics(hwnd)
+        assert normal_client is not None
+        # A native caption double-click used to lose the normal geometry;
+        # following it with the Qt restore button then clipped the client area.
+        for maximize_message, restore_message in (
+            ((WM_NCLBUTTONDBLCLK, HTCAPTION), None),
+            ((WM_SYSCOMMAND, 0xF030), (WM_NCLBUTTONDBLCLK, HTCAPTION)),
+            ((WM_NCLBUTTONDBLCLK, HTCAPTION), (WM_SYSCOMMAND, 0xF120)),
+        ):
+            send_message(hwnd, *maximize_message, 0)
+            _wait(app)
+            assert window.isMaximized()
+            assert window.normalGeometry() == normal_geometry
+            if restore_message is None:
+                send_message(hwnd, WM_NCLBUTTONDOWN, HTMAXBUTTON, 0)
+                send_message(hwnd, WM_NCLBUTTONUP, HTMAXBUTTON, 0)
+            else:
+                send_message(hwnd, *restore_message, 0)
+            _wait(app)
+            assert not window.isMaximized()
+            assert window.geometry() == normal_geometry
+            assert _client_metrics(hwnd) == normal_client
 
         window.setFixedSize(normal_size)
         _wait(app)

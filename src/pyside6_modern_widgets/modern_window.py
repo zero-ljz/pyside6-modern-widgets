@@ -55,11 +55,13 @@ from ._windows_window import (
     WM_MOUSEMOVE,
     WM_NCCALCSIZE,
     WM_NCHITTEST,
+    WM_NCLBUTTONDBLCLK,
     WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP,
     WM_NCMOUSELEAVE,
     WM_NCMOUSEMOVE,
     WM_NCRBUTTONUP,
+    WM_SYSCOMMAND,
     client_position_from_l_param,
     constrain_maximized_client_area,
     read_message,
@@ -299,7 +301,8 @@ class ModernWindow(QWidget):
         self._native_frame_refresh_pending = False
         self._native_maximize_button_pressed = False
         self._native_caption_press_position: QPoint | None = None
-        self._native_caption_anchor_ratio = 0.5
+        self._native_caption_anchor_x = 0
+        self._native_caption_anchor_from_right = False
         self._native_caption_anchor_y = 0
         self._native_caption_manual_move_offset: QPoint | None = None
         self._application_event_filter_installed = False
@@ -700,6 +703,29 @@ class ModernWindow(QWidget):
         except (TypeError, ValueError):
             return super().nativeEvent(event_type, message)
 
+        if (
+            native_message.message == WM_NCLBUTTONDBLCLK
+            and native_message.w_param == HTCAPTION
+            and self._native_frame_enabled
+        ):
+            self._cancel_native_caption_drag(native_message.hwnd)
+            if self._can_maximize():
+                QTimer.singleShot(0, self.showNormal if self.isMaximized() else self.showMaximized)
+            return True, 0
+
+        if native_message.message == WM_SYSCOMMAND and self._native_frame_enabled:
+            # DefWindowProc's caption double-click and system menu must use the
+            # same state path as our buttons. Native maximization of a Qt
+            # frameless window otherwise loses Qt's saved normal geometry.
+            command = native_message.w_param & 0xFFF0
+            if command == _system_menu.SC_MAXIMIZE:
+                if self._can_maximize():
+                    QTimer.singleShot(0, self.showMaximized)
+                return True, 0
+            if command == _system_menu.SC_RESTORE:
+                QTimer.singleShot(0, self._restore_from_native_command)
+                return True, 0
+
         if native_message.message in (WM_DISPLAYCHANGE, WM_DPICHANGED):
             self._schedule_native_frame_sync(force_refresh=True)
             self._schedule_surface_refresh()
@@ -735,7 +761,7 @@ class ModernWindow(QWidget):
             and native_message.w_param == HTCAPTION
             and self.isMaximized()
         ):
-            self._begin_native_caption_drag(native_message.hwnd)
+            self._begin_native_caption_drag(native_message.hwnd, native_message.l_param)
             return True, 0
         elif native_message.message == WM_NCRBUTTONUP and native_message.w_param == HTCAPTION:
             screen_position = screen_position_from_l_param(native_message.l_param)
@@ -773,6 +799,14 @@ class ModernWindow(QWidget):
             self._sync_window_state_style()
         return super().nativeEvent(event_type, message)
 
+    def _restore_from_native_command(self) -> None:
+        if self.isMinimized():
+            # Restoring a minimized maximized window keeps it maximized.
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+            self.show()
+        else:
+            self.showNormal()
+
     def _set_native_maximize_button_hovered(self, hovered: bool) -> None:
         if self.titleBar is None:
             return
@@ -792,13 +826,23 @@ class ModernWindow(QWidget):
         self._native_maximize_button_pressed = False
         self._set_native_maximize_button_down(False)
 
-    def _begin_native_caption_drag(self, hwnd: int) -> None:
-        position = QCursor.pos()
-        local_position = self.mapFromGlobal(position)
+    def _begin_native_caption_drag(self, hwnd: int, l_param: int) -> None:
+        # Use the press message, not a later cursor sample: the mouse may have
+        # already moved by the time Qt delivers the non-client button press.
+        client_position = client_position_from_l_param(hwnd, l_param, self.width(), self.height())
+        if client_position is None:
+            position = QCursor.pos()
+            local_position = self.mapFromGlobal(position)
+        else:
+            local_position = QPoint(round(client_position[0]), round(client_position[1]))
+            position = self.mapToGlobal(local_position)
         self._native_caption_press_position = position
-        self._native_caption_anchor_ratio = max(
-            0.0,
-            min(1.0, local_position.x() / max(1, self.width())),
+        self._native_caption_anchor_from_right = local_position.x() > self.width() // 2
+        self._native_caption_anchor_x = max(
+            0,
+            self.width() - local_position.x()
+            if self._native_caption_anchor_from_right
+            else local_position.x(),
         )
         title_height = self.titleBar.height() if self.titleBar is not None else 0
         self._native_caption_anchor_y = max(0, min(local_position.y(), title_height))
@@ -822,8 +866,13 @@ class ModernWindow(QWidget):
             normal_geometry = self.geometry()
         restored_width = normal_geometry.width()
         restored_height = normal_geometry.height()
+        # Preserve the distance from the nearest edge. Scaling the offset by
+        # the window width shifts blank caption space onto fixed-width buttons.
+        anchor_x = min(self._native_caption_anchor_x, restored_width // 2)
+        if self._native_caption_anchor_from_right:
+            anchor_x = restored_width - anchor_x
         restored_top_left = QPoint(
-            position.x() - round(restored_width * self._native_caption_anchor_ratio),
+            position.x() - anchor_x,
             position.y() - self._native_caption_anchor_y,
         )
 

@@ -21,6 +21,7 @@ WM_NCLBUTTONDOWN = 0x00A1
 WM_NCLBUTTONUP = 0x00A2
 WM_NCLBUTTONDBLCLK = 0x00A3
 WM_NCRBUTTONUP = 0x00A5
+WM_SYSCOMMAND = 0x0112
 WM_DISPLAYCHANGE = 0x007E
 WM_DPICHANGED = 0x02E0
 WM_MOUSEMOVE = 0x0200
@@ -130,6 +131,13 @@ def set_mouse_capture(hwnd: int, captured: bool) -> None:
 
 def start_system_move(hwnd: int) -> bool:
     """Start a Win32 caption move after the current native message returns."""
+    position = _cursor_screen_position()
+    if position is None:
+        return False
+    # SC_MOVE | HTCAPTION is a mouse-initiated move. Its LPARAM must carry
+    # physical screen coordinates, just like WM_NCLBUTTONDOWN. A zero value
+    # can make Windows reposition the cursor when it takes over the drag.
+    l_param = (position[0] & 0xFFFF) | ((position[1] & 0xFFFF) << 16)
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
         user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
@@ -147,7 +155,7 @@ def start_system_move(hwnd: int) -> bool:
         window_handle = wintypes.HWND(hwnd)
         user32.SetForegroundWindow(window_handle)
         user32.ReleaseCapture()
-        return bool(user32.PostMessageW(window_handle, 0x0112, 0xF010 | HTCAPTION, 0))
+        return bool(user32.PostMessageW(window_handle, 0x0112, 0xF010 | HTCAPTION, l_param))
     except (AttributeError, OSError, TypeError, ValueError):
         return False
 
@@ -171,7 +179,17 @@ def constrain_maximized_client_area(hwnd: int, l_param: int) -> None:
             return
 
         parameters = ctypes.cast(l_param, ctypes.POINTER(_NcCalcSizeParams)).contents
-        parameters.rgrc[0] = monitor_info.rcWork
+        proposed = parameters.rgrc[0]
+        work = monitor_info.rcWork
+        # IsZoomed can still describe the old state during a restore. Only trim
+        # an actual maximized frame; never expand a smaller proposed client area.
+        if (
+            proposed.left <= work.left
+            and proposed.top <= work.top
+            and proposed.right >= work.right
+            and proposed.bottom >= work.bottom
+        ):
+            parameters.rgrc[0] = work
     except (AttributeError, OSError, TypeError, ValueError):
         return
 
