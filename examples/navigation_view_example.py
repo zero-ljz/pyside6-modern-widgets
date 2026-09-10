@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from pyside6_modern_widgets import (
     ModernDialog,
     ModernMenu,
+    ModernMenuBar,
     ModernMessageBox,
     ModernWindow,
     NavigationPosition,
@@ -37,6 +38,8 @@ class ExampleWindow(ModernWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Modern Widgets Example")
+        self.setTitleVisible(False)
+        self.setTitleAlignment("center")
         self.setWindowIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
         self.resize(1000, 640)
 
@@ -326,15 +329,83 @@ class ExampleWindow(ModernWindow):
         self.compact_action.toggled.connect(self.navigation.sidebar.setCollapsed)
         self.navigation.sidebar.collapsedChanged.connect(self.compact_action.setChecked)
 
+        self.new_window_action = QAction("New window", self)
+        self.new_window_action.setShortcut(QKeySequence.StandardKey.New)
+        self.new_window_action.triggered.connect(lambda: self._show_action_message("New window"))
+
+        self.open_action = QAction("Open...", self)
+        self.open_action.setShortcut(QKeySequence.StandardKey.Open)
+        self.open_action.triggered.connect(lambda: self._show_action_message("Open"))
+
+        self.preferences_action = QAction("Preferences...", self)
+        self.preferences_action.triggered.connect(lambda: self.navigation.setCurrentIndex(4))
+
+        self.about_action = QAction("About Modern Widgets", self)
+        self.about_action.triggered.connect(
+            lambda: self._show_action_message("Modern Widgets Example")
+        )
+
         self.exit_action = QAction("Exit", self)
         self.exit_action.setShortcut(QKeySequence("Ctrl+Q"))
         self.exit_action.triggered.connect(self.close)
 
     def _create_menu_bar(self) -> None:
-        file_menu = self.menuBar().addMenu("&File")
+        menu_bar = ModernMenuBar(self)
+        menu_bar.setNativeMenuBar(False)
+        file_menu = menu_bar.addMenu("&File")
+        file_menu.addAction(self.new_window_action)
+        file_menu.addAction(self.open_action)
+        recent_menu = file_menu.addMenu("Open recent")
+        recent_menu.addAction(
+            "project-notes.md", lambda: self._show_action_message("project-notes.md")
+        )
+        recent_menu.addAction(
+            "theme-preview.py", lambda: self._show_action_message("theme-preview.py")
+        )
+        file_menu.addSeparator()
         file_menu.addAction(self.exit_action)
-        view_menu = self.menuBar().addMenu("&View")
+
+        edit_menu = menu_bar.addMenu("&Edit")
+        undo_action = edit_menu.addAction("Undo")
+        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        undo_action.setEnabled(False)
+        redo_action = edit_menu.addAction("Redo")
+        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
+        redo_action.setEnabled(False)
+        edit_menu.addSeparator()
+        for text, shortcut in (
+            ("Cut", QKeySequence.StandardKey.Cut),
+            ("Copy", QKeySequence.StandardKey.Copy),
+            ("Paste", QKeySequence.StandardKey.Paste),
+        ):
+            action = edit_menu.addAction(text)
+            action.setShortcut(shortcut)
+            action.triggered.connect(
+                lambda _checked=False, name=text: self._show_action_message(name)
+            )
+
+        view_menu = menu_bar.addMenu("&View")
         view_menu.addAction(self.compact_action)
+        navigate_menu = menu_bar.addMenu("&Navigate")
+        for index, page_name in enumerate(self._page_names):
+            action = navigate_menu.addAction(page_name)
+            action.triggered.connect(
+                lambda _checked=False, target=index: self.navigation.setCurrentIndex(target)
+            )
+
+        tools_menu = menu_bar.addMenu("&Tools")
+        tools_menu.addAction(self.preferences_action)
+        tools_menu.addSeparator()
+        tools_menu.addAction("Check for updates", lambda: self._show_action_message("Up to date"))
+
+        help_menu = menu_bar.addMenu("&Help")
+        help_menu.addAction("Documentation", lambda: self._show_action_message("Documentation"))
+        help_menu.addAction(self.about_action)
+        assert self.titleBar is not None
+        self.titleBar.addCustomWidget(menu_bar, align="left")
+
+    def _show_action_message(self, message: str) -> None:
+        self.statusBar().showMessage(message, 3000)
 
     def _page_changed(self, index: int) -> None:
         if 0 <= index < len(self._page_names):

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Literal
+
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
@@ -85,17 +88,6 @@ from .theme import (
 )
 
 _DEFAULT_WINDOW_FLAGS = Qt.WindowType.Widget
-
-
-def _menu_bar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
-    return f"""
-    QMenuBar {{ background: transparent; border: none; }}
-    QMenuBar::item {{ background: transparent; }}
-    QMenuBar::item:selected {{
-        background: {theme.control_pressed};
-        border-radius: {metrics.control_radius}px;
-    }}
-    """
 
 
 def _resource_icon(name: str, theme: ModernTheme) -> QIcon:
@@ -539,8 +531,9 @@ class ModernWindow(QWidget):
             self.titleBar.setTheme(self._theme)
             self.titleBar.raise_()
             self._sync_inactive_title_color()
-        if self._menu_bar is not None:
-            self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
+        menu_bars: Iterable[ModernMenuBar] = self.findChildren(ModernMenuBar)
+        for menu_bar in menu_bars:
+            menu_bar._apply_theme()
         self.frame.update()
         self.update()
 
@@ -661,6 +654,33 @@ class ModernWindow(QWidget):
         super().setWindowTitle(title)
         if hasattr(self, "titleBar") and self.titleBar is not None:
             self.titleBar.setTitle(title)
+
+    def setTitleVisible(self, visible: bool) -> None:
+        """Show or hide title text without changing the window title or icon visibility."""
+        if self.titleBar is not None:
+            self.titleBar.setTitleVisible(visible)
+
+    def isTitleVisible(self) -> bool:
+        """Return whether title text is enabled, even in a hidden window."""
+        return self.titleBar is not None and self.titleBar.isTitleVisible()
+
+    def setIconVisible(self, visible: bool) -> None:
+        """Show or hide the title bar icon without changing the actual window icon."""
+        if self.titleBar is not None:
+            self.titleBar.setIconVisible(visible)
+
+    def isIconVisible(self) -> bool:
+        """Return the icon visibility setting, even in a hidden window or with no icon."""
+        return self.titleBar is not None and self.titleBar.isIconVisible()
+
+    def setTitleAlignment(self, alignment: Literal["left", "center"]) -> None:
+        """Align title text left (default) or centered; the icon stays at the left."""
+        if self.titleBar is not None:
+            self.titleBar.setTitleAlignment(alignment)
+
+    def titleAlignment(self) -> Literal["left", "center"]:
+        """Return the configured alignment of the title text."""
+        return self.titleBar.titleAlignment() if self.titleBar is not None else "left"
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -1100,7 +1120,6 @@ class ModernWindow(QWidget):
             assert self.frameLayout is not None
             self._menu_bar = ModernMenuBar(self, metrics=self._metrics)
             self._menu_bar.destroyed.connect(self._clear_menu_bar)
-            self._menu_bar.setStyleSheet(_menu_bar_style(self._theme, self._metrics))
             self.frameLayout.insertWidget(0, self._menu_bar)
             self._install_resize_filters(self._menu_bar)
             self._sync_inactive_title_color()

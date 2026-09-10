@@ -70,6 +70,39 @@ app.exec()
 
 `ModernWindow.menuBar()` returns a `ModernMenuBar`, so menus created from a
 title or icon automatically use `ModernMenu`, including nested submenus.
+`ModernMenuBar` itself provides a transparent background and rounded selection
+highlight, including when constructed manually. It follows its containing
+modern window's theme, or the global theme when used on its own.
+When space is limited, its overflow button also opens a `ModernMenu` with the
+same rounded surface and selection styling as the regular drop-down menus.
+
+To place a manually created menu bar in the title bar's left control area:
+
+```python
+from pyside6_modern_widgets import ModernMenuBar
+
+menu_bar = ModernMenuBar(window)
+menu_bar.setNativeMenuBar(False)
+menu_bar.addMenu("&File").addAction("Open")
+window.titleBar.addCustomWidget(menu_bar, align="left")
+window.setTitleVisible(False)
+```
+
+`setTitleVisible()` controls only title text. `setIconVisible()` independently
+controls the title bar icon. Both default to `True` and preserve the actual
+window title and icon used by the operating system. Updating either while it is
+hidden does not show it again. `isTitleVisible()` and `isIconVisible()` return
+the configured visibility, even when the window itself is hidden. An empty
+window icon is not drawn, regardless of the icon visibility setting.
+
+The icon stays at the far left whenever it is visible. Title text is left-aligned
+by default, between the icon and left custom widgets such as menus. Use
+`setTitleAlignment("center")` to center only the text on the window, with menus
+following the icon, or `setTitleAlignment("left")` to restore the default order.
+`titleAlignment()` returns the selected mode. In narrow windows, the centered
+text stays within the space between the left controls and the window buttons.
+Blank space remains available for dragging. Right custom widgets appear before
+the window buttons. All six methods are also available on `window.titleBar`.
 
 An existing top-level `QWidget` subclass can keep its direct layout when its
 base class changes to `ModernWindow`. The standard `QWidget(parent, f)`

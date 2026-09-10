@@ -7,9 +7,11 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from pyside6_modern_widgets import ModernWindow
+from pyside6_modern_widgets import ModernMenuBar, ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
 from pyside6_modern_widgets._windows_window import (
     HTCAPTION,
@@ -23,6 +25,218 @@ from pyside6_modern_widgets._windows_window import (
 )
 
 _APP = QApplication.instance() or QApplication([])
+
+
+def test_title_visibility_preserves_menu_order_buttons_and_drag_area() -> None:
+    window = ModernWindow()
+    window.setWindowTitle("Original title")
+    assert window.isTitleVisible()
+    window.setTitleVisible(False)
+    assert not window.isTitleVisible()
+    assert window.windowTitle() == "Original title"
+
+    icon = QPixmap(20, 20)
+    icon.fill(Qt.GlobalColor.blue)
+    window.setWindowIcon(QIcon(icon))
+    title_bar = window.titleBar
+    assert title_bar is not None
+    menu_bar = ModernMenuBar(window)
+    menu_bar.setNativeMenuBar(False)
+    menu_bar.addMenu("File").addAction("Open")
+    title_bar.addCustomWidget(menu_bar, align="left")
+    window.resize(800, 400)
+    window.show()
+    _APP.processEvents()
+    assert window.root_layout is None
+    assert title_bar.iconLabel.isVisible()
+    close_position = title_bar.closeButton.pos()
+
+    for visible in (False, True, False, True):
+        window.setTitleVisible(visible)
+        window.setWindowTitle("Updated title")
+        _APP.processEvents()
+        assert window.isTitleVisible() == visible
+        assert title_bar.titleLabel.isVisible() == visible
+        assert title_bar.iconLabel.isVisible()
+        assert title_bar.titleLabel.text() == "Updated title"
+        assert title_bar.closeButton.pos() == close_position
+        if not visible:
+            assert menu_bar.width() == menu_bar.sizeHint().width()
+        else:
+            assert title_bar.iconLabel.geometry().right() < title_bar.titleLabel.x()
+            assert title_bar.titleLabel.geometry().right() < menu_bar.x()
+        assert menu_bar.geometry().right() < title_bar.menuButton.geometry().left() - 100
+        window._native_frame_enabled = True
+        assert (
+            window._native_hit_test_at(
+                menu_bar.mapTo(window, menu_bar.actionGeometry(menu_bar.actions()[0]).center())
+            )
+            != HTCAPTION
+        )
+        assert window._native_hit_test_at(QPoint(400, title_bar.height() // 2)) == HTCAPTION
+
+    window.hide()
+    assert window.isTitleVisible()
+    window.close()
+
+
+@pytest.mark.parametrize("title_visible", [True, False])
+@pytest.mark.parametrize("alignment", ["left", "center"])
+def test_space_after_title_bar_menus_can_drag_window(monkeypatch, title_visible, alignment) -> None:
+    window = ModernWindow()
+    window.setGeometry(100, 100, 900, 400)
+    window.setWindowTitle("Window title")
+    window.setTitleVisible(title_visible)
+    window.setTitleAlignment(alignment)
+    title_bar = window.titleBar
+    assert title_bar is not None
+    menu_bar = ModernMenuBar(window)
+    menu_bar.setNativeMenuBar(False)
+    menu_bar.addMenu("File").addAction("Open")
+    title_bar.addCustomWidget(menu_bar, align="left")
+    window.show()
+    _APP.processEvents()
+
+    menu_item = menu_bar.actionGeometry(menu_bar.actions()[-1])
+    menu_end = menu_bar.mapTo(title_bar, menu_item.topRight()).x()
+    gap_end = (
+        title_bar.titleLabel.x()
+        if title_visible and alignment == "center"
+        else title_bar.menuButton.x()
+    )
+    gap = QPoint((menu_end + gap_end) // 2, title_bar.height() // 2)
+    window._native_frame_enabled = True
+    assert window._native_hit_test_at(gap) == HTCAPTION
+    assert window._native_hit_test_at(menu_bar.mapTo(window, menu_item.center())) != HTCAPTION
+
+    # Exercise the portable drag path as well as Windows caption hit testing.
+    window._native_frame_enabled = False
+    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: False)
+    receiver = title_bar.childAt(gap) or title_bar
+    position = receiver.mapFrom(title_bar, gap)
+    original_position = window.pos()
+    delta = QPoint(40, 20)
+    QTest.mousePress(receiver, Qt.MouseButton.LeftButton, pos=position)
+    QTest.mouseMove(receiver, position + delta)
+    QTest.mouseRelease(receiver, Qt.MouseButton.LeftButton, pos=position + delta)
+    assert window.pos() == original_position + delta
+
+    QTest.mouseClick(menu_bar, Qt.MouseButton.LeftButton, pos=menu_item.center())
+    _APP.processEvents()
+    assert menu_bar.actions()[0].menu().isVisible()
+    menu_bar.actions()[0].menu().close()
+    window.close()
+
+
+def test_title_stays_centered_when_menus_change_and_avoids_controls_when_narrow() -> None:
+    window = ModernWindow()
+    window.resize(1000, 400)
+    window.setWindowTitle("Centered title")
+    assert window.titleAlignment() == "left"
+    window.setTitleAlignment("center")
+    icon = QPixmap(20, 20)
+    icon.fill(Qt.GlobalColor.blue)
+    window.setWindowIcon(QIcon(icon))
+    title_bar = window.titleBar
+    assert title_bar is not None
+    menu_bar = ModernMenuBar(window)
+    menu_bar.setNativeMenuBar(False)
+    title_bar.addCustomWidget(menu_bar, align="left")
+    window.show()
+    _APP.processEvents()
+    icon_position = title_bar.iconLabel.pos()
+
+    for name in ("File", "Edit", "View"):
+        menu_bar.addMenu(name)
+        _APP.processEvents()
+        assert (
+            abs(title_bar.titleLabel.geometry().center().x() - title_bar.rect().center().x()) <= 1
+        )
+        assert title_bar.iconLabel.geometry().right() < title_bar.titleLabel.x()
+        assert title_bar.iconLabel.pos() == icon_position
+        assert title_bar.iconLabel.geometry().right() < menu_bar.x()
+        assert menu_bar.geometry().right() < title_bar.titleLabel.x()
+
+    window.setWindowTitle("Updated centered title")
+    window.resize(1200, 400)
+    _APP.processEvents()
+    assert abs(title_bar.titleLabel.geometry().center().x() - title_bar.rect().center().x()) <= 1
+
+    window.resize(420, 400)
+    _APP.processEvents()
+    assert title_bar.titleLabel.width() < title_bar.titleLabel.sizeHint().width()
+    assert menu_bar.geometry().right() < title_bar.titleLabel.x()
+    assert title_bar.titleLabel.geometry().right() < title_bar.menuButton.x()
+
+    window.resize(1000, 400)
+    window.setTitleVisible(False)
+    _APP.processEvents()
+    window.setTitleVisible(True)
+    assert abs(title_bar.titleLabel.geometry().center().x() - title_bar.rect().center().x()) <= 1
+    window.setTitleAlignment("left")
+    _APP.processEvents()
+    assert window.titleAlignment() == "left"
+    assert title_bar.iconLabel.x() == title_bar.main_layout.contentsMargins().left()
+    assert title_bar.iconLabel.pos() == icon_position
+    assert title_bar.iconLabel.geometry().right() < title_bar.titleLabel.x()
+    assert title_bar.titleLabel.geometry().right() < menu_bar.x()
+    window.setTitleAlignment("center")
+    _APP.processEvents()
+    assert title_bar.iconLabel.pos() == icon_position
+    assert title_bar.iconLabel.geometry().right() < menu_bar.x()
+    assert abs(title_bar.titleLabel.geometry().center().x() - title_bar.rect().center().x()) <= 1
+    with pytest.raises(ValueError, match="title alignment"):
+        window.setTitleAlignment("right")
+    assert window.titleAlignment() == "center"
+    window.close()
+
+
+@pytest.mark.parametrize("alignment", ["left", "center"])
+@pytest.mark.parametrize("title_visible", [True, False])
+@pytest.mark.parametrize("icon_visible", [True, False])
+def test_title_and_icon_visibility_are_independent(alignment, title_visible, icon_visible) -> None:
+    window = ModernWindow()
+    window.setTitleAlignment(alignment)
+    assert window.isTitleVisible()
+    assert window.isIconVisible()
+    window.setTitleVisible(title_visible)
+    window.setIconVisible(icon_visible)
+    icon = QPixmap(20, 20)
+    icon.fill(Qt.GlobalColor.blue)
+    window.setWindowIcon(QIcon(icon))
+    window.setWindowTitle("Updated while hidden")
+    window.show()
+    _APP.processEvents()
+    title_bar = window.titleBar
+    assert title_bar is not None
+    assert window.isTitleVisible() == title_visible
+    assert window.isIconVisible() == icon_visible
+    assert title_bar.iconLabel.isVisible() == icon_visible
+    assert title_bar.titleLabel.isVisible() == title_visible
+    assert window.windowTitle() == "Updated while hidden"
+    assert not window.windowIcon().isNull()
+
+    window.setTitleVisible(not title_visible)
+    _APP.processEvents()
+    assert title_bar.iconLabel.isVisible() == icon_visible
+    assert title_bar.titleLabel.isVisible() != title_visible
+    assert title_bar.titleLabel.text() == "Updated while hidden"
+    window.setIconVisible(not icon_visible)
+    _APP.processEvents()
+    assert title_bar.iconLabel.isVisible() != icon_visible
+    assert title_bar.titleLabel.isVisible() != title_visible
+
+    window.setWindowIcon(QIcon())
+    window.setIconVisible(True)
+    assert title_bar.iconLabel.isHidden()
+    assert window.isIconVisible()
+    assert title_bar.titleLabel.isVisible() != title_visible
+    window.setWindowIcon(QIcon(icon))
+    assert not title_bar.iconLabel.isHidden()
+    window.hide()
+    assert window.isIconVisible()
+    assert window.isTitleVisible() != title_visible
+    window.close()
 
 
 @pytest.mark.parametrize(

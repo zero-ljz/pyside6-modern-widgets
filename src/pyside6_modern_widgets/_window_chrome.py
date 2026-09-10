@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QSpacerItem,
     QWidget,
 )
 
@@ -313,6 +314,10 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self._theme = theme
         self._metrics = metrics
         self._allows_maximize = allows_maximize
+        self._title_alignment: Literal["left", "center"] = "left"
+        self._title_visible = True
+        self._icon_visible = True
+        self._has_icon = False
         self._manual_move_offset: QPoint | None = None
         self.setObjectName("CustomTitleBar")
         self.setAutoFillBackground(False)
@@ -330,23 +335,27 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.main_layout.setContentsMargins(5, vertical_padding, 5, vertical_padding)
         self.main_layout.setSpacing(5)
 
-        self.left_layout = QHBoxLayout()
-        self.left_layout.setContentsMargins(0, 0, 0, 0)
-        self.left_layout.setSpacing(1)
-        self.main_layout.addLayout(self.left_layout)
-
         self.iconLabel = QLabel(self)
         self.iconLabel.setFixedSize(20, 20)
         self.iconLabel.setScaledContents(True)
         self.iconLabel.hide()
         self.main_layout.addWidget(self.iconLabel)
 
+        self.left_layout = QHBoxLayout()
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_layout.setSpacing(1)
+        self.main_layout.addLayout(self.left_layout)
+
         self.titleLabel = QLabel(self.parent_window.windowTitle(), self)
         self.titleLabel.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.titleLabel.setObjectName("ModernWindowTitle")
         self.titleLabel.setMinimumWidth(0)
-        self.titleLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.main_layout.addWidget(self.titleLabel)
+        self.main_layout.insertWidget(1, self.titleLabel, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._title_spacer = QSpacerItem(
+            0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        self.main_layout.addSpacerItem(self._title_spacer)
+        self.main_layout.setStretch(self.main_layout.count() - 1, 1)
 
         self.right_layout = QHBoxLayout()
         self.right_layout.setContentsMargins(0, 0, 0, 0)
@@ -363,12 +372,34 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.main_layout.addWidget(self.closeButton)
         WindowTitleBar.setTheme(self, self._theme)
 
+    def event(self, event) -> bool:
+        handled = super().event(event)
+        if event.type() in (QEvent.Type.LayoutRequest, QEvent.Type.Resize) and hasattr(
+            self, "_title_spacer"
+        ):
+            self.main_layout.activate()
+            self._layout_title()
+        return handled
+
+    def _layout_title(self) -> None:
+        if self._title_alignment == "left":
+            return
+        # Center the text on the window, without covering the icon or controls.
+        available = self._title_spacer.geometry()
+        width = min(self.titleLabel.sizeHint().width(), max(0, available.width()))
+        left = max(
+            available.left(),
+            min((self.width() - width) // 2, available.right() + 1 - width),
+        )
+        self.titleLabel.setGeometry(left, available.top(), width, available.height())
+
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
         self.setPalette(palette_for_theme(theme, self.palette()))
         title_font = self.titleLabel.font()
         title_font.setPointSizeF(max(title_font.pointSizeF(), 10.5))
         self.titleLabel.setFont(title_font)
+        self._layout_title()
         self.closeButton.setStyleSheet(
             button_style(theme, self._metrics)
             + f"QPushButton {{ color: {theme.text}; font-size: 18px; }}"
@@ -385,18 +416,66 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.titleLabel.setPalette(palette)
 
     def setIcon(self, icon: QIcon) -> None:
-        self.iconLabel.setVisible(not icon.isNull())
-        if not icon.isNull():
+        self._has_icon = not icon.isNull()
+        self.iconLabel.setVisible(self._icon_visible and self._has_icon)
+        if self._has_icon:
             self.iconLabel.setPixmap(icon.pixmap(20, 20))
+        else:
+            self.iconLabel.clear()
+        self._layout_title()
 
     def addCustomWidget(self, widget: QWidget, align: str = "right") -> None:
+        """Insert a vertically centered widget in the left or right control area."""
         if align == "left":
-            self.left_layout.addWidget(widget)
+            self.left_layout.addWidget(
+                widget, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
         else:
-            self.right_layout.addWidget(widget)
+            self.right_layout.addWidget(widget, 0, Qt.AlignmentFlag.AlignVCenter)
 
     def setTitle(self, title: str) -> None:
         self.titleLabel.setText(title)
+        self._layout_title()
+
+    def setTitleVisible(self, visible: bool) -> None:
+        """Show or hide title text without changing the window title or icon visibility."""
+        self._title_visible = visible
+        self.titleLabel.setVisible(visible)
+        self._layout_title()
+
+    def isTitleVisible(self) -> bool:
+        """Return whether title text is enabled, even in a hidden window."""
+        return self._title_visible
+
+    def setIconVisible(self, visible: bool) -> None:
+        """Show or hide the title bar icon independently of title text."""
+        self._icon_visible = visible
+        self.iconLabel.setVisible(visible and self._has_icon)
+        self._layout_title()
+
+    def isIconVisible(self) -> bool:
+        """Return the icon visibility setting, even in a hidden window or with no icon."""
+        return self._icon_visible
+
+    def setTitleAlignment(self, alignment: Literal["left", "center"]) -> None:
+        """Align title text left (default) or to the window center; keep the icon left."""
+        if alignment not in ("left", "center"):
+            raise ValueError("title alignment must be 'left' or 'center'")
+        if alignment == self._title_alignment:
+            return
+        self._title_alignment = alignment
+        if alignment == "left":
+            self.titleLabel.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            self.main_layout.insertWidget(1, self.titleLabel, 0, Qt.AlignmentFlag.AlignVCenter)
+        else:
+            self.titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.main_layout.removeWidget(self.titleLabel)
+        self.main_layout.activate()
+        self._layout_title()
+
+    def titleAlignment(self) -> Literal["left", "center"]:
+        """Return the configured alignment of the title text."""
+        return self._title_alignment
 
     def syncWindowFlags(self, flags: Qt.WindowType) -> bool:
         """Synchronize the controls shared by simple frameless windows."""
