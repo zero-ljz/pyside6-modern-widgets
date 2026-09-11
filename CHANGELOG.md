@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-09-11
+
+### Fixed
+
+- Kept transparent Windows acrylic menu surfaces in native mouse hit testing,
+  so blank space across the full width of a menu item now receives hover input.
+
 ## [0.5.2] - 2026-09-11
 
 ### Fixed

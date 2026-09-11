@@ -20,6 +20,7 @@ from .theme import DEFAULT_METRICS, ModernMetrics
 
 _FALLBACK_BASE_STYLE = "fusion"
 _WINDOWS_ACRYLIC_TINT_ALPHA = 170
+_ACRYLIC_INPUT_ALPHA = 1
 _MENU_ITEM_EXTRA_HEIGHT = 4
 _MENU_VERTICAL_MARGIN = 2
 _OUTLINE_ALPHA = 30
@@ -181,7 +182,10 @@ class _RoundedMenuStyle(QProxyStyle):
                 option.palette,
                 widget if isinstance(widget, QWidget) else None,
             )
-            surface.setAlpha(0 if self._native_acrylic else 255)
+            # Fully transparent pixels in a layered Windows popup are omitted
+            # from native hit testing. Keep the acrylic surface visually clear
+            # while ensuring blank menu-item space still receives mouse input.
+            surface.setAlpha(_ACRYLIC_INPUT_ALPHA if self._native_acrylic else 255)
             painter.setBrush(surface)
             painter.setPen(QPen(_soft_line_color(option.palette, _OUTLINE_ALPHA), 1))
             rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)
