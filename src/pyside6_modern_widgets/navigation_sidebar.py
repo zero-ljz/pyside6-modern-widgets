@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from enum import Enum
 
-from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import (
+    QByteArray,
+    QEasingCurve,
+    QPropertyAnimation,
+    QRectF,
+    QSize,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QIcon,
@@ -27,7 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import _resources  # noqa: F401
-from ._window_chrome import paint_watercolor
+from ._window_chrome import SurfaceActivationTransition, inactive_surface_color, paint_watercolor
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -233,6 +241,7 @@ class NavigationSidebar(QWidget):
         self._init_ui()
         self._init_animation()
         self.setFixedWidth(self._expanded_width)
+        self._activation_transition = SurfaceActivationTransition(self)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -437,7 +446,13 @@ class NavigationSidebar(QWidget):
 
         parent = self.parentWidget()
         surface_width = parent.width() if parent is not None else self.width()
-        paint_watercolor(painter, QRectF(self.rect()), self._theme, surface_width)
+        opacity = self._activation_transition.opacity
+        if opacity > 0:
+            paint_watercolor(painter, QRectF(self.rect()), self._theme, surface_width)
+        if opacity < 1:
+            painter.setOpacity(1 - opacity)
+            painter.fillRect(self.rect(), inactive_surface_color(self._theme))
+            painter.setOpacity(1)
 
         if not self._collapsed:
             border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)

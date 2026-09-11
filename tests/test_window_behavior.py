@@ -346,6 +346,9 @@ def test_screen_metric_change_invalidates_surface_and_schedules_refresh() -> Non
     window = ModernWindow()
     window.resize(400, 250)
     window.show()
+    window.activateWindow()
+    # Let the activation fade expose the wallpaper before checking its repaint cache.
+    QTest.qWait(250)
     _APP.processEvents()
     window.frame._ensure_watercolor_cache()
     cached_surface = window.frame._watercolor_cache

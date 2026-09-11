@@ -196,7 +196,15 @@ menu.addMenu("Recent")
 ## Themes
 
 Widgets use a modern theme colored from the current desktop wallpaper through
-the process-wide theme manager. Widgets following the global theme update
+the process-wide theme manager. Starting with 0.5.1, inactive windows replace the
+wallpaper effect with a solid background: `#F3F3F3` for light themes, or the
+theme's surface color for dark themes. The effect returns when activated again,
+using a 250 ms linear fade in both directions.
+Rapid focus changes continue smoothly from the current blend. This applies to
+window and dialog backgrounds, including title bars, message boxes, and
+navigation sidebar overlays.
+
+Widgets following the global theme update
 automatically after a wallpaper change. The watcher responds directly to
 changes in the current image file and performs a lightweight path and metadata
 check every second for wallpaper switches; image sampling only runs after

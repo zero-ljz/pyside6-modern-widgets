@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt
+from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QRect, QRectF, QSize, Qt, QVariantAnimation
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -143,8 +143,53 @@ def paint_watercolor(
         painter.drawRect(rect)
 
 
+def inactive_surface_color(theme: ModernTheme) -> QColor:
+    """Use a neutral light background while retaining dark theme surfaces."""
+    surface = QColor(theme.surface)
+    return surface if surface.lightness() < 128 else QColor("#F3F3F3")
+
+
+class SurfaceActivationTransition(QVariantAnimation):
+    """Fade the background effect without changing content or window opacity."""
+
+    DURATION_MS = 250
+
+    def __init__(self, widget: QWidget) -> None:
+        super().__init__(widget)
+        self._widget = widget
+        self.opacity = float(widget.isActiveWindow())
+        self.setEasingCurve(QEasingCurve.Type.Linear)
+        self.valueChanged.connect(self._set_opacity)
+        widget.installEventFilter(self)
+
+    def _set_opacity(self, value: float) -> None:
+        self.opacity = value
+        self._widget.update()
+
+    def eventFilter(self, watched, event) -> bool:
+        event_type = event.type()
+        if event_type in (
+            QEvent.Type.WindowActivate,
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.Show,
+            QEvent.Type.Hide,
+        ):
+            target = float(self._widget.isActiveWindow())
+            self.stop()
+            if event_type in (QEvent.Type.Show, QEvent.Type.Hide) or not self._widget.isVisible():
+                self._set_opacity(target)
+            elif self.opacity != target:
+                # Changing duration can emit valueChanged using the previous endpoints.
+                current_opacity = self.opacity
+                self.setDuration(max(1, round(self.DURATION_MS * abs(target - current_opacity))))
+                self.setStartValue(current_opacity)
+                self.setEndValue(target)
+                self.start()
+        return super().eventFilter(watched, event)
+
+
 class BackgroundFrame(QFrame):
-    """Cross-platform watercolor surface used by frameless windows."""
+    """Watercolor for active windows, with a solid inactive surface."""
 
     def __init__(
         self,
@@ -164,6 +209,7 @@ class BackgroundFrame(QFrame):
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, not opaque_surface)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, opaque_surface)
+        self._activation_transition = SurfaceActivationTransition(self)
 
     def nativeEvent(self, event_type, message):
         if (
@@ -186,7 +232,7 @@ class BackgroundFrame(QFrame):
     def setLiveResize(self, active: bool) -> None:
         if active == self._live_resize:
             return
-        if active:
+        if active and self.isActiveWindow():
             self._ensure_watercolor_cache()
         self._live_resize = active
         if not active:
@@ -234,16 +280,17 @@ class BackgroundFrame(QFrame):
             painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
-        watercolor = self._ensure_watercolor_cache()
-        if self._corner_radius <= 0:
-            painter.drawPixmap(self.rect(), watercolor)
-            return
-
-        border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        path = QPainterPath()
-        path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
-        painter.setClipPath(path)
-        painter.drawPixmap(self.rect(), watercolor)
+        if self._corner_radius > 0:
+            border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+            path = QPainterPath()
+            path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
+            painter.setClipPath(path)
+        opacity = self._activation_transition.opacity
+        if opacity > 0:
+            painter.drawPixmap(self.rect(), self._ensure_watercolor_cache())
+        if opacity < 1:
+            painter.setOpacity(1 - opacity)
+            painter.fillRect(self.rect(), inactive_surface_color(self._theme))
 
 
 class WindowChromeOverlay(QWidget):
