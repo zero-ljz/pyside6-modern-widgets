@@ -35,6 +35,23 @@ resizing, and a menu with the available window commands.
 pip install pyside6-modern-widgets
 ```
 
+## Upgrading to 0.5.0
+
+Version 0.5.0 adds modern dialogs, message boxes, menus, and menu bars, plus
+independent title-bar text/icon visibility and centered title text. It also
+improves Windows maximize/restore behavior and content-aware navigation layout.
+See the [changelog](CHANGELOG.md#050---2026-09-11) for the full release notes.
+
+When upgrading from 0.4.x, remove uses of `WatercolorStyle`,
+`theme_with_watercolor_style`, `ORIGINAL_LIGHT_THEME`, and `ORIGINAL_DARK_THEME`.
+These exports and the title-bar Theme Style submenu have been removed. Widgets
+now follow desktop-wallpaper colors by default; `LIGHT_THEME`, `DARK_THEME`,
+`ModernTheme`, and `setTheme()` remain available for explicit theme overrides.
+
+Automatic navigation overlay thresholds now depend on the current page's
+minimum width instead of fixed window widths. Use `setAutoSidebarOverlay(False)`
+and `setSidebarOverlay()` if your application needs explicit control.
+
 ## PyInstaller
 
 The installed package automatically registers its PyInstaller hook. Applications

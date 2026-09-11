@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-11
+
 ### Added
 
 - Added `ModernDialog`, a frameless `QDialog` that shares the modern window
@@ -15,6 +17,11 @@ All notable changes to this project are documented in this file.
   native menu layout.
 - Added `ModernMenuBar`, which creates `ModernMenu` drop-down menus while
   preserving the standard `QMenuBar` API.
+- Added independent title text and icon visibility controls to `ModernWindow`
+  and its title bar, with getters that retain the configured state while hidden.
+- Added left and centered title alignment, keeping centered text clear of
+  custom title-bar widgets and window buttons in narrow windows.
+- Added `theme_from_wallpaper()` for deriving a modern theme from wallpaper.
 
 ### Changed
 
@@ -24,6 +31,8 @@ All notable changes to this project are documented in this file.
 - Removed window theme switching and the standard and classic surfaces. The
   remaining modern surface now follows desktop-wallpaper colors automatically,
   using low-frequency metadata checks and file notifications.
+- Removed the legacy `WatercolorStyle`, `theme_with_watercolor_style`,
+  `ORIGINAL_LIGHT_THEME`, and `ORIGINAL_DARK_THEME` exports.
 - Made `ModernWindow` use modern menus for its menu bar, title-bar menu, and
   cross-platform system-menu fallback.
 - Made `ModernWindow` accept the `QWidget(parent, f)` constructor shape and
@@ -37,11 +46,22 @@ All notable changes to this project are documented in this file.
 - Extracted reusable window surfaces, overlays, and title-bar behavior from
   `ModernWindow` for use by other top-level widgets.
 - Reworked the Windows frameless-window boundary so Qt exclusively owns window
-  state while the default Windows procedure owns activation, moving, resizing,
-  caption double-clicks, and system-command transitions.
+  state while Windows supplies native activation, moving, resizing, and hit
+  testing. Caption double-clicks and maximize/restore system commands now route
+  through Qt to preserve the saved normal geometry.
+- Styled manually created `ModernMenuBar` instances with transparent backgrounds
+  and rounded selection highlights that follow their containing window's theme
+  or the global theme when used on their own.
+- Made menu-bar overflow use `ModernMenu` while retaining Qt action updates.
+- Updated the navigation example with a title-bar menu bar and hidden title text.
 
 ### Fixed
 
+- Preserved normal window geometry when mixing title-bar double-clicks, native
+  system commands, and custom maximize/restore buttons, and retained maximized
+  state when restoring a minimized maximized window.
+- Kept blank title-bar space draggable beside embedded menus with either title
+  alignment and with title text hidden.
 - Made maximized title-bar dragging use the native Windows maximize state when
   Qt state updates lag, and restored rounded corners immediately on drag-restore.
 - Kept the cursor anchored to the same title-bar position when dragging a
@@ -165,7 +185,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.0...v0.4.1
