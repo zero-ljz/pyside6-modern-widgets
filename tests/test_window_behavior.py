@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import os
 
 import pytest
@@ -9,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from pyside6_modern_widgets import ModernMenuBar, ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
@@ -17,15 +18,76 @@ from pyside6_modern_widgets._windows_window import (
     HTCAPTION,
     HTCLIENT,
     HTMAXBUTTON,
+    WM_DPICHANGED,
+    WM_GETMINMAXINFO,
     WM_NCLBUTTONDBLCLK,
     WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP,
     WM_NCMOUSEMOVE,
     WM_SYSCOMMAND,
     WindowsMessage,
+    _MinMaxInfo,
 )
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize(
+    ("old_dpi", "new_dpi", "old_scale", "expected_minimum"),
+    [(168, 96, 1.75, 477), (96, 168, 1.0, 835), (168, 96, 3.5, 954)],
+)
+@pytest.mark.parametrize("qt_scale_updated", [False, True])
+def test_dpi_change_uses_new_minimum_before_qt_updates_screen(
+    monkeypatch, old_dpi, new_dpi, old_scale, expected_minimum, qt_scale_updated
+) -> None:
+    window = ModernWindow()
+    window.setMinimumSize(477, 165)
+    window.setMaximumSize(1000, 700)
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    # Programmatic moves can update Qt before the native message instead.
+    qt_scale = old_scale * new_dpi / old_dpi if qt_scale_updated else old_scale
+    monkeypatch.setattr(window, "devicePixelRatioF", lambda: qt_scale)
+    monkeypatch.setattr(QWidget, "nativeEvent", lambda *_args: (False, 0))
+    monkeypatch.setattr(
+        QApplication,
+        "highDpiScaleFactorRoundingPolicy",
+        lambda: Qt.HighDpiScaleFactorRoundingPolicy.PassThrough,
+    )
+    message = [WindowsMessage(1, WM_DPICHANGED, new_dpi | (new_dpi << 16), 0)]
+    monkeypatch.setattr(modern_window_module, "read_message", lambda _: message[0])
+    window._native_frame_enabled = True
+    window._native_window_dpi = old_dpi
+    window._native_window_scale = old_scale
+
+    # Windows requests constraints inside its DPI resize while Qt still reports
+    # the old screen/scale. It must not clamp 477px to the old 835px minimum.
+    window.nativeEvent(b"windows_generic_MSG", 0)
+    info = _MinMaxInfo()
+    message[0] = WindowsMessage(1, WM_GETMINMAXINFO, 0, ctypes.addressof(info))
+    assert window.nativeEvent(b"windows_generic_MSG", 0) == (True, 0)
+    assert info.ptMinTrackSize.x == expected_minimum
+    target_scale = old_scale * new_dpi / old_dpi
+    assert info.ptMinTrackSize.y == int(165 * target_scale + 0.5)
+    assert info.ptMaxTrackSize.x == int(1000 * target_scale + 0.5)
+    assert info.ptMaxTrackSize.y == int(700 * target_scale + 0.5)
+
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
+    window._sync_windows_native_frame()
+    assert window._native_dpi_scale is None
+    window.close()
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected"),
+    [("PassThrough", 1.5), ("Round", 2), ("Ceil", 2), ("Floor", 1), ("RoundPreferFloor", 1)],
+)
+def test_native_dpi_constraints_follow_qt_rounding(monkeypatch, policy, expected) -> None:
+    monkeypatch.setattr(
+        QApplication,
+        "highDpiScaleFactorRoundingPolicy",
+        lambda: getattr(Qt.HighDpiScaleFactorRoundingPolicy, policy),
+    )
+    assert modern_window_module._rounded_dpi_scale(144) == expected
 
 
 def test_title_visibility_preserves_menu_order_buttons_and_drag_area() -> None:

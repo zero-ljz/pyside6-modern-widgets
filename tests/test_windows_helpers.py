@@ -88,6 +88,34 @@ def test_system_move_falls_back_when_cursor_position_is_unavailable(monkeypatch)
     assert user32.calls == []
 
 
+@pytest.mark.parametrize("scale", [1.0, 1.25, 1.75, 2.0])
+def test_dpi_constraints_scale_both_axes_and_preserve_monitor_bounds(scale) -> None:
+    info = _windows_window._MinMaxInfo()
+    info.ptMaxSize = wintypes.POINT(1920, 1032)
+    info.ptMaxPosition = wintypes.POINT(-1920, 0)
+    _windows_window.set_size_constraints(ctypes.addressof(info), (477, 165), (1000, 700), scale)
+
+    assert (info.ptMinTrackSize.x, info.ptMinTrackSize.y) == (
+        int(477 * scale + 0.5),
+        int(165 * scale + 0.5),
+    )
+    assert (info.ptMaxTrackSize.x, info.ptMaxTrackSize.y) == (
+        int(1000 * scale + 0.5),
+        int(700 * scale + 0.5),
+    )
+    assert (info.ptMaxSize.x, info.ptMaxSize.y) == (1920, 1032)
+    assert (info.ptMaxPosition.x, info.ptMaxPosition.y) == (-1920, 0)
+
+
+def test_unconstrained_dimensions_keep_windows_defaults() -> None:
+    info = _windows_window._MinMaxInfo()
+    info.ptMinTrackSize = wintypes.POINT(120, 30)
+    info.ptMaxTrackSize = wintypes.POINT(4480, 1600)
+    _windows_window.set_size_constraints(ctypes.addressof(info), (0, 200), (16777215, 200), 1.75)
+    assert (info.ptMinTrackSize.x, info.ptMinTrackSize.y) == (120, 350)
+    assert (info.ptMaxTrackSize.x, info.ptMaxTrackSize.y) == (4480, 350)
+
+
 @pytest.mark.parametrize(
     ("proposed", "expected"),
     [

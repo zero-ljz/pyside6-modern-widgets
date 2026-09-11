@@ -24,6 +24,7 @@ WM_NCRBUTTONUP = 0x00A5
 WM_SYSCOMMAND = 0x0112
 WM_DISPLAYCHANGE = 0x007E
 WM_DPICHANGED = 0x02E0
+WM_GETMINMAXINFO = 0x0024
 WM_MOUSEMOVE = 0x0200
 WM_LBUTTONUP = 0x0202
 WM_CAPTURECHANGED = 0x0215
@@ -85,6 +86,41 @@ class _MonitorInfo(ctypes.Structure):
         ("rcWork", wintypes.RECT),
         ("dwFlags", wintypes.DWORD),
     )
+
+
+class _MinMaxInfo(ctypes.Structure):
+    _fields_ = (
+        ("ptReserved", wintypes.POINT),
+        ("ptMaxSize", wintypes.POINT),
+        ("ptMaxPosition", wintypes.POINT),
+        ("ptMinTrackSize", wintypes.POINT),
+        ("ptMaxTrackSize", wintypes.POINT),
+    )
+
+
+def window_dpi(hwnd: int) -> int | None:
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetDpiForWindow.argtypes = (wintypes.HWND,)
+        user32.GetDpiForWindow.restype = wintypes.UINT
+        return int(user32.GetDpiForWindow(wintypes.HWND(hwnd))) or None
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
+def set_size_constraints(
+    l_param: int,
+    minimum: tuple[int, int],
+    maximum: tuple[int, int],
+    scale: float,
+) -> None:
+    """Set frameless tracking bounds in physical pixels, preserving work-area fields."""
+    info = ctypes.cast(l_param, ctypes.POINTER(_MinMaxInfo)).contents
+    for axis, lower, upper in zip(("x", "y"), minimum, maximum):
+        if lower > 0:
+            setattr(info.ptMinTrackSize, axis, int(lower * scale + 0.5))
+        if upper < 16777215:
+            setattr(info.ptMaxTrackSize, axis, int(upper * scale + 0.5))
 
 
 def read_message(address: int) -> WindowsMessage:
