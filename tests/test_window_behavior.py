@@ -8,7 +8,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QCursor, QIcon, QPixmap
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
@@ -30,6 +30,20 @@ from pyside6_modern_widgets._windows_window import (
 )
 
 _APP = QApplication.instance() or QApplication([])
+
+
+def test_window_menu_clears_stale_hover_after_popup_closes(monkeypatch) -> None:
+    window = ModernWindow()
+    button = window.titleBar.menuButton
+    outside = button.mapToGlobal(QPoint(-10, -10))
+    monkeypatch.setattr(QCursor, "pos", lambda: outside)
+    button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, True)
+
+    window.titleBar.windowMenu.aboutToHide.emit()
+    _APP.processEvents()
+
+    assert not button.underMouse()
+    window.close()
 
 
 @pytest.mark.parametrize("window_class", [ModernWindow, ModernDialog])

@@ -10,6 +10,7 @@ from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QRect, QRectF, QSize, Q
 from PySide6.QtGui import (
     QBrush,
     QColor,
+    QEnterEvent,
     QIcon,
     QPainter,
     QPainterPath,
@@ -29,10 +30,32 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import _resources  # noqa: F401
 from ._windows_window import HTTRANSPARENT, WM_NCHITTEST, read_message
-from .theme import ModernMetrics, ModernTheme, palette_for_theme
+from .theme import ModernMetrics, ModernTheme, palette_for_theme, tinted_icon
 
 WindowWidget = TypeVar("WindowWidget", bound=QWidget)
+
+
+class _TitleBarCloseButton(QPushButton):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self._normal_icon = QIcon()
+        self._hover_icon = QIcon()
+
+    def setTheme(self, theme: ModernTheme) -> None:
+        source_icon = QIcon(":/pyside6_modern_widgets/icons/close.svg")
+        self._normal_icon = tinted_icon(source_icon, theme.text)
+        self._hover_icon = tinted_icon(source_icon, theme.danger)
+        self.setIcon(self._hover_icon if self.underMouse() else self._normal_icon)
+
+    def enterEvent(self, event: QEnterEvent) -> None:
+        self.setIcon(self._hover_icon)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event: QEvent) -> None:
+        self.setIcon(self._normal_icon)
+        super().leaveEvent(event)
 
 
 def uses_windows_window_state() -> bool:
@@ -409,7 +432,7 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.right_layout.setSpacing(1)
         self.main_layout.addLayout(self.right_layout)
 
-        self.closeButton = QPushButton("✕", self)
+        self.closeButton = _TitleBarCloseButton(self)
         # Window controls must not enter the content's tab order or become a
         # dialog's default button.
         self.closeButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -451,11 +474,8 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         title_font.setPointSizeF(max(title_font.pointSizeF(), 10.5))
         self.titleLabel.setFont(title_font)
         self._layout_title()
-        self.closeButton.setStyleSheet(
-            button_style(theme, self._metrics)
-            + f"QPushButton {{ color: {theme.text}; font-size: 18px; }}"
-            + f"QPushButton:hover {{ color: {theme.danger}; }}"
-        )
+        self.closeButton.setStyleSheet(button_style(theme, self._metrics))
+        self.closeButton.setTheme(theme)
 
     def setInactiveTitleColor(self, color: QColor) -> None:
         palette = QPalette()

@@ -135,8 +135,9 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             allows_maximize=True,
         )
         self.windowMenu = self._create_window_menu()
+        self.windowMenu.aboutToHide.connect(self._schedule_menu_button_hover_refresh)
         self.menuButton = self._create_button(
-            _resource_icon("expand-arrow.png", self._theme),
+            _resource_icon("menu-vertical.png", self._theme),
             "窗口菜单",
             self.showWindowMenu,
         )
@@ -206,6 +207,17 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         position = self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height()))
         self.windowMenu.popup(position)
 
+    def _schedule_menu_button_hover_refresh(self) -> None:
+        QTimer.singleShot(0, self._refresh_menu_button_hover)
+
+    def _refresh_menu_button_hover(self) -> None:
+        position = self.menuButton.mapFromGlobal(QCursor.pos())
+        self.menuButton.setAttribute(
+            Qt.WidgetAttribute.WA_UnderMouse,
+            self.menuButton.rect().contains(position),
+        )
+        self.menuButton.update()
+
     def contextMenuEvent(self, event) -> None:
         self.parent_window.showSystemWindowMenu(event.globalPos())
         event.accept()
@@ -252,7 +264,7 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
                 theme,
             )
         )
-        self.menuButton.setIcon(_resource_icon("expand-arrow.png", theme))
+        self.menuButton.setIcon(_resource_icon("menu-vertical.png", theme))
         self.quitAction.setIcon(_resource_icon("shutdown.png", theme))
         self.minimizeButton.setIcon(_resource_icon("minimize.png", theme))
         self.updateMaximizeIcon(self.parent_window.isMaximized())

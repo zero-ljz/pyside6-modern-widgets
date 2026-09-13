@@ -6,8 +6,15 @@
     <file alias="minimize.png">resources/icons/icons8-minimize-48.png</file>
     <file alias="maximize.png">resources/icons/icons8-maximize-button-48.png</file>
     <file alias="restore.png">resources/icons/icons8-restore-down-48.png</file>
+    <file alias="close.png">resources/icons/icons8-close-48.png</file>
+    <file alias="close.svg">resources/icons/close.svg</file>
     <file alias="shutdown.png">resources/icons/icons8-shutdown-48.png</file>
     <file alias="menu.png">resources/icons/icons8-menu-48.png</file>
+    <file alias="menu-vertical.png">resources/icons/icons8-menu-vertical-48.png</file>
+    <file alias="more.png">resources/icons/icons8-more-48.png</file>
     <file alias="expand-arrow.png">resources/icons/icons8-expand-arrow-48.png</file>
+    <file alias="full-screen.png">resources/icons/icons8-full-screen-48.png</file>
+    <file alias="search.png">resources/icons/icons8-search-48.png</file>
+    <file alias="settings.png">resources/icons/icons8-settings-48.png</file>
   </qresource>
 </RCC>

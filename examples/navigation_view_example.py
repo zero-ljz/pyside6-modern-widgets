@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QLabel,
     QMenu,
-    QMessageBox,
     QPushButton,
     QStyle,
     QVBoxLayout,
@@ -45,7 +44,6 @@ class ExampleWindow(ModernWindow):
 
         self.navigation = NavigationView()
         self.setCentralWidget(self.navigation)
-        self._page_names = ("Home", "Dialog", "Message boxes", "Menu", "Settings")
 
         self.navigation.addPage(
             self._create_home_page(),
@@ -71,14 +69,12 @@ class ExampleWindow(ModernWindow):
         self.navigation.addPage(
             self._create_settings_page(),
             "Settings",
-            standard_icon(QStyle.StandardPixmap.SP_FileDialogContentsView),
+            QIcon(":/pyside6_modern_widgets/icons/settings.png"),
             position=NavigationPosition.BOTTOM,
         )
 
         self._create_actions()
         self._create_menu_bar()
-        self.navigation.currentChanged.connect(self._page_changed)
-        self.statusBar().showMessage("Ready")
 
     @staticmethod
     def _create_page(title: str) -> tuple[QWidget, QVBoxLayout]:
@@ -176,11 +172,9 @@ class ExampleWindow(ModernWindow):
         self.choice_groups: list[QActionGroup] = []
         self.example_menu = ModernMenu("Actions", self)
         self._populate_example_menu(self.example_menu)
-        self.example_menu.triggered.connect(self._menu_action_triggered)
 
         self.native_menu = QMenu("Native actions", self)
         self._populate_example_menu(self.native_menu)
-        self.native_menu.triggered.connect(self._menu_action_triggered)
         layout.addStretch()
         return page
 
@@ -238,9 +232,6 @@ class ExampleWindow(ModernWindow):
         position = self.native_menu_button.mapToGlobal(self.native_menu_button.rect().bottomLeft())
         self.native_menu.popup(position)
 
-    def _menu_action_triggered(self, action: QAction) -> None:
-        self.statusBar().showMessage(f"Menu: {action.text()}", 3000)
-
     def _show_dialog(self) -> None:
         dialog = ModernDialog(self)
         dialog.setWindowTitle("Save changes")
@@ -254,30 +245,26 @@ class ExampleWindow(ModernWindow):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
 
-        result = dialog.exec()
-        result_name = "Accepted" if result == ModernDialog.DialogCode.Accepted else "Rejected"
-        self.statusBar().showMessage(f"Dialog: {result_name}", 3000)
+        dialog.exec()
 
     def _show_information(self) -> None:
-        result = ModernMessageBox.information(
+        ModernMessageBox.information(
             self,
             "Update complete",
             "The application is up to date.",
         )
-        self._show_message_result("Information", result)
 
     def _show_question(self) -> None:
-        result = ModernMessageBox.question(
+        ModernMessageBox.question(
             self,
             "Replace file",
             "A file with this name already exists. Replace it?",
             ModernMessageBox.StandardButton.Yes | ModernMessageBox.StandardButton.No,
             ModernMessageBox.StandardButton.No,
         )
-        self._show_message_result("Question", result)
 
     def _show_warning(self) -> None:
-        result = ModernMessageBox.warning(
+        ModernMessageBox.warning(
             self,
             "Unsaved changes",
             "Closing now will discard your changes.",
@@ -286,17 +273,15 @@ class ExampleWindow(ModernWindow):
             | ModernMessageBox.StandardButton.Cancel,
             ModernMessageBox.StandardButton.Save,
         )
-        self._show_message_result("Warning", result)
 
     def _show_critical(self) -> None:
-        result = ModernMessageBox.critical(
+        ModernMessageBox.critical(
             self,
             "Connection failed",
             "The server could not be reached.",
             ModernMessageBox.StandardButton.Retry | ModernMessageBox.StandardButton.Cancel,
             ModernMessageBox.StandardButton.Retry,
         )
-        self._show_message_result("Critical", result)
 
     def _show_detailed_message(self) -> None:
         message_box = ModernMessageBox(
@@ -313,103 +298,56 @@ class ExampleWindow(ModernWindow):
             "Row 31: unsupported date format"
         )
         message_box.setCheckBox(QCheckBox("Do not show import warnings again"))
-        result = ModernMessageBox.StandardButton(message_box.exec())
-        self._show_message_result("Detailed message", result)
-
-    def _show_message_result(
-        self,
-        kind: str,
-        result: QMessageBox.StandardButton,
-    ) -> None:
-        self.statusBar().showMessage(f"{kind}: {result.name}", 3000)
+        message_box.exec()
 
     def _create_actions(self) -> None:
-        self.compact_action = QAction("Compact navigation", self)
+        self.compact_action = QAction("Compact Navigation", self)
         self.compact_action.setCheckable(True)
         self.compact_action.toggled.connect(self.navigation.sidebar.setCollapsed)
         self.navigation.sidebar.collapsedChanged.connect(self.compact_action.setChecked)
 
-        self.new_window_action = QAction("New window", self)
-        self.new_window_action.setShortcut(QKeySequence.StandardKey.New)
-        self.new_window_action.triggered.connect(lambda: self._show_action_message("New window"))
+        self.quit_action = QAction("Quit", self)
+        self.quit_action.setShortcut(QKeySequence("Ctrl+Q"))
+        self.quit_action.triggered.connect(QApplication.quit)
 
-        self.open_action = QAction("Open...", self)
-        self.open_action.setShortcut(QKeySequence.StandardKey.Open)
-        self.open_action.triggered.connect(lambda: self._show_action_message("Open"))
-
-        self.preferences_action = QAction("Preferences...", self)
-        self.preferences_action.triggered.connect(lambda: self.navigation.setCurrentIndex(4))
-
-        self.about_action = QAction("About Modern Widgets", self)
-        self.about_action.triggered.connect(
-            lambda: self._show_action_message("Modern Widgets Example")
-        )
-
-        self.exit_action = QAction("Exit", self)
-        self.exit_action.setShortcut(QKeySequence("Ctrl+Q"))
-        self.exit_action.triggered.connect(self.close)
+        self.full_screen_action = QAction("Toggle Full Screen", self)
+        self.full_screen_action.setCheckable(True)
+        self.full_screen_action.setShortcut(QKeySequence("F11"))
+        self.full_screen_action.toggled.connect(self._toggle_full_screen)
 
     def _create_menu_bar(self) -> None:
         menu_bar = ModernMenuBar(self)
         menu_bar.setNativeMenuBar(False)
-        file_menu = menu_bar.addMenu("&File")
-        file_menu.addAction(self.new_window_action)
-        file_menu.addAction(self.open_action)
-        recent_menu = file_menu.addMenu("Open recent")
-        recent_menu.addAction(
-            "project-notes.md", lambda: self._show_action_message("project-notes.md")
-        )
-        recent_menu.addAction(
-            "theme-preview.py", lambda: self._show_action_message("theme-preview.py")
-        )
-        file_menu.addSeparator()
-        file_menu.addAction(self.exit_action)
 
-        edit_menu = menu_bar.addMenu("&Edit")
-        undo_action = edit_menu.addAction("Undo")
-        undo_action.setShortcut(QKeySequence.StandardKey.Undo)
-        undo_action.setEnabled(False)
-        redo_action = edit_menu.addAction("Redo")
-        redo_action.setShortcut(QKeySequence.StandardKey.Redo)
-        redo_action.setEnabled(False)
-        edit_menu.addSeparator()
-        for text, shortcut in (
-            ("Cut", QKeySequence.StandardKey.Cut),
-            ("Copy", QKeySequence.StandardKey.Copy),
-            ("Paste", QKeySequence.StandardKey.Paste),
-        ):
-            action = edit_menu.addAction(text)
-            action.setShortcut(shortcut)
-            action.triggered.connect(
-                lambda _checked=False, name=text: self._show_action_message(name)
-            )
+        file_menu = menu_bar.addMenu("&File")
+        file_menu.addAction(self.quit_action)
 
         view_menu = menu_bar.addMenu("&View")
         view_menu.addAction(self.compact_action)
-        navigate_menu = menu_bar.addMenu("&Navigate")
-        for index, page_name in enumerate(self._page_names):
-            action = navigate_menu.addAction(page_name)
-            action.triggered.connect(
-                lambda _checked=False, target=index: self.navigation.setCurrentIndex(target)
-            )
+        view_menu.addSeparator()
+        view_menu.addAction(self.full_screen_action)
 
-        tools_menu = menu_bar.addMenu("&Tools")
-        tools_menu.addAction(self.preferences_action)
-        tools_menu.addSeparator()
-        tools_menu.addAction("Check for updates", lambda: self._show_action_message("Up to date"))
+        window_menu = menu_bar.addMenu("&Window")
+        window_menu.addAction("Minimize", self.showMinimized)
+        window_menu.addAction("Maximize / Restore", self._toggle_maximized)
+        window_menu.addSeparator()
+        close_action = window_menu.addAction("Close", self.close)
+        close_action.setShortcut(QKeySequence.StandardKey.Close)
 
-        help_menu = menu_bar.addMenu("&Help")
-        help_menu.addAction("Documentation", lambda: self._show_action_message("Documentation"))
-        help_menu.addAction(self.about_action)
         assert self.titleBar is not None
         self.titleBar.addCustomWidget(menu_bar, align="left")
 
-    def _show_action_message(self, message: str) -> None:
-        self.statusBar().showMessage(message, 3000)
+    def _toggle_full_screen(self, enabled: bool) -> None:
+        if enabled:
+            self.showFullScreen()
+        else:
+            self.showNormal()
 
-    def _page_changed(self, index: int) -> None:
-        if 0 <= index < len(self._page_names):
-            self.statusBar().showMessage(self._page_names[index], 3000)
+    def _toggle_maximized(self) -> None:
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
 
 
 def main() -> int:

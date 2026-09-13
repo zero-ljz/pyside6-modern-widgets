@@ -143,16 +143,40 @@ class NavigationPosition(Enum):
 
 
 class _NavigationButton(QPushButton):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._keyboard_focus_visible = False
+
     def paintEvent(self, _event) -> None:
         option = QStyleOptionButton()
         self.initStyleOption(option)
         state = option.state  # type: ignore[attr-defined]
         if state & QStyle.StateFlag.State_HasFocus:
             state &= ~QStyle.StateFlag.State_HasFocus
-            state |= QStyle.StateFlag.State_MouseOver
+            if self._keyboard_focus_visible:
+                state |= QStyle.StateFlag.State_MouseOver
             option.state = state  # type: ignore[attr-defined]
         painter = QStylePainter(self)
         painter.drawControl(QStyle.ControlElement.CE_PushButton, option)
+
+    def mousePressEvent(self, event) -> None:
+        self._keyboard_focus_visible = False
+        self.update()
+        super().mousePressEvent(event)
+
+    def focusInEvent(self, event) -> None:
+        self._keyboard_focus_visible = event.reason() in (
+            Qt.FocusReason.TabFocusReason,
+            Qt.FocusReason.BacktabFocusReason,
+            Qt.FocusReason.ShortcutFocusReason,
+        )
+        self.update()
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event) -> None:
+        self._keyboard_focus_visible = False
+        self.update()
+        super().focusOutEvent(event)
 
 
 class _NavigationItem(_NavigationButton):
