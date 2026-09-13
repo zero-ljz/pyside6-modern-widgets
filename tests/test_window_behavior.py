@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
 from pyside6_modern_widgets import ModernMenuBar, ModernWindow
@@ -30,6 +30,61 @@ from pyside6_modern_widgets._windows_window import (
 )
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize("setter", ["button", "flag", "flags"])
+def test_native_topmost_changes_keep_window_visible_and_preserve_other_flags(
+    monkeypatch, setter
+) -> None:
+    window = ModernWindow()
+    window.show()
+    _APP.processEvents()
+    handle = window.windowHandle()
+    visibility = QSignalSpy(handle.visibleChanged)
+    original_flags = window.windowFlags()
+    original_geometry = window.geometry()
+    native_calls = []
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(
+        modern_window_module,
+        "set_window_topmost",
+        lambda hwnd, on_top: native_calls.append((hwnd, on_top)) or True,
+    )
+
+    for on_top in (True, False, True, False):
+        expected_flags = (
+            original_flags | Qt.WindowType.WindowStaysOnTopHint if on_top else original_flags
+        )
+        if setter == "button":
+            window.titleBar.pinButton.click()
+        elif setter == "flag":
+            window.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, on_top)
+        else:
+            window.setWindowFlags(expected_flags)
+        assert window.isVisible()
+        assert window.windowHandle() is handle
+        assert window.geometry() == original_geometry
+        assert window.windowFlags() == expected_flags
+        assert window.titleBar.pinButton.isChecked() == on_top
+        assert window.titleBar.pinButton.toolTip() == ("取消置顶" if on_top else "置顶")
+    assert visibility.count() == 0
+    assert native_calls == [(int(handle.winId()), state) for state in (True, False, True, False)]
+    window.close()
+
+
+def test_topmost_button_falls_back_if_native_change_fails(monkeypatch) -> None:
+    window = ModernWindow()
+    window.showMaximized()
+    _APP.processEvents()
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(modern_window_module, "set_window_topmost", lambda *_args: False)
+    for on_top in (True, False):
+        window.titleBar.pinButton.click()
+        assert window.isVisible()
+        assert window.isMaximized()
+        assert bool(window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint) == on_top
+        assert window.titleBar.pinButton.isChecked() == on_top
+    window.close()
 
 
 @pytest.mark.parametrize(

@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Toggle Windows always-on-top status without hiding/re-showing the window or
+  briefly exposing the system frame.
 - Restore maximized Windows windows to their original size before title-bar
   dragging, including after minimizing/restoring or hiding/showing the window.
   Clear the native maximize state before handing the drag back to Windows.

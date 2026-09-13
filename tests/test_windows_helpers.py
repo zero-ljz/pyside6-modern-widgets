@@ -59,6 +59,24 @@ def test_restore_native_window_uses_show_window_restore(monkeypatch) -> None:
     assert calls == [(12345, 9)]
 
 
+@pytest.mark.parametrize("on_top", [True, False])
+@pytest.mark.parametrize("succeeded", [True, False])
+def test_topmost_changes_only_native_z_order(monkeypatch, on_top, succeeded) -> None:
+    calls = []
+
+    def set_position(hwnd, after, x, y, width, height, flags):
+        calls.append((hwnd.value, after.value, x, y, width, height, flags))
+        return succeeded
+
+    class User32:
+        SetWindowPos = _NativeFunction(set_position)
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())
+
+    assert _windows_window.set_window_topmost(12345, on_top) is succeeded
+    assert calls == [(12345, wintypes.HWND(-1 if on_top else -2).value, 0, 0, 0, 0, 0x13)]
+
+
 def test_l_param_coordinates_use_full_width_cursor_position_when_available(monkeypatch) -> None:
     x, y = 70_000, -40_000
     l_param = (x & 0xFFFF) | ((y & 0xFFFF) << 16)

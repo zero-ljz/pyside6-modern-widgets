@@ -78,6 +78,7 @@ from ._windows_window import (
     set_mouse_capture,
     set_native_frame,
     set_size_constraints,
+    set_window_topmost,
     start_system_move,
     track_non_client_mouse_leave,
     window_dpi,
@@ -262,12 +263,10 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         window_state = self.parent_window.windowState()
         on_top = self.pinButton.isChecked()
         self.parent_window.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, on_top)
-        self.pinButton.setIcon(_resource_icon("push-pin.png" if on_top else "pin.png", self._theme))
-        self.pinButton.setToolTip("取消置顶" if on_top else "置顶")
-        self.parent_window.setWindowState(window_state)
-        if was_visible:
+        if self.parent_window.windowState() != window_state:
+            self.parent_window.setWindowState(window_state)
+        if was_visible and not self.parent_window.isVisible():
             self.parent_window.show()
-        self.parent_window.apply_window_style()
 
     def updateMaximizeIcon(self, isMaximized: bool) -> None:
         self.maximizeButton.setIcon(
@@ -358,15 +357,42 @@ class ModernWindow(QWidget):
         return uses_windows_window_state()
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
-        QWidget.setWindowFlags(self, flags | Qt.WindowType.FramelessWindowHint)
+        flags |= Qt.WindowType.FramelessWindowHint
+        if self._try_set_native_topmost(flags):
+            return
+        QWidget.setWindowFlags(self, flags)
         if hasattr(self, "titleBar"):
             self._sync_chrome_with_window_flags()
 
     def setWindowFlag(self, flag: Qt.WindowType, on: bool = True) -> None:
+        flags = Qt.WindowType(
+            int(self.windowFlags()) | int(flag) if on else int(self.windowFlags()) & ~int(flag)
+        )
+        if self._try_set_native_topmost(flags):
+            return
         QWidget.setWindowFlag(self, flag, on)
         QWidget.setWindowFlag(self, Qt.WindowType.FramelessWindowHint, True)
         if hasattr(self, "titleBar"):
             self._sync_chrome_with_window_flags()
+
+    def _try_set_native_topmost(self, flags: Qt.WindowType) -> bool:
+        if (
+            flags ^ self.windowFlags() != Qt.WindowType.WindowStaysOnTopHint
+            or not self._uses_windows_window_state()
+        ):
+            return False
+        handle = self.windowHandle()
+        if handle is None or not self.isWindow():
+            return False
+        on_top = bool(flags & Qt.WindowType.WindowStaysOnTopHint)
+        if not set_window_topmost(int(handle.winId()), on_top):
+            return False
+        # QWidget.setWindowFlag hides/re-shows the window and reapplies frame
+        # styles. Only update Qt's bookkeeping after changing the native Z order.
+        QWidget.overrideWindowFlags(self, flags)
+        if self.titleBar is not None:
+            self.titleBar._sync_pin_state(on_top)
+        return True
 
     def _sync_window_state_style(self) -> None:
         is_maximized = self.isMaximized()

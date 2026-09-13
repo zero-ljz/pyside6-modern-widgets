@@ -7,7 +7,7 @@ import sys
 from ctypes import wintypes
 from unittest.mock import patch
 
-from PySide6.QtCore import QPoint, QSize
+from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -33,6 +33,23 @@ def _wait(app: QApplication, milliseconds: int = 100) -> None:
     app.processEvents()
     QTest.qWait(milliseconds)
     app.processEvents()
+
+
+class _LifecycleProbe(QObject):
+    def __init__(self, window: ModernWindow) -> None:
+        super().__init__(window)
+        self.events: list[QEvent.Type] = []
+        window.installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() in (
+            QEvent.Type.Hide,
+            QEvent.Type.Show,
+            QEvent.Type.WinIdChange,
+            QEvent.Type.PlatformSurface,
+        ):
+            self.events.append(event.type())
+        return False
 
 
 def main() -> int:
@@ -145,6 +162,35 @@ def main() -> int:
                 assert window.size() == normal_geometry.size(), (transition, restore)
                 if restore == "button":
                     assert window.geometry() == normal_geometry, (transition, restore)
+
+        lifecycle = _LifecycleProbe(window)
+        for maximized in (False, True):
+            window.setGeometry(normal_geometry)
+            if maximized:
+                window.showMaximized()
+            _wait(app)
+            geometry = window.geometry()
+            restore_geometry = window.normalGeometry()
+            style = int(get_style(hwnd, -16))
+            native_maximized = is_window_maximized(hwnd)
+            lifecycle.events.clear()
+            for on_top in (True, False, True, False):
+                window.titleBar.pinButton.click()
+                _wait(app)
+                assert not lifecycle.events, lifecycle.events
+                assert int(window.winId()) == hwnd
+                assert window.isVisible()
+                assert window.isMaximized() == maximized
+                assert is_window_maximized(hwnd) == native_maximized
+                assert window.geometry() == geometry
+                assert window.normalGeometry() == restore_geometry
+                assert int(get_style(hwnd, -16)) == style
+                assert bool(get_style(hwnd, -20) & 0x00000008) == on_top  # WS_EX_TOPMOST
+                assert bool(window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint) == on_top
+                assert window.titleBar.pinButton.isChecked() == on_top
+            window.showNormal()
+            _wait(app)
+            assert window.geometry() == normal_geometry
 
         window.setFixedSize(normal_size)
         _wait(app)

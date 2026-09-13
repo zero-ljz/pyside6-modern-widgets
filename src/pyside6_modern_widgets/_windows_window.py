@@ -155,6 +155,35 @@ def restore_native_window(hwnd: int) -> None:
         return
 
 
+def set_window_topmost(hwnd: int, on_top: bool) -> bool:
+    """Change only the HWND's stacking band, without refreshing its frame."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.SetWindowPos.argtypes = (
+            wintypes.HWND,
+            wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        )
+        user32.SetWindowPos.restype = wintypes.BOOL
+        return bool(
+            user32.SetWindowPos(
+                wintypes.HWND(hwnd),
+                wintypes.HWND(-1 if on_top else -2),  # HWND_TOPMOST / HWND_NOTOPMOST
+                0,
+                0,
+                0,
+                0,
+                0x0001 | 0x0002 | 0x0010,  # SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
+            )
+        )
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+
+
 def track_non_client_mouse_leave(hwnd: int) -> None:
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
