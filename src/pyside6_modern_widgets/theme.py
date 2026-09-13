@@ -258,6 +258,16 @@ def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPale
     return palette
 
 
+def _chrome_palette(theme: ModernTheme, base: QPalette) -> QPalette:
+    """Let Qt select inactive chrome colors without fading ordinary page content."""
+    palette = palette_for_theme(theme, base)
+    foreground = QColor(theme.text)
+    foreground.setAlphaF(foreground.alphaF() * 0.5)
+    for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.ButtonText):
+        palette.setColor(QPalette.ColorGroup.Inactive, role, foreground)
+    return palette
+
+
 def tinted_icon(icon: QIcon, color: str, size: int = 48) -> QIcon:
     """Tint a monochrome icon while preserving its alpha channel."""
     pixmap = icon.pixmap(size, size)

@@ -7,14 +7,63 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtGui import QColor, QPainter, QPalette, QPixmap
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QStyle, QStyleOptionMenuItem, QToolButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QMenuBar,
+    QStyle,
+    QStyleOptionMenuItem,
+    QToolButton,
+    QWidget,
+)
 
 from pyside6_modern_widgets import ModernMenu, ModernMenuBar, ModernWindow
-from pyside6_modern_widgets.theme import DARK_THEME, LIGHT_THEME
+from pyside6_modern_widgets.theme import DARK_THEME, LIGHT_THEME, ThemeMode
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize("mode", [ThemeMode.LIGHT, ThemeMode.DARK])
+def test_title_bar_menu_uses_qt_foreground_states_without_restyling(theme_manager_instance, mode):
+    theme_manager_instance.setMode(mode)
+    window, other = ModernWindow(), QWidget()
+    modern, native = ModernMenuBar(window), QMenuBar(window)
+    for bar in (modern, native):
+        bar.setNativeMenuBar(False)
+        bar.addAction("File")
+        window.titleBar.addCustomWidget(bar, align="left")
+    try:
+        window.show()
+        other.show()
+        _APP.processEvents()
+        style_sheet = modern.styleSheet()
+        geometry = modern.geometry()
+        for target in (window, other, window):
+            target.activateWindow()
+            _APP.processEvents()
+            assert target.isActiveWindow()
+            for enabled in (True, False):
+                options = []
+                for bar in (modern, native):
+                    action = bar.actions()[0]
+                    action.setEnabled(enabled)
+                    option = QStyleOptionMenuItem()
+                    bar.initStyleOption(option, action)
+                    options.append(option)
+                assert options[0].state == options[1].state
+                assert (
+                    options[0].palette.currentColorGroup() == options[1].palette.currentColorGroup()
+                )
+                for role in (QPalette.ColorRole.ButtonText, QPalette.ColorRole.WindowText):
+                    assert options[0].palette.color(role) == options[1].palette.color(role)
+            assert modern.styleSheet() == style_sheet
+            assert modern.geometry() == geometry
+    finally:
+        window.close()
+        other.close()
+        window.deleteLater()
+        other.deleteLater()
 
 
 def _selected_background(menu_bar: ModernMenuBar) -> QColor:

@@ -31,7 +31,6 @@ from ._window_chrome import (
     WindowChromeOverlay,
     WindowSurfacePolicy,
     WindowTitleBar,
-    button_style,
     current_window_surface_policy,
     manual_resize_geometry,
     uses_windows_window_state,
@@ -175,7 +174,7 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             self._metrics.title_button_size,
             self._metrics.title_button_size,
         )
-        button.setStyleSheet(button_style(self._theme, self._metrics))
+        button.applyTheme(self._theme, self._metrics)
         button.clicked.connect(callback)
         return button
 
@@ -266,13 +265,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         self.quitAction.setIcon(_resource_icon("shutdown.png", theme))
         self.minimizeButton.setIcon(_resource_icon("minimize.png", theme))
         self.updateMaximizeIcon(self.parent_window.isMaximized())
-        for button in (
-            self.menuButton,
-            self.pinButton,
-            self.minimizeButton,
-            self.maximizeButton,
-        ):
-            button.setStyleSheet(button_style(theme, self._metrics))
 
     def toggleOnTop(self) -> None:
         was_visible = self.parent_window.isVisible()
@@ -744,7 +736,7 @@ class ModernWindow(QWidget):
             self._metrics.title_button_size,
             self._metrics.title_button_size,
         )
-        button.setStyleSheet(button_style(self._theme, self._metrics))
+        button.applyTheme(self._theme, self._metrics)
         if tooltip:
             button.setToolTip(tooltip)
         if callback:

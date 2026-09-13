@@ -5,18 +5,15 @@ from __future__ import annotations
 from typing import overload
 
 from PySide6.QtCore import QEvent
-from PySide6.QtGui import QAction, QColor, QIcon, QPixmap
+from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu, QMenuBar, QToolButton, QWidget
 
-from ._window_chrome import INACTIVE_TITLE_OPACITY, WindowTitleBar
 from .modern_menu import ModernMenu
-from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme, theme_manager
+from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme, _chrome_palette, theme_manager
 
 
-def _menu_bar_style(
-    theme: ModernTheme, metrics: ModernMetrics, in_title_bar: bool = False, active: bool = True
-) -> str:
-    style = f"""
+def _menu_bar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
+    return f"""
     QMenuBar {{ background: transparent; border: none; }}
     QMenuBar::item {{ background: transparent; }}
     QMenuBar::item:selected {{
@@ -29,16 +26,6 @@ def _menu_bar_style(
         border-radius: {metrics.control_radius}px;
     }}
     """
-    if in_title_bar:
-        color = QColor(theme.text)
-        if not active:
-            color.setAlphaF(color.alphaF() * INACTIVE_TITLE_OPACITY)
-        style += f"""
-        QMenuBar::item {{
-            color: rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()});
-        }}
-        """
-    return style
 
 
 class ModernMenuBar(QMenuBar):
@@ -53,9 +40,6 @@ class ModernMenuBar(QMenuBar):
         super().__init__(parent)
         self._metrics = metrics
         self._styled_theme: ModernTheme | None = None
-        self._styled_in_title_bar = False
-        self._styled_active = True
-        self._observed_window: QWidget | None = None
         theme_manager().themeChanged.connect(self._on_theme_changed)
         self._apply_theme()
         # Qt fills this menu with overflow actions during layout. Supply the
@@ -76,46 +60,12 @@ class ModernMenuBar(QMenuBar):
         return theme_manager().theme()
 
     def _apply_theme(self) -> None:
-        window = self.window()
-        if window is not self._observed_window:
-            if self._observed_window is not None:
-                self._observed_window.removeEventFilter(self)
-            self._observed_window = window
-            window.installEventFilter(self)
         theme = self._inherited_theme()
-        in_title_bar = self._in_title_bar()
-        active = window.isActiveWindow()
-        if (
-            theme != self._styled_theme
-            or in_title_bar != self._styled_in_title_bar
-            or (in_title_bar and active != self._styled_active)
-        ):
+        if theme != self._styled_theme:
             # Cache before setting the style sheet, which can emit palette events.
             self._styled_theme = theme
-            self._styled_in_title_bar = in_title_bar
-            self._styled_active = active
-            self.setStyleSheet(_menu_bar_style(theme, self._metrics, in_title_bar, active))
-            # Re-polishing QMenuBar can temporarily expand it to the window width.
-            # Restore the title-bar layout before hit testing or painting resumes.
-            parent = self.parentWidget()
-            layout = parent.layout() if parent is not None else None
-            if in_title_bar and layout is not None:
-                layout.activate()
-
-    def eventFilter(self, watched, event) -> bool:
-        if event.type() == QEvent.Type.ActivationChange and watched is getattr(
-            self, "_observed_window", None
-        ):
-            self._apply_theme()
-        return super().eventFilter(watched, event)
-
-    def _in_title_bar(self) -> bool:
-        ancestor = self.parentWidget()
-        while ancestor is not None:
-            if isinstance(ancestor, WindowTitleBar):
-                return True
-            ancestor = ancestor.parentWidget()
-        return False
+            self.setStyleSheet(_menu_bar_style(theme, self._metrics))
+            self.setPalette(_chrome_palette(theme, self.palette()))
 
     def _on_theme_changed(self, _theme: ModernTheme) -> None:
         self._apply_theme()
@@ -138,7 +88,7 @@ class ModernMenuBar(QMenuBar):
     def addMenu(self, icon: QIcon | QPixmap, title: str, /) -> ModernMenu: ...
 
     def addMenu(self, *args):
-        owner = self.window() if self._in_title_bar() else self.parentWidget() or self
+        owner = self.parentWidget() or self
         if len(args) == 1 and isinstance(args[0], str):
             menu = ModernMenu(args[0], owner, metrics=self._metrics)
             super().addMenu(menu)

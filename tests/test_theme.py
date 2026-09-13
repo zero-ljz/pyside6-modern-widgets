@@ -197,7 +197,9 @@ def test_business_controls_and_open_menus_refresh(theme_manager_instance, monkey
         theme_manager_instance.setMode(ThemeMode.DARK)
         _APP.processEvents()
         for widget in (label, edit, menu_bar, menu, submenu, standalone):
-            assert widget.palette().color(QPalette.ColorRole.WindowText) == QColor(DARK_THEME.text)
+            assert widget.palette().color(
+                QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText
+            ) == QColor(DARK_THEME.text)
         assert edit.palette().color(QPalette.ColorRole.Base) == QColor(DARK_THEME.surface)
         assert disabled.palette().color(
             QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText

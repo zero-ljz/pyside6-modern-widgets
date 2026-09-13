@@ -6,11 +6,15 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restore inactive title and menu foregrounds through Qt's `Inactive` palette
+  group, with 50% alpha. Title-bar icons follow that group while retaining native
+  button rendering; remove foreground activation monitors and dynamic menu QSS.
+- Restore visible Win11 menu acrylic after theme palette propagation changed
+  the native tint to pure white. Limit very light acrylic tints without changing
+  the Qt surface or the opaque fallback, including for open menus and submenus.
 - Restore native Qt system accent and selection roles by default, including after
   switching back from custom colors. Built-in `accent`/`on_accent` are `None` for
   inheritance; explicit custom colors still override them.
-- Render inactive title-bar text, window icons, and control foregrounds at 50%
-  opacity, preserving their colors and the opacity of hover/pressed backgrounds.
 
 ### Fixed
 

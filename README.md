@@ -289,10 +289,17 @@ Inactive windows use a solid background (`#F3F3F3` for light themes, the surface
 color for dark themes). Activation restores the wallpaper effect with a reversible
 250 ms linear fade. Layout metrics remain independently configurable through
 `ModernMetrics`.
-Inactive title-bar text, the window icon, and control icons retain their original
-colors at 50% opacity. Activation restores full opacity; control hover and pressed
-backgrounds retain their normal opacity. This applies to windows, dialogs, and
-message boxes, including menu-bar text placed inside the title bar.
+Title text and menu bars use a 50%-alpha foreground in Qt's `Inactive` palette
+group. Qt selects the group automatically; activation does not rewrite styles
+or change layout. Title-bar window and button icons read the same palette group
+when painted, preserving their original colors and icon modes. Button backgrounds,
+hover/pressed behavior, and disabled rendering remain handled by Qt's style.
+Ordinary page content retains its normal inactive contrast.
+
+Windows 11 menu acrylic follows the owner theme, including changes while a menu
+is open. Very light native acrylic tints are limited to lightness 240 so a pure
+white theme surface does not wash out the backdrop. This leaves the Qt surface
+palette and opaque fallback unchanged.
 
 ### Local overrides and application pages
 

@@ -20,6 +20,7 @@ from .theme import DEFAULT_METRICS, ModernMetrics, theme_manager
 
 _FALLBACK_BASE_STYLE = "fusion"
 _WINDOWS_ACRYLIC_TINT_ALPHA = 170
+_WINDOWS_ACRYLIC_MAX_TINT_LIGHTNESS = 240
 _ACRYLIC_INPUT_ALPHA = 1
 _MENU_ITEM_EXTRA_HEIGHT = 4
 _MENU_VERTICAL_MARGIN = 2
@@ -92,6 +93,16 @@ def _enable_windows_rounded_corners(menu: QMenu, radius: int) -> bool:
         return False
 
 
+def _windows_acrylic_tint(palette: QPalette, widget: QWidget | None = None) -> QColor:
+    tint = _surface_color(palette, widget)
+    # DWM's acrylic luminosity layer washes out the backdrop with a pure-white
+    # tint. Keep the pre-theme Windows menu lightness without changing Qt's
+    # surface palette or the opaque fallback used on other platforms.
+    if tint.lightness() > _WINDOWS_ACRYLIC_MAX_TINT_LIGHTNESS:
+        tint.setHsl(tint.hslHue(), tint.hslSaturation(), _WINDOWS_ACRYLIC_MAX_TINT_LIGHTNESS)
+    return tint
+
+
 def _enable_windows_acrylic(menu: QMenu) -> bool:
     if not _supports_windows_acrylic():
         return False
@@ -114,7 +125,7 @@ def _enable_windows_acrylic(menu: QMenu) -> bool:
                 ("size", ctypes.c_size_t),
             ]
 
-        tint = _surface_color(menu.palette(), menu)
+        tint = _windows_acrylic_tint(menu.palette(), menu)
         gradient_color = (
             (_WINDOWS_ACRYLIC_TINT_ALPHA << 24)
             | (tint.blue() << 16)
