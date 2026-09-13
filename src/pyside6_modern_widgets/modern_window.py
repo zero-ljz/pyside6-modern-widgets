@@ -72,6 +72,7 @@ from ._windows_window import (
     is_window_maximized,
     read_message,
     redraw_native_window,
+    restore_native_window,
     screen_position_from_client,
     screen_position_from_l_param,
     set_mouse_capture,
@@ -319,6 +320,7 @@ class ModernWindow(QWidget):
         self._native_caption_anchor_from_right = False
         self._native_caption_anchor_y = 0
         self._native_caption_manual_move_offset: QPoint | None = None
+        self._normal_geometry: QRect | None = None
         self._application_event_filter_installed = False
         self._screen_change_window: QWindow | None = None
         self._screen_metrics_screen: QScreen | None = None
@@ -493,6 +495,24 @@ class ModernWindow(QWidget):
     def showMaximized(self) -> None:
         if self._size_allows_maximize():
             QWidget.showMaximized(self)
+
+    def showNormal(self) -> None:
+        normal_geometry = self._normal_geometry
+        handle = self.windowHandle()
+        native_maximized = (
+            self._uses_windows_window_state()
+            and handle is not None
+            and is_window_maximized(int(handle.winId()))
+        )
+        if native_maximized:
+            # Qt emulates maximization for FramelessWindowHint, but re-showing
+            # a minimized/hidden window can make Windows set WS_MAXIMIZE too.
+            # QWidget.showNormal() alone then leaves the HWND maximized. Restore
+            # it first so queued native events cannot put Qt back into that state.
+            restore_native_window(int(handle.winId()))
+        QWidget.showNormal(self)
+        if native_maximized and normal_geometry is not None:
+            self.setGeometry(normal_geometry)
 
     def _window_constraints_changed(self) -> None:
         if not hasattr(self, "_native_frame_sync_timer"):
@@ -941,7 +961,7 @@ class ModernWindow(QWidget):
         if (position - press_position).manhattanLength() < QApplication.startDragDistance():
             return
 
-        normal_geometry = self.normalGeometry()
+        normal_geometry = self._normal_geometry or self.normalGeometry()
         if not normal_geometry.isValid():
             normal_geometry = self.geometry()
         restored_width = normal_geometry.width()
@@ -1267,6 +1287,19 @@ class ModernWindow(QWidget):
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
+            non_normal = (
+                Qt.WindowState.WindowMinimized
+                | Qt.WindowState.WindowMaximized
+                | Qt.WindowState.WindowFullScreen
+            )
+            if not event.oldState() & non_normal and self.windowState() & non_normal:
+                # Keep our own copy: a native re-show can overwrite Qt's saved
+                # rectangle with the maximized dimensions without a state change.
+                geometry = self.normalGeometry()
+                if geometry.isValid():
+                    self._normal_geometry = QRect(geometry)
+            elif not self.windowState() & non_normal:
+                self._normal_geometry = None
             if self.isMaximized() or self.isFullScreen():
                 self._set_resize_cursor(Qt.Edge(0))
             self._sync_window_state_style()

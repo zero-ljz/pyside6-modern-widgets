@@ -46,6 +46,19 @@ def test_native_maximize_state(monkeypatch, zoomed) -> None:
     assert _windows_window.is_window_maximized(12345) is zoomed
 
 
+def test_restore_native_window_uses_show_window_restore(monkeypatch) -> None:
+    calls = []
+
+    class User32:
+        ShowWindow = _NativeFunction(lambda hwnd, command: calls.append((hwnd.value, command)))
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())
+
+    _windows_window.restore_native_window(12345)
+
+    assert calls == [(12345, 9)]
+
+
 def test_l_param_coordinates_use_full_width_cursor_position_when_available(monkeypatch) -> None:
     x, y = 70_000, -40_000
     l_param = (x & 0xFFFF) | ((y & 0xFFFF) << 16)

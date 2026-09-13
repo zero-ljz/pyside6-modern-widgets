@@ -5,15 +5,18 @@ from __future__ import annotations
 import ctypes
 import sys
 from ctypes import wintypes
+from unittest.mock import patch
 
 from PySide6.QtCore import QPoint, QSize
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from pyside6_modern_widgets import ModernWindow
+from pyside6_modern_widgets import modern_window as modern_window_module
 from pyside6_modern_widgets._windows_window import (
     HTCAPTION,
     HTMAXBUTTON,
+    WM_MOUSEMOVE,
     WM_NCLBUTTONDBLCLK,
     WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP,
@@ -21,6 +24,8 @@ from pyside6_modern_widgets._windows_window import (
     WS_MAXIMIZEBOX,
     WS_THICKFRAME,
     _client_metrics,
+    is_window_maximized,
+    screen_position_from_client,
 )
 
 
@@ -93,6 +98,53 @@ def main() -> int:
             assert not window.isMaximized()
             assert window.geometry() == normal_geometry
             assert _client_metrics(hwnd) == normal_client
+
+        # Re-showing a frameless maximized window can set WS_MAXIMIZE and
+        # overwrite Qt's normalGeometry with the maximized client rectangle.
+        for transition in ("direct", "minimize", "hide"):
+            for restore in ("drag", "button"):
+                window.setGeometry(normal_geometry)
+                window.showMaximized()
+                _wait(app)
+                if transition == "minimize":
+                    window.showMinimized()
+                    _wait(app)
+                    send_message(hwnd, WM_SYSCOMMAND, 0xF120, 0)
+                elif transition == "hide":
+                    window.hide()
+                    window.show()
+                _wait(app)
+                assert window.isMaximized()
+
+                if restore == "button":
+                    window.titleBar.maximizeButton.click()
+                else:
+                    press = QPoint(300, 20)
+                    physical = screen_position_from_client(
+                        hwnd, press.x(), press.y(), window.width(), window.height()
+                    )
+                    assert physical is not None
+                    l_param = (physical[0] & 0xFFFF) | ((physical[1] & 0xFFFF) << 16)
+                    cursor = window.mapToGlobal(press) + QPoint(30, 20)
+                    send_message(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, l_param)
+                    assert window._native_caption_press_position is not None
+                    with (
+                        patch.object(modern_window_module.QCursor, "pos", return_value=cursor),
+                        patch.object(
+                            modern_window_module, "start_system_move", return_value=True
+                        ) as start_move,
+                    ):
+                        send_message(hwnd, WM_MOUSEMOVE, 1, 0)
+                        start_move.assert_called_once_with(hwnd)
+                    # Check the handoff as well as queued native state changes.
+                    assert not is_window_maximized(hwnd), (transition, restore)
+                    assert window.size() == normal_geometry.size(), (transition, restore)
+                _wait(app)
+                assert not window.isMaximized(), (transition, restore)
+                assert not is_window_maximized(hwnd), (transition, restore)
+                assert window.size() == normal_geometry.size(), (transition, restore)
+                if restore == "button":
+                    assert window.geometry() == normal_geometry, (transition, restore)
 
         window.setFixedSize(normal_size)
         _wait(app)

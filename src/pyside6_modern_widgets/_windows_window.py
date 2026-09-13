@@ -144,6 +144,17 @@ def is_window_maximized(hwnd: int) -> bool:
         return False
 
 
+def restore_native_window(hwnd: int) -> None:
+    """Clear native maximization before Qt restores a frameless window."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+        user32.ShowWindow.restype = wintypes.BOOL
+        user32.ShowWindow(wintypes.HWND(hwnd), 9)  # SW_RESTORE
+    except (AttributeError, OSError, TypeError, ValueError):
+        return
+
+
 def track_non_client_mouse_leave(hwnd: int) -> None:
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)

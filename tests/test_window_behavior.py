@@ -373,6 +373,66 @@ def test_native_restore_from_minimized_preserves_previous_state(maximized) -> No
     window.close()
 
 
+@pytest.mark.parametrize("restore", ["drag", "button"])
+def test_restore_keeps_normal_geometry_when_native_reshow_overwrites_qt_cache(
+    monkeypatch, restore
+) -> None:
+    window = ModernWindow()
+    window.setGeometry(100, 100, 500, 300)
+    window.show()
+    _APP.processEvents()
+    normal = window.geometry()
+    window.showMaximized()
+    window.showMinimized()
+    window._restore_from_native_command()
+    _APP.processEvents()
+
+    # Windows can re-show this as a natively maximized HWND and replace Qt's
+    # normalGeometry without delivering another WindowStateChange.
+    monkeypatch.setattr(window, "normalGeometry", lambda: QRect(0, 0, 1600, 900))
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    native_maximized = [True]
+    native_restores = []
+
+    def restore_native(hwnd):
+        assert window.isMaximized()  # Native restore must precede Qt restore.
+        native_restores.append(hwnd)
+        native_maximized[0] = False
+
+    monkeypatch.setattr(modern_window_module, "is_window_maximized", lambda _: native_maximized[0])
+    monkeypatch.setattr(modern_window_module, "restore_native_window", restore_native)
+    monkeypatch.setattr(modern_window_module, "set_mouse_capture", lambda *_args: None)
+    hwnd = int(window.winId())
+    if restore == "button":
+        window.titleBar.maximizeButton.click()
+        assert window.geometry() == normal
+    else:
+        press = window.mapToGlobal(QPoint(100, 20))
+        positions = iter((press, press + QPoint(30, 20)))
+        monkeypatch.setattr(modern_window_module.QCursor, "pos", lambda: next(positions))
+        monkeypatch.setattr(
+            modern_window_module, "client_position_from_l_param", lambda *_args: None
+        )
+        moves = []
+
+        def start_move(move_hwnd):
+            assert not window.isMaximized()
+            assert not native_maximized[0]
+            assert window.size() == normal.size()
+            moves.append(move_hwnd)
+            return True
+
+        monkeypatch.setattr(modern_window_module, "start_system_move", start_move)
+        window._begin_native_caption_drag(hwnd, 0)
+        window._continue_native_caption_drag(hwnd)
+        assert moves == [hwnd]
+        assert window.pos() == press + QPoint(30, 20) - QPoint(100, 20)
+    assert native_restores == [hwnd]
+    assert not window.isMaximized()
+    assert window._normal_geometry is None
+    window.close()
+
+
 def test_fixed_window_cannot_maximize() -> None:
     window = ModernWindow()
     window.setFixedSize(500, 300)

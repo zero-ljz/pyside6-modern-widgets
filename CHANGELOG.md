@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore maximized Windows windows to their original size before title-bar
+  dragging, including after minimizing/restoring or hiding/showing the window.
+  Clear the native maximize state before handing the drag back to Windows.
+
 ## [0.5.3] - 2026-09-11
 
 ### Fixed
