@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Hide the title-bar pin button on native Wayland, where Qt's standard shell
+  integration does not support always-on-top.
+
 ## [0.5.4] - 2026-09-13
 
 ### Changed

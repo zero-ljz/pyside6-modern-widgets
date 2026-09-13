@@ -223,7 +223,11 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         self.menuButton.setVisible(
             regular_window and bool(flags & Qt.WindowType.WindowSystemMenuHint)
         )
-        self.pinButton.setVisible(regular_window and not customized)
+        self.pinButton.setVisible(
+            regular_window
+            and not customized
+            and not QApplication.platformName().startswith("wayland")
+        )
         self.minimizeButton.setVisible(
             regular_window and bool(flags & Qt.WindowType.WindowMinimizeButtonHint)
         )
