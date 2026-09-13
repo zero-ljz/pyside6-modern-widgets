@@ -13,6 +13,12 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Release the cached central-widget reference when its ownership moves away
+  from a `ModernWindow`, preventing later replacements from deleting another
+  window's content.
+- Move wallpaper discovery, metadata checks, and image sampling off the GUI
+  thread. Coalesce refresh requests, avoid repeated discovery after a missing
+  wallpaper, and ignore stale results after a manual theme selection.
 - Keep tab labels and pages synchronized when inserting an existing page again,
   and disable the page content along with its tab.
 - Scope tab shortcuts to the nearest focused tab view, including nested views, preserving

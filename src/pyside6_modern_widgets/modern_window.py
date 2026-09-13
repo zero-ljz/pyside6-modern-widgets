@@ -785,7 +785,12 @@ class ModernWindow(QWidget):
 
     def event(self, event) -> bool:
         handled = super().event(event)
-        if event.type() == QEvent.Type.WinIdChange:
+        if event.type() == QEvent.Type.ChildRemoved:
+            # Ownership can change while hidden, when our application-wide
+            # event filter is inactive.
+            if event.child() is getattr(self, "content", None):
+                self._track_content(None)
+        elif event.type() == QEvent.Type.WinIdChange:
             self._schedule_native_frame_sync()
         elif event.type() == QEvent.Type.PlatformSurface and isinstance(
             event, QPlatformSurfaceEvent

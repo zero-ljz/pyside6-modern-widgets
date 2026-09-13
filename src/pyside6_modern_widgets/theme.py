@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -10,7 +11,12 @@ from PySide6.QtCore import QEvent, QFileSystemWatcher, QObject, Qt, QTimer, Sign
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
 
-from ._wallpaper import desktop_wallpaper_path, wallpaper_colors, wallpaper_signature
+from ._wallpaper import (
+    WallpaperSignature,
+    desktop_wallpaper_path,
+    wallpaper_colors,
+    wallpaper_signature,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +122,11 @@ def theme_from_wallpaper(
     path: str | os.PathLike[str] | None = None,
 ) -> ModernTheme:
     """Return a modern surface colored from the current desktop wallpaper."""
+    return _theme_from_colors(theme, wallpaper_colors(path))
+
+
+def _theme_from_colors(theme: ModernTheme, colors: tuple[QColor, ...]) -> ModernTheme:
     is_dark = QColor(theme.surface).lightness() < 128
-    colors = wallpaper_colors(path)
     if not colors:
         fallback = DARK_THEME if is_dark else LIGHT_THEME
         return replace(
@@ -222,6 +231,27 @@ def tinted_icon(icon: QIcon, color: str, size: int = 48) -> QIcon:
     return QIcon(pixmap)
 
 
+@dataclass(frozen=True)
+class _WallpaperSnapshot:
+    path: Path | None
+    signature: WallpaperSignature | None
+    colors: tuple[QColor, ...] | None
+
+
+def _read_wallpaper(previous: WallpaperSignature | None, force: bool) -> _WallpaperSnapshot:
+    """Run discovery, metadata IO and QImage sampling without accessing Qt widgets."""
+    path = desktop_wallpaper_path()
+    # None means discovery failed, not a request to discover the wallpaper again.
+    signature = wallpaper_signature(path) if path is not None else None
+    colors = None
+    if force or signature != previous:
+        colors = wallpaper_colors(path) if path is not None else ()
+    return _WallpaperSnapshot(path, signature, colors)
+
+
+_WALLPAPER_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wallpaper")
+
+
 class ThemeManager(QObject):
     """Publish one runtime theme to widgets that do not use a local override."""
 
@@ -236,16 +266,24 @@ class ThemeManager(QObject):
         self._follows_system = False
         self._application: QApplication | None = None
         self._wallpaper_path: Path | None = None
-        self._wallpaper_signature: tuple[str, int, int] | None = None
+        self._wallpaper_signature: WallpaperSignature | None = None
+        self._wallpaper_colors: tuple[QColor, ...] = ()
         self._wallpaper_watcher: QFileSystemWatcher | None = None
         self._wallpaper_poll_timer: QTimer | None = None
         self._wallpaper_refresh_timer: QTimer | None = None
+        self._wallpaper_result_timer: QTimer | None = None
+        self._wallpaper_future: Future[_WallpaperSnapshot] | None = None
+        self._wallpaper_refresh_pending = False
+        self._manual_theme_revision = 0
+        self._wallpaper_request_revision = 0
 
     def theme(self) -> ModernTheme:
         self._ensure_wallpaper_monitor()
         return self._theme
 
     def setTheme(self, theme: ModernTheme) -> None:
+        self._manual_theme_revision += 1
+        self._wallpaper_refresh_pending = False
         self._follows_system = False
         application = QApplication.instance()
         if isinstance(application, QApplication):
@@ -253,12 +291,11 @@ class ThemeManager(QObject):
         self._set_theme(theme)
 
     def refreshWallpaperTheme(self) -> None:
-        """Re-read the desktop wallpaper and publish its colors."""
-        path = desktop_wallpaper_path()
-        self._wallpaper_path = path
-        self._wallpaper_signature = wallpaper_signature(path)
-        self._sync_wallpaper_watch(path)
-        self._set_theme(theme_from_wallpaper(self._theme, path))
+        """Request a background refresh; publish the result through themeChanged."""
+        if self._wallpaper_poll_timer is None:
+            self._ensure_wallpaper_monitor()
+        else:
+            self._request_wallpaper_update(force=True)
 
     def followsSystemTheme(self) -> bool:
         return self._follows_system
@@ -276,20 +313,21 @@ class ThemeManager(QObject):
                 application.installEventFilter(self)
         if enabled and application is not None:
             self._set_theme(
-                theme_from_wallpaper(
+                _theme_from_colors(
                     theme_for_palette(application.palette()),
-                    self._wallpaper_path,
+                    self._wallpaper_colors,
                 )
             )
+            self._request_wallpaper_update(force=True)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if self._follows_system and event.type() == QEvent.Type.ApplicationPaletteChange:
             application = QApplication.instance()
             if isinstance(application, QApplication):
                 self._set_theme(
-                    theme_from_wallpaper(
+                    _theme_from_colors(
                         theme_for_palette(application.palette()),
-                        self._wallpaper_path,
+                        self._wallpaper_colors,
                     )
                 )
         return super().eventFilter(watched, event)
@@ -311,10 +349,10 @@ class ThemeManager(QObject):
         self._wallpaper_refresh_timer.setInterval(self.WALLPAPER_REFRESH_DELAY_MS)
         self._wallpaper_refresh_timer.timeout.connect(self._refresh_changed_wallpaper)
 
-        self._wallpaper_path = desktop_wallpaper_path()
-        self._wallpaper_signature = wallpaper_signature(self._wallpaper_path)
-        self._sync_wallpaper_watch(self._wallpaper_path)
-        self._set_theme(theme_from_wallpaper(self._theme, self._wallpaper_path))
+        self._wallpaper_result_timer = QTimer(self)
+        self._wallpaper_result_timer.setInterval(50)
+        self._wallpaper_result_timer.timeout.connect(self._receive_wallpaper_update)
+        self._request_wallpaper_update(force=True)
         self._wallpaper_poll_timer.start()
 
     def _queue_wallpaper_refresh(self, _path: str) -> None:
@@ -322,18 +360,50 @@ class ThemeManager(QObject):
             self._wallpaper_refresh_timer.start()
 
     def _refresh_changed_wallpaper(self) -> None:
-        self._wallpaper_signature = None
-        self._poll_wallpaper_update()
+        self._request_wallpaper_update(force=True)
 
     def _poll_wallpaper_update(self) -> None:
-        path = desktop_wallpaper_path()
-        signature = wallpaper_signature(path)
-        self._sync_wallpaper_watch(path)
-        if signature == self._wallpaper_signature:
+        self._request_wallpaper_update(force=False)
+
+    def _request_wallpaper_update(self, *, force: bool) -> None:
+        if self._wallpaper_result_timer is None:
             return
-        self._wallpaper_path = path
-        self._wallpaper_signature = signature
-        self._set_theme(theme_from_wallpaper(self._theme, path))
+        if self._wallpaper_future is not None:
+            # Routine polls never build a queue behind a slow OS command. A file
+            # change or explicit refresh needs at most one follow-up sample.
+            self._wallpaper_refresh_pending |= force
+            return
+        self._wallpaper_request_revision = self._manual_theme_revision
+        self._wallpaper_future = _WALLPAPER_EXECUTOR.submit(
+            _read_wallpaper, self._wallpaper_signature, force
+        )
+        self._wallpaper_result_timer.start()
+
+    def _receive_wallpaper_update(self) -> None:
+        future = self._wallpaper_future
+        if future is None or not future.done():
+            return
+        self._wallpaper_future = None
+        assert self._wallpaper_result_timer is not None
+        self._wallpaper_result_timer.stop()
+        request_revision = self._wallpaper_request_revision
+        try:
+            snapshot = future.result()
+        except (OSError, ValueError):
+            # Transient discovery/read failures leave the current theme intact;
+            # the next poll can retry without leaving the worker marked busy.
+            snapshot = None
+        if snapshot is not None:
+            self._wallpaper_path = snapshot.path
+            self._wallpaper_signature = snapshot.signature
+            self._sync_wallpaper_watch(snapshot.path)
+            if snapshot.colors is not None:
+                self._wallpaper_colors = snapshot.colors
+                if request_revision == self._manual_theme_revision:
+                    self._set_theme(_theme_from_colors(self._theme, snapshot.colors))
+        if self._wallpaper_refresh_pending:
+            self._wallpaper_refresh_pending = False
+            self._request_wallpaper_update(force=True)
 
     def _sync_wallpaper_watch(self, path: Path | None) -> None:
         if self._wallpaper_watcher is None:

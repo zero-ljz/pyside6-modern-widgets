@@ -6,7 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtWidgets import QApplication, QLabel, QToolBar
+from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar
 from shiboken6 import isValid
 
 from pyside6_modern_widgets import ModernWindow
@@ -76,6 +76,36 @@ def test_central_widget_destruction_and_none_leave_window_reusable(
     assert window.frameLayout is not None
     assert window.frameLayout.indexOf(third) >= 0
     window.close()
+
+
+@pytest.mark.parametrize("visible", [False, True])
+@pytest.mark.parametrize("transfer", ["window", "detach"])
+def test_transferred_central_widget_survives_source_replacement(application, visible, transfer):
+    for window_class in (QMainWindow, ModernWindow):
+        source, destination = window_class(), window_class()
+        page = QLabel("Moved content")
+        source.setCentralWidget(page)
+        if visible:
+            source.show()
+            application.processEvents()
+        if transfer == "window":
+            destination.setCentralWidget(page)
+        else:
+            page.setParent(None)
+        content = source.content if isinstance(source, ModernWindow) else source.centralWidget()
+        assert content is None
+        source.setCentralWidget(QLabel("Replacement"))
+        _destroy_deferred_objects(application)
+        assert isValid(page)
+        assert page.text() == "Moved content"
+        if transfer == "window":
+            assert page.parentWidget() is destination
+        # Taking the same page back must remain supported after ownership changes.
+        source.setCentralWidget(page)
+        assert page.parentWidget() is source
+        source.deleteLater()
+        destination.deleteLater()
+        _destroy_deferred_objects(application)
 
 
 def test_add_toolbar_honors_supported_areas_and_rejects_invalid_signatures(

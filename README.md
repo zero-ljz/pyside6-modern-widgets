@@ -213,7 +213,10 @@ Widgets following the global theme update
 automatically after a wallpaper change. The watcher responds directly to
 changes in the current image file and performs a lightweight path and metadata
 check every second for wallpaper switches; image sampling only runs after
-a change is detected.
+a change is detected. Wallpaper discovery, file metadata checks, and image
+sampling run in a background worker. Widgets initially use the cached theme
+and update when the result is ready, keeping the GUI responsive during slow
+system queries. Repeated refresh requests are coalesced.
 
 ```python
 from pyside6_modern_widgets import theme_manager
@@ -225,8 +228,8 @@ Following the system theme switches the readable semantic colors between light
 and dark while retaining colors extracted from the wallpaper. If the wallpaper
 cannot be read, the surface falls back to its built-in modern colors. Layout
 metrics can be customized with `ModernMetrics` without modifying component
-internals. `theme_manager().refreshWallpaperTheme()` remains available for an
-immediate manual refresh when needed.
+internals. `theme_manager().refreshWallpaperTheme()` requests an asynchronous
+manual refresh; `themeChanged` is emitted if the resulting theme changes.
 
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is
