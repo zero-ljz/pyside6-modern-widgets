@@ -508,6 +508,7 @@ class ModernWindow(QWidget):
             system_menu=bool(flags & Qt.WindowType.WindowSystemMenuHint),
             minimizable=bool(flags & Qt.WindowType.WindowMinimizeButtonHint),
             maximizable=self._can_maximize(),
+            maximized=self.isMaximized() and not self.isFullScreen(),
             force_refresh=force_refresh,
         )
         self._native_frame_enabled = enabled and applied
@@ -554,6 +555,9 @@ class ModernWindow(QWidget):
         QWidget.setWindowState(self, state)
         if normal_geometry is not None:
             self.setGeometry(normal_geometry)
+            # Clear any style Qt reapplied during restore before a caption drag
+            # hands the window back to the native move loop.
+            self._sync_windows_native_frame()
 
     def _restore_native_maximize_state(self) -> QRect | None:
         normal_geometry = self._normal_geometry
@@ -1341,6 +1345,7 @@ class ModernWindow(QWidget):
             if self.isMaximized() or self.isFullScreen():
                 self._set_resize_cursor(Qt.Edge(0))
             self._sync_window_state_style()
+            self._schedule_native_frame_sync()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

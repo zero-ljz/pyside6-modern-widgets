@@ -397,6 +397,7 @@ def set_native_frame(
     system_menu: bool = True,
     minimizable: bool = True,
     maximizable: bool = True,
+    maximized: bool = False,
     force_refresh: bool = False,
 ) -> bool:
     """Synchronize the native frame styles that drive Windows window behavior."""
@@ -430,6 +431,9 @@ def set_native_frame(
                 (WS_SYSMENU, system_menu),
                 (WS_MINIMIZEBOX, minimizable),
                 (WS_MAXIMIZEBOX, maximizable),
+                # Qt maximizes frameless windows by resizing them, without
+                # setting the bit Windows uses for the native restore tooltip.
+                (WS_MAXIMIZE, maximized),
             )
             for style_bit, active in capabilities:
                 if active:

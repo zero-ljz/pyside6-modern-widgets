@@ -87,10 +87,14 @@ def main() -> int:
         assert send_message(hwnd, WM_NCLBUTTONUP, HTMAXBUTTON, 0) == 0
         _wait(app)
         assert window.isMaximized()
+        assert is_window_maximized(hwnd)
+        assert window.titleBar.maximizeButton.toolTip() == "向下还原"
         assert send_message(hwnd, WM_NCLBUTTONDOWN, HTMAXBUTTON, 0) == 0
         assert send_message(hwnd, WM_NCLBUTTONUP, HTMAXBUTTON, 0) == 0
         _wait(app)
         assert not window.isMaximized()
+        assert not is_window_maximized(hwnd)
+        assert window.titleBar.maximizeButton.toolTip() == "最大化"
 
         normal_geometry = window.geometry()
         normal_client = _client_metrics(hwnd)
