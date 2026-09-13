@@ -546,6 +546,10 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         title_font = self.titleLabel.font()
         title_font.setPointSizeF(max(title_font.pointSizeF(), 10.5))
         self.titleLabel.setFont(title_font)
+        # Global QSS can stop QLabel from inheriting its parent's palette even
+        # when its selectors only target unrelated labels (for example page titles).
+        self.titleLabel.setPalette(self.palette())
+        self.iconLabel.setPalette(self.palette())
         self._layout_title()
         buttons: Iterable[TitleBarButton] = self.findChildren(TitleBarButton)
         for button in buttons:

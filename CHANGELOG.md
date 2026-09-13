@@ -4,8 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-09-13
+
 ### Fixed
 
+- Preserve inactive title text and icon opacity when the application uses global
+  QSS, including selectors that only target unrelated labels.
 - Restore inactive title and menu foregrounds through Qt's `Inactive` palette
   group, with 50% alpha. Title-bar icons follow that group while retaining native
   button rendering; remove foreground activation monitors and dynamic menu QSS.
@@ -15,13 +19,9 @@ All notable changes to this project are documented in this file.
 - Restore native Qt system accent and selection roles by default, including after
   switching back from custom colors. Built-in `accent`/`on_accent` are `None` for
   inheritance; explicit custom colors still override them.
-
-### Fixed
-
 - Hide the title-bar pin button on native Wayland, where Qt's standard shell
   integration does not support always-on-top.
-
-## [Unreleased]
+- Synchronize native Windows maximize state before updating the restore tooltip.
 
 ### Changed
 
@@ -281,7 +281,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.1...v0.5.2

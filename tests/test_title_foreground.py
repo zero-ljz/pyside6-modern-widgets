@@ -21,6 +21,18 @@ from pyside6_modern_widgets._window_chrome import WindowTitleBar
 _APP = QApplication.instance()
 
 
+@pytest.fixture(params=[False, True], ids=["no-qss", "global-qss"])
+def application_stylesheet(request):
+    original = _APP.styleSheet()
+    # A selector for unrelated labels is enough to change QLabel inheritance.
+    stylesheet = 'QLabel[typographyRole="pageTitle"] { font-weight: 700; }'
+    _APP.setStyleSheet(stylesheet if request.param else "")
+    try:
+        yield
+    finally:
+        _APP.setStyleSheet(original)
+
+
 def _activate(window):
     window.activateWindow()
     _APP.processEvents()
@@ -47,7 +59,7 @@ def _foreground_alpha(widget):
 
 @pytest.mark.parametrize("window_type", [ModernWindow, ModernDialog, ModernMessageBox])
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=["light", "dark"])
-def test_actual_chrome_foregrounds_fade_and_restore(window_type, theme):
+def test_actual_chrome_foregrounds_fade_and_restore(window_type, theme, application_stylesheet):
     # Native Windows 11 menu items need more height than Fusion menu items.
     window = window_type(theme=theme, metrics=ModernMetrics(title_bar_height=40))
     other = QWidget()
