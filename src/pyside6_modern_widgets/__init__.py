@@ -15,6 +15,8 @@ from .theme import (
     ModernMetrics,
     ModernTheme,
     ThemeManager,
+    ThemeMode,
+    palette_for_theme,
     theme_from_wallpaper,
     theme_manager,
 )
@@ -35,6 +37,8 @@ __all__ = [
     "NavigationView",
     "TabView",
     "ThemeManager",
+    "ThemeMode",
+    "palette_for_theme",
     "theme_from_wallpaper",
     "theme_manager",
 ]

@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
+from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QFileSystemWatcher, QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QFileSystemWatcher, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -28,6 +29,11 @@ class ModernTheme:
     text_muted: str
     text_disabled: str
     surface: str
+    surface_alternate: str
+    tooltip_surface: str
+    accent: str
+    on_accent: str
+    link_visited: str
     border: str
     control_hover: str
     control_pressed: str
@@ -68,6 +74,11 @@ LIGHT_THEME = ModernTheme(
     text_muted="#454545",
     text_disabled="#8A8A8A",
     surface="#FFFFFF",
+    surface_alternate="#F5F5F5",
+    tooltip_surface="#FFFFFF",
+    accent="#0067C0",
+    on_accent="#FFFFFF",
+    link_visited="#7030A0",
     border="#E5E5E5",
     control_hover="#0D000000",
     control_pressed="#26000000",
@@ -95,6 +106,11 @@ DARK_THEME = ModernTheme(
     text_muted="#D6D6D6",
     text_disabled="#777777",
     surface="#2B2B2B",
+    surface_alternate="#323232",
+    tooltip_surface="#323232",
+    accent="#60CDFF",
+    on_accent="#003047",
+    link_visited="#CF9FFF",
     border="#454545",
     control_hover="#14FFFFFF",
     control_pressed="#29FFFFFF",
@@ -128,13 +144,7 @@ def theme_from_wallpaper(
 def _theme_from_colors(theme: ModernTheme, colors: tuple[QColor, ...]) -> ModernTheme:
     is_dark = QColor(theme.surface).lightness() < 128
     if not colors:
-        fallback = DARK_THEME if is_dark else LIGHT_THEME
-        return replace(
-            theme,
-            focus=fallback.focus,
-            watercolor_base=fallback.watercolor_base,
-            watercolor_spots=fallback.watercolor_spots,
-        )
+        return theme
     alpha_values = (0x50, 0x48, 0x40) if is_dark else (0x66, 0x58, 0x50)
     spots = tuple(
         (
@@ -187,35 +197,55 @@ def _blend_colors(background: QColor, foreground: QColor, amount: float) -> QCol
 DEFAULT_METRICS = ModernMetrics()
 
 
-def theme_for_palette(palette: QPalette) -> ModernTheme:
-    """Choose the built-in theme matching an application palette."""
-    return DARK_THEME if palette.color(QPalette.ColorRole.Window).lightness() < 128 else LIGHT_THEME
-
-
 def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPalette:
     """Return a Qt palette carrying the theme's semantic colors."""
-    palette = QPalette(base or QApplication.palette())
-    for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
-        for role in (
-            QPalette.ColorRole.Text,
-            QPalette.ColorRole.WindowText,
-            QPalette.ColorRole.ButtonText,
-            QPalette.ColorRole.ToolTipText,
-        ):
-            palette.setColor(group, role, QColor(theme.text))
-        palette.setColor(group, QPalette.ColorRole.Window, QColor(theme.surface))
-        palette.setColor(group, QPalette.ColorRole.Base, QColor(theme.surface))
-        palette.setColor(group, QPalette.ColorRole.Button, QColor(theme.surface))
-    for role in (
-        QPalette.ColorRole.Text,
-        QPalette.ColorRole.WindowText,
-        QPalette.ColorRole.ButtonText,
+    palette = QPalette(base) if base is not None else QPalette()
+    role = QPalette.ColorRole
+    surface = QColor(theme.surface)
+    colors = {
+        role.Window: surface,
+        role.Base: surface,
+        role.Button: surface,
+        role.AlternateBase: QColor(theme.surface_alternate),
+        role.ToolTipBase: QColor(theme.tooltip_surface),
+        role.Text: QColor(theme.text),
+        role.WindowText: QColor(theme.text),
+        role.ButtonText: QColor(theme.text),
+        role.ToolTipText: QColor(theme.text),
+        role.BrightText: QColor(theme.text),
+        role.PlaceholderText: QColor(theme.text_muted),
+        role.Highlight: QColor(theme.accent),
+        role.HighlightedText: QColor(theme.on_accent),
+        role.Accent: QColor(theme.accent),
+        role.Link: QColor(theme.accent),
+        role.LinkVisited: QColor(theme.link_visited),
+        role.Light: surface.lighter(150),
+        role.Midlight: surface.lighter(115),
+        role.Mid: QColor(theme.border),
+        role.Dark: surface.darker(150),
+        role.Shadow: surface.darker(200),
+    }
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
     ):
-        palette.setColor(
-            QPalette.ColorGroup.Disabled,
-            role,
-            QColor(theme.text_disabled),
-        )
+        for color_role, color in colors.items():
+            palette.setColor(group, color_role, color)
+    for color_role in (
+        role.Text,
+        role.WindowText,
+        role.ButtonText,
+        role.ToolTipText,
+        role.BrightText,
+        role.PlaceholderText,
+        role.HighlightedText,
+        role.Link,
+        role.LinkVisited,
+        role.Accent,
+    ):
+        palette.setColor(QPalette.ColorGroup.Disabled, color_role, QColor(theme.text_disabled))
+    palette.setColor(QPalette.ColorGroup.Disabled, role.Highlight, QColor(theme.border))
     return palette
 
 
@@ -252,19 +282,39 @@ def _read_wallpaper(previous: WallpaperSignature | None, force: bool) -> _Wallpa
 _WALLPAPER_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wallpaper")
 
 
+class ThemeMode(str, Enum):
+    """Persistable user preference, independent of the resolved color scheme."""
+
+    SYSTEM = "system"
+    LIGHT = "light"
+    DARK = "dark"
+
+
 class ThemeManager(QObject):
-    """Publish one runtime theme to widgets that do not use a local override."""
+    """Manage application colors on the GUI thread.
+
+    Defaults to SYSTEM with wallpaper colors enabled. Unknown system schemes
+    resolve to LIGHT. Modes, base themes, and wallpaper policy are independent.
+    Use theme_manager() for widgets; additional managers also affect QApplication.
+    """
 
     WALLPAPER_POLL_INTERVAL_MS = 1000
     WALLPAPER_REFRESH_DELAY_MS = 350
 
     themeChanged = Signal(object)
+    modeChanged = Signal(object)
+    wallpaperEnabledChanged = Signal(bool)
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._mode = ThemeMode.SYSTEM
+        self._light_theme = LIGHT_THEME
+        self._dark_theme = DARK_THEME
         self._theme = LIGHT_THEME
-        self._follows_system = False
+        self._system_scheme = Qt.ColorScheme.Unknown
         self._application: QApplication | None = None
+        self._base_palette: QPalette | None = None
+        self._wallpaper_enabled = True
         self._wallpaper_path: Path | None = None
         self._wallpaper_signature: WallpaperSignature | None = None
         self._wallpaper_colors: tuple[QColor, ...] = ()
@@ -274,67 +324,126 @@ class ThemeManager(QObject):
         self._wallpaper_result_timer: QTimer | None = None
         self._wallpaper_future: Future[_WallpaperSnapshot] | None = None
         self._wallpaper_refresh_pending = False
-        self._manual_theme_revision = 0
+        self._wallpaper_revision = 0
         self._wallpaper_request_revision = 0
 
     def theme(self) -> ModernTheme:
+        """Return the effective tokens; attach lazily once QApplication exists."""
+        if self._ensure_application():
+            self._update_theme()
         self._ensure_wallpaper_monitor()
         return self._theme
 
-    def setTheme(self, theme: ModernTheme) -> None:
-        self._manual_theme_revision += 1
+    def mode(self) -> ThemeMode:
+        """Return the selected preference, including SYSTEM when following the OS."""
+        return self._mode
+
+    def setMode(self, mode: ThemeMode) -> None:
+        """Select a mode; system detection never reads our application palette."""
+        if not isinstance(mode, ThemeMode):
+            raise TypeError("mode must be a ThemeMode")
+        changed = mode != self._mode
+        self._mode = mode
+        self._update_theme()
+        if changed:
+            self.modeChanged.emit(mode)
+
+    def isDark(self) -> bool:
+        """Return whether the effective mode is dark, including in SYSTEM mode."""
+        self.theme()
+        return self._resolved_mode() == ThemeMode.DARK
+
+    def setThemes(self, *, light: ModernTheme, dark: ModernTheme) -> None:
+        """Replace both base themes without changing mode or wallpaper policy."""
+        if not isinstance(light, ModernTheme) or not isinstance(dark, ModernTheme):
+            raise TypeError("light and dark must be ModernTheme instances")
+        self._light_theme = light
+        self._dark_theme = dark
+        self._update_theme()
+
+    def wallpaperEnabled(self) -> bool:
+        return self._wallpaper_enabled
+
+    def setWallpaperEnabled(self, enabled: bool) -> None:
+        """Enable wallpaper accents or restore the unmodified base theme.
+
+        Disabling stops monitoring and invalidates in-flight samples. An already
+        running worker is drained without publishing its result.
+        """
+        if not isinstance(enabled, bool):
+            raise TypeError("enabled must be a bool")
+        if enabled == self._wallpaper_enabled:
+            self._update_theme()
+            return
+        self._wallpaper_enabled = enabled
+        self._wallpaper_revision += 1
         self._wallpaper_refresh_pending = False
-        self._follows_system = False
-        application = QApplication.instance()
-        if isinstance(application, QApplication):
-            application.setPalette(palette_for_theme(theme, application.palette()))
-        self._set_theme(theme)
+        if not enabled:
+            for timer in (self._wallpaper_poll_timer, self._wallpaper_refresh_timer):
+                if timer is not None:
+                    timer.stop()
+            self._sync_wallpaper_watch(None)
+        self._update_theme()
+        self.wallpaperEnabledChanged.emit(enabled)
 
     def refreshWallpaperTheme(self) -> None:
-        """Request a background refresh; publish the result through themeChanged."""
+        """Refresh asynchronously when wallpaper is enabled; otherwise do nothing."""
+        if not self._wallpaper_enabled:
+            return
+        if self._ensure_application():
+            self._update_theme()
+            return
         if self._wallpaper_poll_timer is None:
             self._ensure_wallpaper_monitor()
         else:
             self._request_wallpaper_update(force=True)
 
-    def followsSystemTheme(self) -> bool:
-        return self._follows_system
-
-    def setFollowsSystemTheme(self, enabled: bool) -> None:
-        self._ensure_wallpaper_monitor()
-        self._follows_system = enabled
+    def _ensure_application(self) -> bool:
         application = QApplication.instance()
-        application = application if isinstance(application, QApplication) else None
-        if application is not self._application:
-            if self._application is not None:
-                self._application.removeEventFilter(self)
-            self._application = application
-            if application is not None:
-                application.installEventFilter(self)
-        if enabled and application is not None:
-            self._set_theme(
-                _theme_from_colors(
-                    theme_for_palette(application.palette()),
-                    self._wallpaper_colors,
-                )
-            )
-            self._request_wallpaper_update(force=True)
+        if not isinstance(application, QApplication) or application is self._application:
+            return False
+        self._application = application
+        self._base_palette = QPalette(application.palette())
+        hints = application.styleHints()
+        self._system_scheme = hints.colorScheme()
+        hints.colorSchemeChanged.connect(self._on_system_color_scheme_changed)
+        return True
 
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if self._follows_system and event.type() == QEvent.Type.ApplicationPaletteChange:
-            application = QApplication.instance()
-            if isinstance(application, QApplication):
-                self._set_theme(
-                    _theme_from_colors(
-                        theme_for_palette(application.palette()),
-                        self._wallpaper_colors,
-                    )
-                )
-        return super().eventFilter(watched, event)
+    def _on_system_color_scheme_changed(self, scheme: Qt.ColorScheme) -> None:
+        self._system_scheme = scheme
+        if self._mode == ThemeMode.SYSTEM:
+            self._update_theme()
+
+    def _resolved_mode(self) -> ThemeMode:
+        if self._mode != ThemeMode.SYSTEM:
+            return self._mode
+        # Unknown platforms use a deterministic light fallback, never our palette.
+        return ThemeMode.DARK if self._system_scheme == Qt.ColorScheme.Dark else ThemeMode.LIGHT
+
+    def _update_theme(self) -> None:
+        self._ensure_application()
+        theme = self._dark_theme if self._resolved_mode() == ThemeMode.DARK else self._light_theme
+        if self._wallpaper_enabled and self._wallpaper_colors:
+            theme = _theme_from_colors(theme, self._wallpaper_colors)
+        changed = theme != self._theme
+        # Palette events can synchronously query the manager: expose the new tokens first.
+        self._theme = theme
+        if self._application is not None:
+            palette = palette_for_theme(theme, self._base_palette)
+            if palette != self._application.palette():
+                self._application.setPalette(palette)
+        if changed:
+            self.themeChanged.emit(theme)
+        self._ensure_wallpaper_monitor()
 
     def _ensure_wallpaper_monitor(self) -> None:
         application = QApplication.instance()
-        if not isinstance(application, QApplication) or self._wallpaper_poll_timer is not None:
+        if not self._wallpaper_enabled or not isinstance(application, QApplication):
+            return
+        if self._wallpaper_poll_timer is not None:
+            if not self._wallpaper_poll_timer.isActive():
+                self._wallpaper_poll_timer.start()
+                self._request_wallpaper_update(force=True)
             return
         self._wallpaper_watcher = QFileSystemWatcher(self)
         self._wallpaper_watcher.fileChanged.connect(self._queue_wallpaper_refresh)
@@ -356,7 +465,7 @@ class ThemeManager(QObject):
         self._wallpaper_poll_timer.start()
 
     def _queue_wallpaper_refresh(self, _path: str) -> None:
-        if self._wallpaper_refresh_timer is not None:
+        if self._wallpaper_enabled and self._wallpaper_refresh_timer is not None:
             self._wallpaper_refresh_timer.start()
 
     def _refresh_changed_wallpaper(self) -> None:
@@ -366,14 +475,14 @@ class ThemeManager(QObject):
         self._request_wallpaper_update(force=False)
 
     def _request_wallpaper_update(self, *, force: bool) -> None:
-        if self._wallpaper_result_timer is None:
+        if not self._wallpaper_enabled or self._wallpaper_result_timer is None:
             return
         if self._wallpaper_future is not None:
             # Routine polls never build a queue behind a slow OS command. A file
             # change or explicit refresh needs at most one follow-up sample.
             self._wallpaper_refresh_pending |= force
             return
-        self._wallpaper_request_revision = self._manual_theme_revision
+        self._wallpaper_request_revision = self._wallpaper_revision
         self._wallpaper_future = _WALLPAPER_EXECUTOR.submit(
             _read_wallpaper, self._wallpaper_signature, force
         )
@@ -393,14 +502,17 @@ class ThemeManager(QObject):
             # Transient discovery/read failures leave the current theme intact;
             # the next poll can retry without leaving the worker marked busy.
             snapshot = None
-        if snapshot is not None:
+        if (
+            snapshot is not None
+            and self._wallpaper_enabled
+            and request_revision == self._wallpaper_revision
+        ):
             self._wallpaper_path = snapshot.path
             self._wallpaper_signature = snapshot.signature
             self._sync_wallpaper_watch(snapshot.path)
             if snapshot.colors is not None:
                 self._wallpaper_colors = snapshot.colors
-                if request_revision == self._manual_theme_revision:
-                    self._set_theme(_theme_from_colors(self._theme, snapshot.colors))
+                self._update_theme()
         if self._wallpaper_refresh_pending:
             self._wallpaper_refresh_pending = False
             self._request_wallpaper_update(force=True)
@@ -416,16 +528,13 @@ class ThemeManager(QObject):
         if desired is not None and desired not in watched:
             self._wallpaper_watcher.addPath(desired)
 
-    def _set_theme(self, theme: ModernTheme) -> None:
-        if theme == self._theme:
-            return
-        self._theme = theme
-        self.themeChanged.emit(theme)
 
-
-_THEME_MANAGER = ThemeManager()
+_THEME_MANAGER: ThemeManager | None = None
 
 
 def theme_manager() -> ThemeManager:
-    """Return the process-wide theme manager."""
+    """Return the process-wide manager. Use on the QApplication GUI thread."""
+    global _THEME_MANAGER
+    if _THEME_MANAGER is None:
+        _THEME_MANAGER = ThemeManager()
     return _THEME_MANAGER

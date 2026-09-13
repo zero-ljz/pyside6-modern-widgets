@@ -34,7 +34,7 @@ class TabViewWindow(ModernWindow):
     def add_page(self, content: str, title: str, *, select: bool = False) -> int:
         page = QLabel(content, self.tab_view)
         page.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        page.setStyleSheet("font-size: 20pt; color: #555555;")
+        page.setStyleSheet("font-size: 20pt;")
         index = self.tab_view.addTab(page, title)
         if select:
             self.tab_view.setCurrentIndex(index)

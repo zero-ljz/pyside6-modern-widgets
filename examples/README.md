@@ -18,6 +18,9 @@ and hides the title text while keeping the window icon visible. Narrow the
 window to try menu overflow and the navigation sidebar's automatic overlay mode.
 The source also configures centered title alignment; use `setTitleVisible(True)`
 to display the centered text alongside the menus.
+Open Settings to switch between System, Light, and Dark at runtime and toggle
+wallpaper colors independently. Existing pages, menus, and dialogs update without
+recreating the window. The tab example's text also inherits the active palette.
 
 Run the multi-tab `ModernWindow` example without a menu bar:
 

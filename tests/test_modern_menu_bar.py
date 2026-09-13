@@ -12,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QStyle, QStyleOptionMenuItem, QToolButton
 
 from pyside6_modern_widgets import ModernMenu, ModernMenuBar, ModernWindow
-from pyside6_modern_widgets.theme import LIGHT_THEME, theme_manager
+from pyside6_modern_widgets.theme import DARK_THEME, LIGHT_THEME
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -68,19 +68,18 @@ def test_manual_menu_bar_updates_theme_when_moved_between_windows() -> None:
     second.close()
 
 
-def test_standalone_menu_bar_follows_global_theme() -> None:
-    manager = theme_manager()
+def test_standalone_menu_bar_follows_global_theme(theme_manager_instance) -> None:
+    manager = theme_manager_instance
     original = manager.theme()
     menu_bar = ModernMenuBar()
     menu_bar.addMenu("File")
     try:
-        manager.setTheme(replace(original, control_pressed="#FF123456"))
+        manager.setThemes(light=replace(original, control_pressed="#FF123456"), dark=DARK_THEME)
         assert _selected_background(menu_bar) == QColor("#123456")
-        manager.setTheme(replace(original, control_pressed="#FF654321"))
+        manager.setThemes(light=replace(original, control_pressed="#FF654321"), dark=DARK_THEME)
         assert _selected_background(menu_bar) == QColor("#654321")
     finally:
         menu_bar.close()
-        manager.setTheme(original)
 
 
 def test_overflow_uses_modern_menu_and_keeps_qt_action_updates() -> None:

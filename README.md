@@ -46,7 +46,7 @@ When upgrading from 0.4.x, remove uses of `WatercolorStyle`,
 `theme_with_watercolor_style`, `ORIGINAL_LIGHT_THEME`, and `ORIGINAL_DARK_THEME`.
 These exports and the title-bar Theme Style submenu have been removed. Widgets
 now follow desktop-wallpaper colors by default; `LIGHT_THEME`, `DARK_THEME`,
-`ModernTheme`, and `setTheme()` remain available for explicit theme overrides.
+`ModernTheme`, and widget-level `setTheme()` remain available for local overrides.
 
 Automatic navigation overlay thresholds now depend on the current page's
 minimum width instead of fixed window widths. Use `setAutoSidebarOverlay(False)`
@@ -200,36 +200,154 @@ menu.addMenu("Recent")
 
 ## Themes
 
-Widgets use a modern theme colored from the current desktop wallpaper through
-the process-wide theme manager. Starting with 0.5.1, inactive windows replace the
-wallpaper effect with a solid background: `#F3F3F3` for light themes, or the
-theme's surface color for dark themes. The effect returns when activated again,
-using a 250 ms linear fade in both directions.
-Rapid focus changes continue smoothly from the current blend. This applies to
-window and dialog backgrounds, including title bars, message boxes, and
-navigation sidebar overlays.
-
-Widgets following the global theme update
-automatically after a wallpaper change. The watcher responds directly to
-changes in the current image file and performs a lightweight path and metadata
-check every second for wallpaper switches; image sampling only runs after
-a change is detected. Wallpaper discovery, file metadata checks, and image
-sampling run in a background worker. Widgets initially use the cached theme
-and update when the result is ready, keeping the GUI responsive during slow
-system queries. Repeated refresh requests are coalesced.
+The process-wide manager defaults to **System mode with wallpaper colors enabled**.
+Select a mode after creating `QApplication`, before creating windows. Use the Fusion
+style for consistent palette support across platforms; the library does not change
+the application's style. Existing widgets update when the theme changes.
 
 ```python
-from pyside6_modern_widgets import theme_manager
+from PySide6.QtWidgets import QApplication
+from pyside6_modern_widgets import ModernWindow, ThemeMode, theme_manager
 
-theme_manager().setFollowsSystemTheme(True)
+app = QApplication([])
+app.setStyle("Fusion")
+manager = theme_manager()
+manager.setMode(ThemeMode.SYSTEM)  # Or ThemeMode.LIGHT / ThemeMode.DARK.
+manager.setWallpaperEnabled(False)  # Optional: use the exact base theme colors.
+
+window = ModernWindow()
+window.show()
+app.exec()
 ```
 
-Following the system theme switches the readable semantic colors between light
-and dark while retaining colors extracted from the wallpaper. If the wallpaper
-cannot be read, the surface falls back to its built-in modern colors. Layout
-metrics can be customized with `ModernMetrics` without modifying component
-internals. `theme_manager().refreshWallpaperTheme()` requests an asynchronous
-manual refresh; `themeChanged` is emitted if the resulting theme changes.
+| API | Contract |
+| --- | --- |
+| `setMode(ThemeMode.SYSTEM / LIGHT / DARK)` | Select the user's preference. Accepts a `ThemeMode` enum. |
+| `mode()` | Return the selected preference, even when System currently resolves to Dark. |
+| `isDark()` | Return whether the resolved mode is Dark. |
+| `theme()` | Return the effective immutable `ModernTheme` tokens. |
+| `setThemes(light=..., dark=...)` | Replace the two base themes without changing mode or wallpaper policy. |
+| `setWallpaperEnabled(bool)` / `wallpaperEnabled()` | Control wallpaper accents independently of mode. |
+| `refreshWallpaperTheme()` | Request an asynchronous refresh; no effect while wallpaper is disabled. |
+| `modeChanged(mode)` | Emitted only when the selected preference changes. |
+| `themeChanged(theme)` | Emitted only when effective tokens change, after the application palette is applied. |
+| `wallpaperEnabledChanged(enabled)` | Emitted when the wallpaper policy changes. |
+
+System mode reads `QApplication.styleHints().colorScheme()` and listens for
+`colorSchemeChanged`; it never infers the OS setting from the palette it has
+written. An unknown system scheme falls back to Light. Fixed Light/Dark modes
+ignore system changes visually but remember them for the next switch to System.
+An OS appearance change can emit `themeChanged` while `mode()` remains `SYSTEM`.
+Repeatedly setting the same effective state does not emit duplicate signals.
+
+Use the manager on the QApplication GUI thread. Configuration before application
+creation is supported; it attaches on the first subsequent `theme()` or setter
+call (including when a globally themed widget is constructed). The library owns
+the application's semantic palette roles once attached. It does not install a
+global style sheet or store preferences automatically.
+
+### Custom colors and wallpaper
+
+Customize a pair of themes using semantic tokens, not per-widget color literals:
+
+```python
+from dataclasses import replace
+from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ThemeMode, theme_manager
+
+manager = theme_manager()
+manager.setWallpaperEnabled(False)
+manager.setThemes(
+    light=replace(LIGHT_THEME, accent="#0067C0", on_accent="#FFFFFF", focus="#0067C0"),
+    dark=replace(DARK_THEME, accent="#60CDFF", on_accent="#003047", focus="#60CDFF"),
+)
+manager.setMode(ThemeMode.SYSTEM)
+```
+
+Supply a light-colored theme in `light` and a dark-colored theme in `dark`;
+theme names are labels and do not control mode selection. `accent` and
+`on_accent` form the selection background/text pair. `surface_alternate`,
+`tooltip_surface`, and `link_visited` cover additional Qt palette roles.
+
+Enabling wallpaper colors allows the manager to derive `focus`, `watercolor_base`,
+and `watercolor_spots` from the wallpaper, leaving other base tokens intact.
+Disabling immediately restores the selected base theme, stops monitoring, and
+discards pending results. Re-enabling can use cached colors while requesting a
+fresh sample. If no wallpaper is available, the configured base theme is used.
+Sampling always resolves against the latest mode and base themes.
+
+Wallpaper discovery, metadata checks, and sampling run off the GUI thread. A file
+watcher and a one-second metadata poll detect changes; only changed images are
+resampled. Repeated refresh requests are coalesced. Transient query errors retain
+the current colors until a later successful refresh.
+
+Inactive windows use a solid background (`#F3F3F3` for light themes, the surface
+color for dark themes). Activation restores the wallpaper effect with a reversible
+250 ms linear fade. Layout metrics remain independently configurable through
+`ModernMetrics`.
+
+### Local overrides and application pages
+
+`ModernWindow`, `ModernDialog`, `ModernMessageBox`, `NavigationView`,
+`NavigationSidebar`, and `TabView` share this contract:
+
+```python
+window.setTheme(DARK_THEME)  # Fix this component and its internal chrome.
+window.setTheme(None)  # Resume following the global manager.
+```
+
+The constructor's `theme=` argument has the same semantics. Overrides stay fixed
+across global mode and wallpaper changes. Setting a window theme does not
+recursively override independently themed library widgets placed inside it.
+`ModernMenu` inherits its owner's Qt palette (including submenus); `ModernMenuBar`
+uses the nearest themed ancestor, or the global theme when standalone.
+
+Ordinary Qt controls inherit the application or parent palette, including disabled
+text, placeholders, selection colors, tooltips, links, and alternating surfaces.
+Explicit widget palettes and hardcoded QSS colors can override that inheritance.
+The public `palette_for_theme(theme, base=None)` helper creates a matching palette
+without changing application state. For custom QSS or painting, read `theme()`
+initially and subscribe to `themeChanged`:
+
+```python
+from PySide6.QtWidgets import QLabel
+from pyside6_modern_widgets import theme_manager
+
+
+class StatusLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__("Ready", parent)
+        self.applyTheme(theme_manager().theme())
+        theme_manager().themeChanged.connect(self.applyTheme)
+
+    def applyTheme(self, theme):
+        self.setStyleSheet(f"color: {theme.text_muted};")
+```
+
+Monochrome library icons are recolored by their components. Application-owned
+icons and custom artwork should be refreshed by the application when needed.
+
+### Saving the user's preference
+
+Persist the selected mode, not the currently resolved light/dark appearance:
+
+```python
+from PySide6.QtCore import QSettings
+from pyside6_modern_widgets import ThemeMode, theme_manager
+
+settings = QSettings("Example", "MyApp")
+manager = theme_manager()
+saved_mode = settings.value("appearance/mode", "system", type=str)
+try:
+    mode = ThemeMode(saved_mode)
+except ValueError:
+    mode = ThemeMode.SYSTEM
+manager.setMode(mode)
+manager.modeChanged.connect(lambda mode: settings.setValue("appearance/mode", mode.value))
+```
+
+The previous manager-level `setTheme()`, `setFollowsSystemTheme()`, and
+`followsSystemTheme()` APIs are removed. Use `setMode()` and `setThemes()`;
+widget-level `setTheme()` remains the local-override API.
 
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is

@@ -9,6 +9,7 @@ from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDialogButtonBox,
     QLabel,
     QMenu,
@@ -26,6 +27,8 @@ from pyside6_modern_widgets import (
     ModernWindow,
     NavigationPosition,
     NavigationView,
+    ThemeMode,
+    theme_manager,
 )
 
 
@@ -148,8 +151,35 @@ class ExampleWindow(ModernWindow):
 
     def _create_settings_page(self) -> QWidget:
         page, layout = self._create_page("Settings")
+        manager = theme_manager()
+        layout.addWidget(QLabel("Appearance"))
+        self.theme_mode_combo = QComboBox()
+        for label, mode in (
+            ("Follow system", ThemeMode.SYSTEM),
+            ("Light", ThemeMode.LIGHT),
+            ("Dark", ThemeMode.DARK),
+        ):
+            self.theme_mode_combo.addItem(label, mode.value)
+        self._sync_theme_mode(manager.mode())
+        self.theme_mode_combo.currentIndexChanged.connect(self._set_theme_mode)
+        manager.modeChanged.connect(self._sync_theme_mode)
+        layout.addWidget(self.theme_mode_combo)
+
+        self.wallpaper_checkbox = QCheckBox("Use desktop wallpaper colors")
+        self.wallpaper_checkbox.setChecked(manager.wallpaperEnabled())
+        self.wallpaper_checkbox.toggled.connect(manager.setWallpaperEnabled)
+        manager.wallpaperEnabledChanged.connect(self.wallpaper_checkbox.setChecked)
+        layout.addWidget(self.wallpaper_checkbox)
         layout.addStretch()
         return page
+
+    def _set_theme_mode(self, _index: int) -> None:
+        theme_manager().setMode(ThemeMode(self.theme_mode_combo.currentData()))
+
+    def _sync_theme_mode(self, mode: ThemeMode) -> None:
+        self.theme_mode_combo.blockSignals(True)
+        self.theme_mode_combo.setCurrentIndex(self.theme_mode_combo.findData(mode.value))
+        self.theme_mode_combo.blockSignals(False)
 
     def _create_menu_page(self) -> QWidget:
         page, layout = self._create_page("Menus")

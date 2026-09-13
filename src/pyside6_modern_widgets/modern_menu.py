@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from typing import Protocol, cast, overload
 
-from PySide6.QtCore import QRect, QRectF, Qt
+from PySide6.QtCore import QEvent, QRect, QRectF, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .theme import DEFAULT_METRICS, ModernMetrics
+from .theme import DEFAULT_METRICS, ModernMetrics, theme_manager
 
 _FALLBACK_BASE_STYLE = "fusion"
 _WINDOWS_ACRYLIC_TINT_ALPHA = 170
@@ -267,11 +267,27 @@ class ModernMenu(QMenu):
             super().__init__(title, parent)
 
         self._metrics = metrics
+        theme_manager().theme()
+        self.setAttribute(Qt.WidgetAttribute.WA_WindowPropagation, True)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._rounded_style = _RoundedMenuStyle(metrics.control_radius, _base_style_name(self))
         self.setStyle(self._rounded_style)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if (
+            event.type() == QEvent.Type.PaletteChange
+            and self.isVisible()
+            and hasattr(self, "_rounded_style")
+        ):
+            # An open Windows popup must refresh its native tint as well as Qt colors.
+            self._rounded_style.setNativeAcrylic(
+                _enable_windows_rounded_corners(self, self._metrics.control_radius)
+                and _enable_windows_acrylic(self)
+            )
+            self.update()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

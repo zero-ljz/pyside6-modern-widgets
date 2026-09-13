@@ -9,6 +9,24 @@ All notable changes to this project are documented in this file.
 - Hide the title-bar pin button on native Wayland, where Qt's standard shell
   integration does not support always-on-top.
 
+## [Unreleased]
+
+### Changed
+
+- Replace the global theme API with `ThemeMode.SYSTEM/LIGHT/DARK`, `setMode()`,
+  `mode()`, `isDark()`, `setThemes(light=..., dark=...)`, and `modeChanged`.
+  Remove manager-level `setTheme()`, `setFollowsSystemTheme()`, and
+  `followsSystemTheme()` without compatibility aliases; retain widget overrides.
+- Default to System mode and detect OS appearance through Qt style hints instead
+  of reading the library's application palette. Unknown schemes use Light.
+- Make wallpaper accents an independent setting with `setWallpaperEnabled()`,
+  `wallpaperEnabled()`, and `wallpaperEnabledChanged`. Disabling restores base
+  colors and invalidates in-flight samples; custom base pairs survive switching.
+- Complete native Qt palette roles, including selection, disabled backgrounds,
+  placeholders, tooltips, and links; export `palette_for_theme()` for custom pages.
+- Refresh visible menu acrylic tints after palette changes and propagate owner
+  palettes to submenus. Add live appearance controls to the navigation example.
+
 ## [0.5.4] - 2026-09-13
 
 ### Changed
