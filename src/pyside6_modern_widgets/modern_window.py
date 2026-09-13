@@ -8,10 +8,8 @@ from typing import Literal
 
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import (
-    QColor,
     QCursor,
     QIcon,
-    QPalette,
     QPixmap,
     QPlatformSurfaceEvent,
     QScreen,
@@ -19,7 +17,6 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
-    QMenuBar,
     QPushButton,
     QStatusBar,
     QToolBar,
@@ -30,6 +27,7 @@ from PySide6.QtWidgets import (
 from . import _resources, _system_menu  # noqa: F401
 from ._window_chrome import (
     BackgroundFrame,
+    TitleBarButton,
     WindowChromeOverlay,
     WindowSurfacePolicy,
     WindowTitleBar,
@@ -167,7 +165,7 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         self.setTheme(self._theme)
 
     def _create_button(self, icon, tooltip, callback, *, checkable=False):
-        button = QPushButton(self)
+        button = TitleBarButton(self)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.setAutoDefault(False)
         button.setIcon(icon)
@@ -637,7 +635,6 @@ class ModernWindow(QWidget):
         if hasattr(self, "titleBar") and self.titleBar:
             self.titleBar.setTheme(self._theme)
             self.titleBar.raise_()
-            self._sync_inactive_title_color()
         menu_bars: Iterable[ModernMenuBar] = self.findChildren(ModernMenuBar)
         for menu_bar in menu_bars:
             menu_bar._apply_theme()
@@ -734,7 +731,7 @@ class ModernWindow(QWidget):
     ) -> QPushButton | None:
         if not hasattr(self, "titleBar") or self.titleBar is None:
             return None
-        button = QPushButton(self.titleBar)
+        button = TitleBarButton(self.titleBar)
         if isinstance(icon, str):
             button.setIcon(QIcon(icon))
         elif isinstance(icon, QIcon):
@@ -818,12 +815,6 @@ class ModernWindow(QWidget):
         elif event.type() == QEvent.Type.DevicePixelRatioChange:
             self._schedule_native_frame_sync(force_refresh=True)
             self._schedule_surface_refresh()
-        elif event.type() in (
-            QEvent.Type.ApplicationPaletteChange,
-            QEvent.Type.PaletteChange,
-            QEvent.Type.StyleChange,
-        ):
-            self._sync_inactive_title_color()
         return handled
 
     def nativeEvent(self, event_type, message):
@@ -1205,25 +1196,6 @@ class ModernWindow(QWidget):
             if self._uses_windows_window_state():
                 redraw_native_window(int(window_handle.winId()))
 
-    def _sync_inactive_title_color(self) -> None:
-        title_bar = getattr(self, "titleBar", None)
-        if title_bar is None:
-            return
-        menu_bar = getattr(self, "_menu_bar", None)
-        owns_probe = menu_bar is None
-        if menu_bar is None:
-            menu_bar = QMenuBar()
-        menu_bar.ensurePolished()
-        color = QColor(
-            menu_bar.palette().color(
-                QPalette.ColorGroup.Inactive,
-                QPalette.ColorRole.ButtonText,
-            )
-        )
-        title_bar.setInactiveTitleColor(color)
-        if owns_probe:
-            menu_bar.deleteLater()
-
     def _ensure_compatibility_layout(self) -> None:
         if self.root_layout is not None:
             return
@@ -1274,7 +1246,6 @@ class ModernWindow(QWidget):
             self._menu_bar.destroyed.connect(self._clear_menu_bar)
             self.frameLayout.insertWidget(0, self._menu_bar)
             self._install_resize_filters(self._menu_bar)
-            self._sync_inactive_title_color()
         return self._menu_bar
 
     def addToolBar(self, *args: object) -> QToolBar:

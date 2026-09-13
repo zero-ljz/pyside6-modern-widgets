@@ -31,8 +31,8 @@ class ModernTheme:
     surface: str
     surface_alternate: str
     tooltip_surface: str
-    accent: str
-    on_accent: str
+    accent: str | None
+    on_accent: str | None
     link_visited: str
     border: str
     control_hover: str
@@ -76,8 +76,8 @@ LIGHT_THEME = ModernTheme(
     surface="#FFFFFF",
     surface_alternate="#F5F5F5",
     tooltip_surface="#FFFFFF",
-    accent="#0067C0",
-    on_accent="#FFFFFF",
+    accent=None,
+    on_accent=None,
     link_visited="#7030A0",
     border="#E5E5E5",
     control_hover="#0D000000",
@@ -108,8 +108,8 @@ DARK_THEME = ModernTheme(
     surface="#2B2B2B",
     surface_alternate="#323232",
     tooltip_surface="#323232",
-    accent="#60CDFF",
-    on_accent="#003047",
+    accent=None,
+    on_accent=None,
     link_visited="#CF9FFF",
     border="#454545",
     control_hover="#14FFFFFF",
@@ -200,6 +200,10 @@ DEFAULT_METRICS = ModernMetrics()
 def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPalette:
     """Return a Qt palette carrying the theme's semantic colors."""
     palette = QPalette(base) if base is not None else QPalette()
+    # Rebuild the resolve mask so inherited system roles stay inherited, even
+    # after switching away from a theme with an explicit accent. Qt resolves
+    # these against its native palette (application) or parent (widget).
+    palette.setResolveMask(0)
     role = QPalette.ColorRole
     surface = QColor(theme.surface)
     colors = {
@@ -214,10 +218,6 @@ def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPale
         role.ToolTipText: QColor(theme.text),
         role.BrightText: QColor(theme.text),
         role.PlaceholderText: QColor(theme.text_muted),
-        role.Highlight: QColor(theme.accent),
-        role.HighlightedText: QColor(theme.on_accent),
-        role.Accent: QColor(theme.accent),
-        role.Link: QColor(theme.accent),
         role.LinkVisited: QColor(theme.link_visited),
         role.Light: surface.lighter(150),
         role.Midlight: surface.lighter(115),
@@ -225,6 +225,11 @@ def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPale
         role.Dark: surface.darker(150),
         role.Shadow: surface.darker(200),
     }
+    if theme.accent is not None:
+        for accent_role in (role.Highlight, role.Accent, role.Link):
+            colors[accent_role] = QColor(theme.accent)
+    if theme.on_accent is not None:
+        colors[role.HighlightedText] = QColor(theme.on_accent)
     for group in (
         QPalette.ColorGroup.Active,
         QPalette.ColorGroup.Inactive,
@@ -239,13 +244,17 @@ def palette_for_theme(theme: ModernTheme, base: QPalette | None = None) -> QPale
         role.ToolTipText,
         role.BrightText,
         role.PlaceholderText,
-        role.HighlightedText,
-        role.Link,
         role.LinkVisited,
-        role.Accent,
     ):
         palette.setColor(QPalette.ColorGroup.Disabled, color_role, QColor(theme.text_disabled))
-    palette.setColor(QPalette.ColorGroup.Disabled, role.Highlight, QColor(theme.border))
+    if theme.accent is not None:
+        for accent_role in (role.Accent, role.Link):
+            palette.setColor(QPalette.ColorGroup.Disabled, accent_role, QColor(theme.text_disabled))
+        palette.setColor(QPalette.ColorGroup.Disabled, role.Highlight, QColor(theme.border))
+    if theme.on_accent is not None:
+        palette.setColor(
+            QPalette.ColorGroup.Disabled, role.HighlightedText, QColor(theme.text_disabled)
+        )
     return palette
 
 

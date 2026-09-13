@@ -265,7 +265,12 @@ manager.setMode(ThemeMode.SYSTEM)
 
 Supply a light-colored theme in `light` and a dark-colored theme in `dark`;
 theme names are labels and do not control mode selection. `accent` and
-`on_accent` form the selection background/text pair. `surface_alternate`,
+`on_accent` default to `None`: Qt's native Accent, Highlight, HighlightedText, and
+Link roles remain inherited, so the system accent is preserved across light/dark
+switches. Explicit strings override the selection background/text pair; restore
+`None` to resume inheritance. To read the currently resolved system accent, use
+`QApplication.palette().color(QPalette.ColorRole.Accent)` (or `Highlight` for
+selection backgrounds). Wallpaper colors do not override these roles. `surface_alternate`,
 `tooltip_surface`, and `link_visited` cover additional Qt palette roles.
 
 Enabling wallpaper colors allows the manager to derive `focus`, `watercolor_base`,
@@ -284,6 +289,10 @@ Inactive windows use a solid background (`#F3F3F3` for light themes, the surface
 color for dark themes). Activation restores the wallpaper effect with a reversible
 250 ms linear fade. Layout metrics remain independently configurable through
 `ModernMetrics`.
+Inactive title-bar text, the window icon, and control icons retain their original
+colors at 50% opacity. Activation restores full opacity; control hover and pressed
+backgrounds retain their normal opacity. This applies to windows, dialogs, and
+message boxes, including menu-bar text placed inside the title bar.
 
 ### Local overrides and application pages
 

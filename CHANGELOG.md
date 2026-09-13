@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restore native Qt system accent and selection roles by default, including after
+  switching back from custom colors. Built-in `accent`/`on_accent` are `None` for
+  inheritance; explicit custom colors still override them.
+- Render inactive title-bar text, window icons, and control foregrounds at 50%
+  opacity, preserving their colors and the opacity of hover/pressed backgrounds.
+
+### Fixed
+
 - Hide the title-bar pin button on native Wayland, where Qt's standard shell
   integration does not support always-on-top.
 

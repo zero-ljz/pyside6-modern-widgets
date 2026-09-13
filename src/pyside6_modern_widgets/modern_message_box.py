@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QMenuBar, QMessageBox, QWidget
+from PySide6.QtWidgets import QMessageBox, QWidget
 
 from ._window_chrome import (
     BackgroundFrame,
@@ -101,7 +100,6 @@ class ModernMessageBox(QMessageBox):
         self._chrome_overlay.setTheme(self._theme)
         self._chrome_overlay.setCornerRadius(paint_radius)
         self._surface_policy.apply_native_corner_preference(self, radius > 0)
-        self._sync_inactive_title_color()
         self._layout_chrome()
         self.update()
 
@@ -134,16 +132,6 @@ class ModernMessageBox(QMessageBox):
         self._chrome_overlay.raise_()
         self._title_bar.raise_()
 
-    def _sync_inactive_title_color(self) -> None:
-        probe = QMenuBar()
-        probe.ensurePolished()
-        self._title_bar.setInactiveTitleColor(
-            QColor(
-                probe.palette().color(QPalette.ColorGroup.Inactive, QPalette.ColorRole.ButtonText)
-            )
-        )
-        probe.deleteLater()
-
     def event(self, event) -> bool:
         handled = super().event(event)
         # QMessageBox can dispatch events while its C++ constructor is running.
@@ -156,12 +144,6 @@ class ModernMessageBox(QMessageBox):
             self._layout_chrome()
         elif event.type() == QEvent.Type.WindowStateChange:
             self.apply_window_style()
-        elif event.type() in (
-            QEvent.Type.ApplicationPaletteChange,
-            QEvent.Type.PaletteChange,
-            QEvent.Type.StyleChange,
-        ):
-            self._sync_inactive_title_color()
         return handled
 
     @classmethod

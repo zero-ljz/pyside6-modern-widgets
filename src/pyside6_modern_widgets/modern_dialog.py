@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt
-from PySide6.QtGui import QColor, QIcon, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication, QDialog, QMenuBar, QWidget
+from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
 from ._window_chrome import (
     BackgroundFrame,
@@ -119,7 +119,6 @@ class ModernDialog(QDialog):
         self._chrome_overlay.setTheme(self._theme)
         self._chrome_overlay.setCornerRadius(paint_radius)
         self._set_native_corner_preference(radius > 0)
-        self._sync_inactive_title_color()
         self._raise_chrome()
         self.update()
 
@@ -154,16 +153,6 @@ class ModernDialog(QDialog):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._layout_chrome()
-
-    def event(self, event) -> bool:
-        handled = super().event(event)
-        if event.type() in (
-            QEvent.Type.ApplicationPaletteChange,
-            QEvent.Type.PaletteChange,
-            QEvent.Type.StyleChange,
-        ):
-            self._sync_inactive_title_color()
-        return handled
 
     def eventFilter(self, watched, event) -> bool:
         if isinstance(watched, QWidget) and watched.window() is self:
@@ -246,18 +235,6 @@ class ModernDialog(QDialog):
     def _raise_chrome(self) -> None:
         self._chrome_overlay.raise_()
         self._title_bar.raise_()
-
-    def _sync_inactive_title_color(self) -> None:
-        probe = QMenuBar()
-        probe.ensurePolished()
-        color = QColor(
-            probe.palette().color(
-                QPalette.ColorGroup.Inactive,
-                QPalette.ColorRole.ButtonText,
-            )
-        )
-        self._title_bar.setInactiveTitleColor(color)
-        probe.deleteLater()
 
     def _set_native_corner_preference(self, rounded: bool) -> None:
         self._surface_policy.apply_native_corner_preference(self, rounded)

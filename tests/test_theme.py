@@ -116,6 +116,7 @@ def test_custom_theme_pair_survives_mode_switches(theme_manager_instance, system
 
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=["light", "dark"])
 def test_palette_covers_native_controls_in_all_color_groups(theme):
+    theme = replace(theme, accent="#7030A0", on_accent="#FFFFFF")
     palette = palette_for_theme(theme)
     role = QPalette.ColorRole
     for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
@@ -246,3 +247,65 @@ assert manager.isDark()
 def test_missing_wallpaper_preserves_custom_base(tmp_path):
     theme = replace(DARK_THEME, focus="#123456", watercolor_base="#112233")
     assert theme_from_wallpaper(theme, tmp_path / "missing.png") == theme
+
+
+def test_default_accent_roles_follow_qt_and_restore_after_custom_colors():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+from dataclasses import replace
+from PySide6.QtWidgets import QApplication, QLineEdit
+from PySide6.QtGui import QColor, QPalette
+from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ThemeMode, theme_manager
+app = QApplication([])
+app.setStyle('Fusion')
+native = app.palette()
+roles = (QPalette.ColorRole.Accent, QPalette.ColorRole.Highlight,
+         QPalette.ColorRole.HighlightedText, QPalette.ColorRole.Link)
+groups = (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive,
+          QPalette.ColorGroup.Disabled)
+manager = theme_manager()
+manager.setWallpaperEnabled(False)
+edit = QLineEdit()
+for mode in (ThemeMode.DARK, ThemeMode.LIGHT, ThemeMode.SYSTEM):
+    manager.setMode(mode)
+    app.processEvents()
+    for group in groups:
+        for role in roles:
+            assert app.palette().color(group, role) == native.color(group, role), (group, role)
+            assert edit.palette().color(group, role) == native.color(group, role), (group, role)
+manager.setThemes(
+    light=replace(LIGHT_THEME, accent='#7030A0', on_accent='#FFFFFF'),
+    dark=replace(DARK_THEME, accent='#7030A0', on_accent='#FFFFFF'))
+assert app.palette().color(QPalette.ColorRole.Highlight) == QColor('#7030A0')
+manager.setThemes(light=LIGHT_THEME, dark=DARK_THEME)
+app.processEvents()
+for group in groups:
+    for role in roles:
+        assert app.palette().color(group, role) == native.color(group, role), (group, role)
+        assert edit.palette().color(group, role) == native.color(group, role), (group, role)
+""",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_default_palette_inherits_updated_parent_accent():
+    parent = QWidget()
+    child = QLineEdit(parent)
+    child.setPalette(palette_for_theme(DARK_THEME, child.palette()))
+    try:
+        for name in ("#008676", "#AC366E"):
+            palette = parent.palette()
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(name))
+            parent.setPalette(palette)
+            assert child.palette().color(QPalette.ColorRole.Highlight) == QColor(name)
+            assert child.palette().color(QPalette.ColorRole.Base) == QColor(DARK_THEME.surface)
+    finally:
+        parent.deleteLater()

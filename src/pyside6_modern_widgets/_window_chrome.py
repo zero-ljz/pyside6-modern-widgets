@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
@@ -22,11 +23,14 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
+    QStyle,
+    QStyleOptionButton,
     QWidget,
 )
 
@@ -37,7 +41,35 @@ from .theme import ModernMetrics, ModernTheme, palette_for_theme, tinted_icon
 WindowWidget = TypeVar("WindowWidget", bound=QWidget)
 
 
-class _TitleBarCloseButton(QPushButton):
+INACTIVE_TITLE_OPACITY = 0.5
+
+
+class TitleBarButton(QPushButton):
+    """Fade only the foreground, preserving hover and pressed backgrounds."""
+
+    def paintEvent(self, event) -> None:
+        if self.window().isActiveWindow():
+            super().paintEvent(event)
+            return
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        painter = QPainter(self)
+        self.style().drawControl(QStyle.ControlElement.CE_PushButtonBevel, option, painter, self)
+        if not self.window().isActiveWindow():
+            painter.setOpacity(INACTIVE_TITLE_OPACITY)
+            # Text inherited from the title bar already has inactive alpha;
+            # apply opacity exactly once, together with the icon.
+            label_palette: QPalette = option.palette  # type: ignore[attr-defined]
+            label_palette.setColor(
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorRole.ButtonText,
+                label_palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.ButtonText),
+            )
+        self.style().drawControl(QStyle.ControlElement.CE_PushButtonLabel, option, painter, self)
+        painter.end()
+
+
+class _TitleBarCloseButton(TitleBarButton):
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self._normal_icon = QIcon()
@@ -392,6 +424,7 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.setObjectName("CustomTitleBar")
         self.setAutoFillBackground(False)
         self._init_ui()
+        self.parent_window.installEventFilter(self)
 
     def _init_ui(self) -> None:
         vertical_padding = 2
@@ -408,6 +441,11 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.iconLabel = QLabel(self)
         self.iconLabel.setFixedSize(20, 20)
         self.iconLabel.setScaledContents(True)
+        self._icon_opacity = QGraphicsOpacityEffect(self.iconLabel)
+        self.iconLabel.setGraphicsEffect(self._icon_opacity)
+        self._icon_opacity.setOpacity(
+            1.0 if self.parent_window.isActiveWindow() else INACTIVE_TITLE_OPACITY
+        )
         self.iconLabel.hide()
         self.main_layout.addWidget(self.iconLabel)
 
@@ -455,6 +493,21 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
             self._layout_title()
         return handled
 
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            event.type() == QEvent.Type.ActivationChange
+            and watched is getattr(self, "parent_window", None)
+            and hasattr(self, "_icon_opacity")
+        ):
+            self._icon_opacity.setOpacity(
+                1.0 if self.parent_window.isActiveWindow() else INACTIVE_TITLE_OPACITY
+            )
+            self.update()
+            buttons: Iterable[TitleBarButton] = self.findChildren(TitleBarButton)
+            for button in buttons:
+                button.update()
+        return super().eventFilter(watched, event)
+
     def _layout_title(self) -> None:
         if self._title_alignment == "left":
             return
@@ -469,22 +522,22 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme
-        self.setPalette(palette_for_theme(theme, self.palette()))
+        palette = palette_for_theme(theme, self.palette())
+        foreground = QColor(theme.text)
+        foreground.setAlphaF(foreground.alphaF() * INACTIVE_TITLE_OPACITY)
+        for role in (
+            QPalette.ColorRole.WindowText,
+            QPalette.ColorRole.ButtonText,
+            QPalette.ColorRole.Text,
+        ):
+            palette.setColor(QPalette.ColorGroup.Inactive, role, foreground)
+        self.setPalette(palette)
         title_font = self.titleLabel.font()
         title_font.setPointSizeF(max(title_font.pointSizeF(), 10.5))
         self.titleLabel.setFont(title_font)
         self._layout_title()
         self.closeButton.setStyleSheet(button_style(theme, self._metrics))
         self.closeButton.setTheme(theme)
-
-    def setInactiveTitleColor(self, color: QColor) -> None:
-        palette = QPalette()
-        palette.setColor(
-            QPalette.ColorGroup.Inactive,
-            QPalette.ColorRole.WindowText,
-            color,
-        )
-        self.titleLabel.setPalette(palette)
 
     def setIcon(self, icon: QIcon) -> None:
         self._has_icon = not icon.isNull()
