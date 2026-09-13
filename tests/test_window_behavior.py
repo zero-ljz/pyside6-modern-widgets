@@ -10,9 +10,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtTest import QSignalSpy, QTest
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
-from pyside6_modern_widgets import ModernMenuBar, ModernWindow
+from pyside6_modern_widgets import ModernDialog, ModernMenuBar, ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
 from pyside6_modern_widgets._windows_window import (
     HTCAPTION,
@@ -30,6 +30,36 @@ from pyside6_modern_widgets._windows_window import (
 )
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize("window_class", [ModernWindow, ModernDialog])
+def test_tab_navigation_skips_window_controls_but_reaches_custom_title_widgets(window_class):
+    window = window_class()
+    layout = QVBoxLayout(window)
+    first = QLineEdit("First")
+    second = QLineEdit("Second")
+    layout.addWidget(first)
+    layout.addWidget(second)
+    title_bar = window.titleBar if isinstance(window, ModernWindow) else window._title_bar
+    custom = QPushButton("Custom action")
+    custom.setAutoDefault(False)
+    title_bar.addCustomWidget(custom)
+    window.show()
+    window.activateWindow()
+    QTest.qWait(50)
+    try:
+        first.setFocus()
+        for expected in (second, custom, first):
+            QTest.keyClick(_APP.focusWidget(), Qt.Key.Key_Tab)
+            assert _APP.focusWidget() is expected
+        for expected in (custom, second, first):
+            QTest.keyClick(_APP.focusWidget(), Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+            assert _APP.focusWidget() is expected
+        QTest.mouseClick(title_bar.closeButton, Qt.MouseButton.LeftButton)
+        assert not window.isVisible()
+    finally:
+        window.close()
+        window.deleteLater()
 
 
 @pytest.mark.parametrize("setter", ["button", "flag", "flags"])

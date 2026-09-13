@@ -67,10 +67,6 @@ class ModernMessageBox(QMessageBox):
         self._background_frame.setObjectName("backgroundFrame")
         self._background_frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._title_bar = WindowTitleBar(self, theme=self._theme, metrics=metrics)
-        # Window controls must never become message-box default buttons or
-        # enter the tab order used by Qt's content and button box.
-        self._title_bar.closeButton.setAutoDefault(False)
-        self._title_bar.closeButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._title_bar.setIcon(self.windowIcon())
         self._chrome_overlay = WindowChromeOverlay(
             self, theme=self._theme, corner_radius=paint_radius

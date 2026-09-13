@@ -17,8 +17,9 @@ All notable changes to this project are documented in this file.
   and disable the page content along with its tab.
 - Scope tab shortcuts to the nearest focused tab view, including nested views, preserving
   platform-specific standard key bindings.
-- Keep message-box title-bar controls out of the default-button selection and
-  tab order so Enter activates the native message-box button.
+- Keep built-in title-bar controls out of the tab order in windows, dialogs,
+  and message boxes, and prevent them from becoming dialog default buttons.
+  Custom title-bar widgets retain their own keyboard focus policies.
 - Apply the Windows restore handling to `setWindowState(WindowNoState)` as well
   as `showNormal()`, preserving geometry and keeping hidden windows hidden.
 - Remove tab and navigation entries when their pages are destroyed or reparented,

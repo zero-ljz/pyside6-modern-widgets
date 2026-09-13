@@ -167,6 +167,8 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 
     def _create_button(self, icon, tooltip, callback, *, checkable=False):
         button = QPushButton(self)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setAutoDefault(False)
         button.setIcon(icon)
         button.setToolTip(tooltip)
         button.setCheckable(checkable)

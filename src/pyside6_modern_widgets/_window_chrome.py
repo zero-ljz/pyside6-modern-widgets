@@ -410,6 +410,10 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.main_layout.addLayout(self.right_layout)
 
         self.closeButton = QPushButton("✕", self)
+        # Window controls must not enter the content's tab order or become a
+        # dialog's default button.
+        self.closeButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.closeButton.setAutoDefault(False)
         self.closeButton.setToolTip("关闭")
         self.closeButton.setFixedSize(
             self._metrics.title_button_size,
