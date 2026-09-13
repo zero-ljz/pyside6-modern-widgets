@@ -4,15 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Make `ModernMessageBox` inherit directly from `QMessageBox`, retaining its
+  native content layout, buttons, keyboard handling, results, and signals while
+  preserving themed frameless chrome. Custom button return codes and ownership
+  now follow Qt instead of the former `ModernDialog` implementation.
+
 ### Fixed
 
 - Keep tab labels and pages synchronized when inserting an existing page again,
   and disable the page content along with its tab.
 - Scope tab shortcuts to the nearest focused tab view, including nested views, preserving
   platform-specific standard key bindings.
-- Clear deleted message-box default buttons before querying or replacing them.
-- Match QMessageBox completion signals to button roles, and honor its Escape
-  and window-close rules for standard and custom buttons.
+- Keep message-box title-bar controls out of the default-button selection and
+  tab order so Enter activates the native message-box button.
 - Apply the Windows restore handling to `setWindowState(WindowNoState)` as well
   as `showNormal()`, preserving geometry and keeping hidden windows hidden.
 - Remove tab and navigation entries when their pages are destroyed or reparented,

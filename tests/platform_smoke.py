@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
-from pyside6_modern_widgets import ModernWindow
+from pyside6_modern_widgets import ModernMessageBox, ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
 from pyside6_modern_widgets._windows_window import (
     HTCAPTION,
@@ -228,6 +228,23 @@ def main() -> int:
     assert not window.grab().isNull()
     window.close()
     _wait(app, 20)
+
+    # Check native-platform focus too: title-bar buttons must not capture Enter.
+    outcomes = []
+    for box_class in (QMessageBox, ModernMessageBox):
+        box = box_class()
+        box.setText("Continue?")
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        box.show()
+        box.activateWindow()
+        _wait(app)
+        focus = app.focusWidget()
+        assert focus in box.buttons()
+        QTest.keyClick(focus, Qt.Key.Key_Return)
+        outcomes.append((box.isVisible(), box.result()))
+        box.deleteLater()
+    assert outcomes[0] == outcomes[1]
+
     print(f"platform={app.platformName()} screens={len(app.screens())} smoke=passed")
     return 0
 

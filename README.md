@@ -6,8 +6,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernWindow`: a frameless replacement for top-level `QWidget` windows with
   selected `QMainWindow`-compatible methods.
 - `ModernDialog`: a frameless `QDialog` that preserves the standard dialog API.
-- `ModernMessageBox`: a themed message box with familiar `QMessageBox` buttons
-  and convenience methods.
+- `ModernMessageBox`: a `QMessageBox` subclass with themed frameless chrome,
+  native buttons, keyboard handling, and convenience methods.
 - `ModernMenu`: a native `QMenu` with Windows 11 system acrylic (and an
   opaque fallback elsewhere) plus rounded outer and selected-item
   backgrounds.
@@ -178,6 +178,11 @@ answer = ModernMessageBox.question(
     ModernMessageBox.StandardButton.No,
 )
 ```
+
+Message text, details, checkboxes, button ownership, default and escape buttons,
+return values, and completion signals are handled by `QMessageBox` itself.
+The component customizes its palette, background, and title bar. It uses Qt's
+widget message box on every platform so this appearance remains available.
 
 `ModernMenu` accepts the same common constructor forms as `QMenu` and works
 with ordinary `QAction` instances, separators, checkable actions, and submenus:

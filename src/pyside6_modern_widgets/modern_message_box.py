@@ -1,53 +1,37 @@
-"""A modern, Qt-painted alternative to the common QMessageBox API."""
+"""A native QMessageBox with the package's themed frameless chrome."""
 
 from __future__ import annotations
 
-from typing import ClassVar
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QMenuBar, QMessageBox, QWidget
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QKeySequence, QPixmap
-from PySide6.QtWidgets import (
-    QAbstractButton,
-    QCheckBox,
-    QDialogButtonBox,
-    QHBoxLayout,
-    QLabel,
-    QMessageBox,
-    QPlainTextEdit,
-    QPushButton,
-    QStyle,
-    QVBoxLayout,
-    QWidget,
+from ._window_chrome import (
+    BackgroundFrame,
+    WindowChromeOverlay,
+    WindowTitleBar,
+    current_window_surface_policy,
 )
-from shiboken6 import isValid
+from .theme import (
+    DEFAULT_METRICS,
+    ModernMetrics,
+    ModernTheme,
+    palette_for_theme,
+    theme_manager,
+)
 
-from .modern_dialog import ModernDialog
-from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme
 
-
-class ModernMessageBox(ModernDialog):
-    """A message box with modern chrome and familiar QMessageBox semantics."""
-
-    Icon = QMessageBox.Icon
-    ButtonRole = QMessageBox.ButtonRole
-    StandardButton = QMessageBox.StandardButton
-
-    buttonClicked = Signal(QAbstractButton)
-
-    _ICON_PIXMAPS: ClassVar[dict[QMessageBox.Icon, QStyle.StandardPixmap]] = {
-        Icon.Information: QStyle.StandardPixmap.SP_MessageBoxInformation,
-        Icon.Warning: QStyle.StandardPixmap.SP_MessageBoxWarning,
-        Icon.Critical: QStyle.StandardPixmap.SP_MessageBoxCritical,
-        Icon.Question: QStyle.StandardPixmap.SP_MessageBoxQuestion,
-    }
+class ModernMessageBox(QMessageBox):
+    """Keep QMessageBox content and behavior, adding only themed window chrome."""
 
     def __init__(
         self,
-        icon: QMessageBox.Icon | QWidget = Icon.NoIcon,
+        icon: QMessageBox.Icon | QWidget | None = QMessageBox.Icon.NoIcon,
         title: str = "",
         text: str = "",
-        buttons: QMessageBox.StandardButton = StandardButton.NoButton,
+        buttons: QMessageBox.StandardButton = QMessageBox.StandardButton.NoButton,
         parent: QWidget | None = None,
+        flags: Qt.WindowType = Qt.WindowType.Dialog | Qt.WindowType.MSWindowsFixedSizeDialogHint,
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
@@ -57,323 +41,132 @@ class ModernMessageBox(ModernDialog):
                 raise TypeError("parent-only construction cannot include message-box arguments")
             parent = icon
             icon = self.Icon.NoIcon
+        elif icon is None:
+            icon = self.Icon.NoIcon
 
-        super().__init__(parent, theme=theme, metrics=metrics)
-        self._icon = icon
-        self._icon_pixmap = QPixmap()
-        self._clicked_button: QAbstractButton | None = None
-        self._default_button: QPushButton | None = None
-        self._escape_button: QAbstractButton | None = None
-        self._check_box: QCheckBox | None = None
-        self._custom_button_results: dict[QAbstractButton, int] = {}
-        self._next_custom_result = 2
-
-        self._message_layout = QVBoxLayout(self)
-        self._message_layout.setContentsMargins(20, 18, 20, 18)
-        self._message_layout.setSpacing(12)
-
-        body_layout = QHBoxLayout()
-        body_layout.setSpacing(14)
-        self._message_layout.addLayout(body_layout)
-
-        self._icon_label = QLabel(self)
-        self._icon_label.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self._icon_label.setAccessibleName(self.tr("Message icon"))
-        body_layout.addWidget(self._icon_label, 0, Qt.AlignmentFlag.AlignTop)
-
-        text_layout = QVBoxLayout()
-        text_layout.setSpacing(6)
-        body_layout.addLayout(text_layout, 1)
-
-        self._text_label = QLabel(self)
-        self._text_label.setWordWrap(True)
-        self._text_label.setTextFormat(Qt.TextFormat.AutoText)
-        self._text_label.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
-        self._text_label.setOpenExternalLinks(True)
-        text_layout.addWidget(self._text_label)
-
-        self._informative_label = QLabel(self)
-        self._informative_label.setWordWrap(True)
-        self._informative_label.setTextFormat(Qt.TextFormat.AutoText)
-        self._informative_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        super().__init__(
+            icon, title, text, buttons, parent, flags | Qt.WindowType.FramelessWindowHint
         )
-        self._informative_label.setOpenExternalLinks(True)
-        text_layout.addWidget(self._informative_label)
+        # Keep Qt's widget implementation so our palette and chrome also work on
+        # platforms that otherwise substitute an operating-system message box.
+        self.setOption(QMessageBox.Option.DontUseNativeDialog)
+        self._uses_global_theme = theme is None
+        self._theme = theme or theme_manager().theme()
+        self._metrics = metrics
+        self._corner_radius = metrics.corner_radius
+        self._surface_policy = current_window_surface_policy()
+        self._surface_policy.apply_to(self)
 
-        self._details_button = QPushButton(self.tr("Show Details..."), self)
-        self._details_button.setCheckable(True)
-        self._details_button.toggled.connect(self._set_details_visible)
-        self._message_layout.addWidget(
-            self._details_button,
-            0,
-            Qt.AlignmentFlag.AlignLeft,
+        paint_radius = self._surface_policy.paint_corner_radius(self._corner_radius)
+        self._background_frame = BackgroundFrame(
+            self,
+            theme=self._theme,
+            corner_radius=paint_radius,
+            opaque_surface=self._surface_policy.opaque_surface,
         )
+        self._background_frame.setObjectName("backgroundFrame")
+        self._background_frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._title_bar = WindowTitleBar(self, theme=self._theme, metrics=metrics)
+        # Window controls must never become message-box default buttons or
+        # enter the tab order used by Qt's content and button box.
+        self._title_bar.closeButton.setAutoDefault(False)
+        self._title_bar.closeButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._title_bar.setIcon(self.windowIcon())
+        self._chrome_overlay = WindowChromeOverlay(
+            self, theme=self._theme, corner_radius=paint_radius
+        )
+        self._background_frame.show()
+        self._chrome_overlay.show()
+        self.windowTitleChanged.connect(self._title_bar.setTitle)
+        self.windowIconChanged.connect(self._title_bar.setIcon)
+        theme_manager().themeChanged.connect(self._on_global_theme_changed)
+        self._sync_chrome_with_window_flags()
+        self.apply_window_style()
 
-        self._details_editor = QPlainTextEdit(self)
-        self._details_editor.setReadOnly(True)
-        self._details_editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self._details_editor.setMinimumHeight(120)
-        self._message_layout.addWidget(self._details_editor)
+    def theme(self) -> ModernTheme:
+        return self._theme
 
-        self._button_box = QDialogButtonBox(self)
-        self._button_box.clicked.connect(self._on_button_clicked)
-        self._message_layout.addWidget(self._button_box)
+    def setTheme(self, theme: ModernTheme | None) -> None:
+        self._uses_global_theme = theme is None
+        self._theme = theme or theme_manager().theme()
+        self.apply_window_style()
 
-        self.setWindowTitle(title)
-        self.setText(text)
-        self.setInformativeText("")
-        self.setDetailedText("")
-        self.setIcon(icon)
-        self.setStandardButtons(buttons)
-        self.setMinimumWidth(320)
+    def setCornerRadius(self, radius: int) -> None:
+        self._corner_radius = max(0, radius)
+        self.apply_window_style()
 
-    def text(self) -> str:
-        return self._text_label.text()
+    def apply_window_style(self) -> None:
+        radius = 0 if self.isMaximized() or self.isFullScreen() else self._corner_radius
+        paint_radius = self._surface_policy.paint_corner_radius(radius)
+        self.setPalette(palette_for_theme(self._theme, self.palette()))
+        self._background_frame.setTheme(self._theme)
+        self._background_frame.setCornerRadius(paint_radius)
+        self._title_bar.setTheme(self._theme)
+        self._chrome_overlay.setTheme(self._theme)
+        self._chrome_overlay.setCornerRadius(paint_radius)
+        self._surface_policy.apply_native_corner_preference(self, radius > 0)
+        self._sync_inactive_title_color()
+        self._layout_chrome()
+        self.update()
 
-    def setText(self, text: str) -> None:
-        self._text_label.setText(text)
-        self._text_label.setVisible(bool(text))
+    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
+        if self._uses_global_theme:
+            self._theme = theme
+            self.apply_window_style()
 
-    def informativeText(self) -> str:
-        return self._informative_label.text()
+    def setWindowFlags(self, flags: Qt.WindowType) -> None:
+        super().setWindowFlags(flags | Qt.WindowType.FramelessWindowHint)
+        if hasattr(self, "_chrome_overlay"):
+            self._sync_chrome_with_window_flags()
 
-    def setInformativeText(self, text: str) -> None:
-        self._informative_label.setText(text)
-        self._informative_label.setVisible(bool(text))
+    def setWindowFlag(self, flag: Qt.WindowType, on: bool = True) -> None:
+        super().setWindowFlag(flag, on)
+        super().setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        if hasattr(self, "_chrome_overlay"):
+            self._sync_chrome_with_window_flags()
 
-    def detailedText(self) -> str:
-        return self._details_editor.toPlainText()
+    def _sync_chrome_with_window_flags(self) -> None:
+        visible = self._title_bar.syncWindowFlags(self.windowFlags())
+        self.setContentsMargins(0, self._title_bar.height() if visible else 0, 0, 0)
+        self._layout_chrome()
 
-    def setDetailedText(self, text: str) -> None:
-        self._details_editor.setPlainText(text)
-        self._details_button.setVisible(bool(text))
-        if not text:
-            self._details_button.setChecked(False)
-        self._details_editor.setVisible(bool(text) and self._details_button.isChecked())
+    def _layout_chrome(self) -> None:
+        self._background_frame.setGeometry(self.rect())
+        self._background_frame.lower()
+        self._title_bar.setGeometry(0, 0, self.width(), self._title_bar.height())
+        self._chrome_overlay.setGeometry(self.rect())
+        self._chrome_overlay.raise_()
+        self._title_bar.raise_()
 
-    def textFormat(self) -> Qt.TextFormat:
-        return self._text_label.textFormat()
-
-    def setTextFormat(self, text_format: Qt.TextFormat) -> None:
-        self._text_label.setTextFormat(text_format)
-        self._informative_label.setTextFormat(text_format)
-
-    def textInteractionFlags(self) -> Qt.TextInteractionFlag:
-        return self._text_label.textInteractionFlags()
-
-    def setTextInteractionFlags(self, flags: Qt.TextInteractionFlag) -> None:
-        self._text_label.setTextInteractionFlags(flags)
-        self._informative_label.setTextInteractionFlags(flags)
-
-    def icon(self) -> QMessageBox.Icon:
-        return self._icon
-
-    def setIcon(self, icon: QMessageBox.Icon) -> None:
-        self._icon = icon
-        standard_pixmap = self._ICON_PIXMAPS.get(icon)
-        if standard_pixmap is None:
-            self.setIconPixmap(QPixmap())
-            self._icon = icon
-            return
-        size = self.style().pixelMetric(QStyle.PixelMetric.PM_MessageBoxIconSize)
-        self._icon_pixmap = self.style().standardIcon(standard_pixmap).pixmap(size, size)
-        self._icon_label.setPixmap(self._icon_pixmap)
-        self._icon_label.show()
-
-    def iconPixmap(self) -> QPixmap:
-        return QPixmap(self._icon_pixmap)
-
-    def setIconPixmap(self, pixmap: QPixmap) -> None:
-        self._icon = self.Icon.NoIcon
-        self._icon_pixmap = QPixmap(pixmap)
-        self._icon_label.setPixmap(self._icon_pixmap)
-        self._icon_label.setVisible(not pixmap.isNull())
-
-    def standardButtons(self) -> QMessageBox.StandardButton:
-        return self.StandardButton(self._button_box.standardButtons().value)
-
-    def setStandardButtons(self, buttons: QMessageBox.StandardButton) -> None:
-        dialog_buttons = QDialogButtonBox.StandardButton(buttons.value)
-        self._button_box.setStandardButtons(dialog_buttons)
-        self._default_button = None
-        self._escape_button = None
-
-    def addButton(self, *args):
-        if len(args) == 1 and isinstance(args[0], self.StandardButton):
-            standard = QDialogButtonBox.StandardButton(args[0].value)
-            return self._button_box.addButton(standard)
-        if len(args) != 2:
-            raise TypeError("addButton expects a standard button or a button and role")
-
-        button_or_text, role = args
-        dialog_role = QDialogButtonBox.ButtonRole(role.value)
-        if isinstance(button_or_text, QAbstractButton):
-            self._button_box.addButton(button_or_text, dialog_role)
-            button = button_or_text
-        else:
-            button = self._button_box.addButton(button_or_text, dialog_role)
-        self._custom_button_results[button] = self._next_custom_result
-        self._next_custom_result += 1
-        return button
-
-    def removeButton(self, button: QAbstractButton) -> None:
-        self._button_box.removeButton(button)
-        self._custom_button_results.pop(button, None)
-        if button is self._default_button:
-            self._default_button = None
-        if button is self._escape_button:
-            self._escape_button = None
-
-    def buttons(self) -> list[QAbstractButton]:
-        return self._button_box.buttons()
-
-    def button(self, which: QMessageBox.StandardButton) -> QPushButton | None:
-        standard = QDialogButtonBox.StandardButton(which.value)
-        return self._button_box.button(standard)
-
-    def standardButton(self, button: QAbstractButton) -> QMessageBox.StandardButton:
-        standard = self._button_box.standardButton(button)
-        return self.StandardButton(standard.value)
-
-    def buttonRole(self, button: QAbstractButton) -> QMessageBox.ButtonRole:
-        role = self._button_box.buttonRole(button)
-        return self.ButtonRole(role.value)
-
-    def clickedButton(self) -> QAbstractButton | None:
-        return self._clicked_button
-
-    def defaultButton(self) -> QPushButton | None:
-        if self._default_button is not None and not isValid(self._default_button):
-            self._default_button = None
-        return self._default_button
-
-    def setDefaultButton(
-        self,
-        button: QPushButton | QMessageBox.StandardButton,
-    ) -> None:
-        default = self.button(button) if isinstance(button, self.StandardButton) else button
-        if default is None:
-            return
-        previous = self.defaultButton()
-        if previous is not None:
-            previous.setDefault(False)
-        self._default_button = default
-        default.setDefault(True)
-        default.setAutoDefault(True)
-
-    def escapeButton(self) -> QAbstractButton | None:
-        return self._escape_button
-
-    def setEscapeButton(
-        self,
-        button: QAbstractButton | QMessageBox.StandardButton,
-    ) -> None:
-        escape = self.button(button) if isinstance(button, self.StandardButton) else button
-        if escape is not None:
-            self._escape_button = escape
-
-    def checkBox(self) -> QCheckBox | None:
-        return self._check_box
-
-    def setCheckBox(self, check_box: QCheckBox | None) -> None:
-        if self._check_box is not None:
-            self._message_layout.removeWidget(self._check_box)
-            self._check_box.setParent(None)
-        self._check_box = check_box
-        if check_box is not None:
-            self._message_layout.insertWidget(
-                self._message_layout.indexOf(self._button_box),
-                check_box,
+    def _sync_inactive_title_color(self) -> None:
+        probe = QMenuBar()
+        probe.ensurePolished()
+        self._title_bar.setInactiveTitleColor(
+            QColor(
+                probe.palette().color(QPalette.ColorGroup.Inactive, QPalette.ColorRole.ButtonText)
             )
-
-    def exec(self) -> int:
-        self._clicked_button = None
-        return super().exec()
-
-    def keyPressEvent(self, event) -> None:
-        if event.matches(QKeySequence.StandardKey.Cancel):
-            escape = self._escape_button or self._inferred_escape_button()
-            if escape is not None:
-                escape.click()
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-    def closeEvent(self, event) -> None:
-        escape = self._escape_button or self._inferred_escape_button()
-        if escape is None:
-            event.ignore()
-            return
-        result = self._button_result(escape)
-        super().closeEvent(event)
-        if isValid(self) and event.isAccepted():
-            self._clicked_button = escape
-            self.setResult(result)
-
-    def done(self, result: int) -> None:
-        dialog_code = result
-        if self._clicked_button is not None:
-            role = self.buttonRole(self._clicked_button)
-            if role in (self.ButtonRole.AcceptRole, self.ButtonRole.YesRole):
-                dialog_code = self.DialogCode.Accepted
-            elif role in (self.ButtonRole.RejectRole, self.ButtonRole.NoRole):
-                dialog_code = self.DialogCode.Rejected
-            else:
-                dialog_code = -1
-        # QDialog interprets only 0/1, while message boxes return button codes.
-        # Complete the dialog first, then publish the role-based result once.
-        with QSignalBlocker(self):
-            super().done(result)
-        if dialog_code == self.DialogCode.Accepted:
-            self.accepted.emit()
-        elif dialog_code == self.DialogCode.Rejected:
-            self.rejected.emit()
-        if isValid(self):
-            self.finished.emit(result)
-
-    def showEvent(self, event) -> None:
-        if not event.spontaneous():
-            self._clicked_button = None
-        if not self.buttons():
-            self.setStandardButtons(self.StandardButton.Ok)
-        super().showEvent(event)
-
-    def _set_details_visible(self, visible: bool) -> None:
-        self._details_button.setText(
-            self.tr("Hide Details...") if visible else self.tr("Show Details...")
         )
-        self._details_editor.setVisible(visible)
-        if self.isVisible():
-            self.adjustSize()
+        probe.deleteLater()
 
-    def _on_button_clicked(self, button: QAbstractButton) -> None:
-        self._clicked_button = button
-        result = self._button_result(button)
-        self.buttonClicked.emit(button)
-        if isValid(self):
-            self.done(result)
-
-    def _button_result(self, button: QAbstractButton) -> int:
-        standard = self.standardButton(button)
-        return (
-            standard.value
-            if standard != self.StandardButton.NoButton
-            else self._custom_button_results[button]
-        )
-
-    def _inferred_escape_button(self) -> QAbstractButton | None:
-        buttons = self.buttons()
-        if len(buttons) == 1:
-            return buttons[0]
-        cancel = self.button(self.StandardButton.Cancel)
-        if cancel is not None:
-            return cancel
-        for role in (self.ButtonRole.RejectRole, self.ButtonRole.NoRole):
-            candidates = [button for button in buttons if self.buttonRole(button) == role]
-            if len(candidates) == 1:
-                return candidates[0]
-        return None
+    def event(self, event) -> bool:
+        handled = super().event(event)
+        # QMessageBox can dispatch events while its C++ constructor is running.
+        if not hasattr(self, "_chrome_overlay"):
+            return handled
+        if event.type() == QEvent.Type.Show:
+            self._sync_chrome_with_window_flags()
+            self.apply_window_style()
+        elif event.type() == QEvent.Type.Resize:
+            self._layout_chrome()
+        elif event.type() == QEvent.Type.WindowStateChange:
+            self.apply_window_style()
+        elif event.type() in (
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.PaletteChange,
+            QEvent.Type.StyleChange,
+        ):
+            self._sync_inactive_title_color()
+        return handled
 
     @classmethod
     def _show_message(
@@ -397,8 +190,8 @@ class ModernMessageBox(ModernDialog):
         parent: QWidget | None,
         title: str,
         text: str,
-        buttons: QMessageBox.StandardButton = StandardButton.Ok,
-        defaultButton: QMessageBox.StandardButton = StandardButton.NoButton,
+        buttons: QMessageBox.StandardButton = QMessageBox.StandardButton.Ok,
+        defaultButton: QMessageBox.StandardButton = QMessageBox.StandardButton.NoButton,
     ) -> QMessageBox.StandardButton:
         return cls._show_message(cls.Icon.Information, parent, title, text, buttons, defaultButton)
 
@@ -408,8 +201,9 @@ class ModernMessageBox(ModernDialog):
         parent: QWidget | None,
         title: str,
         text: str,
-        buttons: QMessageBox.StandardButton = StandardButton.Yes | StandardButton.No,
-        defaultButton: QMessageBox.StandardButton = StandardButton.NoButton,
+        buttons: QMessageBox.StandardButton = QMessageBox.StandardButton.Yes
+        | QMessageBox.StandardButton.No,
+        defaultButton: QMessageBox.StandardButton = QMessageBox.StandardButton.NoButton,
     ) -> QMessageBox.StandardButton:
         return cls._show_message(cls.Icon.Question, parent, title, text, buttons, defaultButton)
 
@@ -419,8 +213,8 @@ class ModernMessageBox(ModernDialog):
         parent: QWidget | None,
         title: str,
         text: str,
-        buttons: QMessageBox.StandardButton = StandardButton.Ok,
-        defaultButton: QMessageBox.StandardButton = StandardButton.NoButton,
+        buttons: QMessageBox.StandardButton = QMessageBox.StandardButton.Ok,
+        defaultButton: QMessageBox.StandardButton = QMessageBox.StandardButton.NoButton,
     ) -> QMessageBox.StandardButton:
         return cls._show_message(cls.Icon.Warning, parent, title, text, buttons, defaultButton)
 
@@ -430,7 +224,7 @@ class ModernMessageBox(ModernDialog):
         parent: QWidget | None,
         title: str,
         text: str,
-        buttons: QMessageBox.StandardButton = StandardButton.Ok,
-        defaultButton: QMessageBox.StandardButton = StandardButton.NoButton,
+        buttons: QMessageBox.StandardButton = QMessageBox.StandardButton.Ok,
+        defaultButton: QMessageBox.StandardButton = QMessageBox.StandardButton.NoButton,
     ) -> QMessageBox.StandardButton:
         return cls._show_message(cls.Icon.Critical, parent, title, text, buttons, defaultButton)
