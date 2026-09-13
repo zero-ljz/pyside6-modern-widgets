@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QAbstractButton,
     QCheckBox,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from .modern_dialog import ModernDialog
 from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme
@@ -243,6 +244,8 @@ class ModernMessageBox(ModernDialog):
         return self._clicked_button
 
     def defaultButton(self) -> QPushButton | None:
+        if self._default_button is not None and not isValid(self._default_button):
+            self._default_button = None
         return self._default_button
 
     def setDefaultButton(
@@ -252,8 +255,9 @@ class ModernMessageBox(ModernDialog):
         default = self.button(button) if isinstance(button, self.StandardButton) else button
         if default is None:
             return
-        if self._default_button is not None:
-            self._default_button.setDefault(False)
+        previous = self.defaultButton()
+        if previous is not None:
+            previous.setDefault(False)
         self._default_button = default
         default.setDefault(True)
         default.setAutoDefault(True)
@@ -287,14 +291,50 @@ class ModernMessageBox(ModernDialog):
         self._clicked_button = None
         return super().exec()
 
-    def reject(self) -> None:
+    def keyPressEvent(self, event) -> None:
+        if event.matches(QKeySequence.StandardKey.Cancel):
+            escape = self._escape_button or self._inferred_escape_button()
+            if escape is not None:
+                escape.click()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event) -> None:
         escape = self._escape_button or self._inferred_escape_button()
         if escape is None:
-            super().reject()
-        else:
-            self._on_button_clicked(escape)
+            event.ignore()
+            return
+        result = self._button_result(escape)
+        super().closeEvent(event)
+        if isValid(self) and event.isAccepted():
+            self._clicked_button = escape
+            self.setResult(result)
+
+    def done(self, result: int) -> None:
+        dialog_code = result
+        if self._clicked_button is not None:
+            role = self.buttonRole(self._clicked_button)
+            if role in (self.ButtonRole.AcceptRole, self.ButtonRole.YesRole):
+                dialog_code = self.DialogCode.Accepted
+            elif role in (self.ButtonRole.RejectRole, self.ButtonRole.NoRole):
+                dialog_code = self.DialogCode.Rejected
+            else:
+                dialog_code = -1
+        # QDialog interprets only 0/1, while message boxes return button codes.
+        # Complete the dialog first, then publish the role-based result once.
+        with QSignalBlocker(self):
+            super().done(result)
+        if dialog_code == self.DialogCode.Accepted:
+            self.accepted.emit()
+        elif dialog_code == self.DialogCode.Rejected:
+            self.rejected.emit()
+        if isValid(self):
+            self.finished.emit(result)
 
     def showEvent(self, event) -> None:
+        if not event.spontaneous():
+            self._clicked_button = None
         if not self.buttons():
             self.setStandardButtons(self.StandardButton.Ok)
         super().showEvent(event)
@@ -309,25 +349,30 @@ class ModernMessageBox(ModernDialog):
 
     def _on_button_clicked(self, button: QAbstractButton) -> None:
         self._clicked_button = button
+        result = self._button_result(button)
         self.buttonClicked.emit(button)
+        if isValid(self):
+            self.done(result)
+
+    def _button_result(self, button: QAbstractButton) -> int:
         standard = self.standardButton(button)
-        result = (
+        return (
             standard.value
             if standard != self.StandardButton.NoButton
             else self._custom_button_results[button]
         )
-        self.done(result)
 
     def _inferred_escape_button(self) -> QAbstractButton | None:
-        for standard in (
-            self.StandardButton.Cancel,
-            self.StandardButton.Close,
-            self.StandardButton.No,
-            self.StandardButton.Abort,
-        ):
-            button = self.button(standard)
-            if button is not None:
-                return button
+        buttons = self.buttons()
+        if len(buttons) == 1:
+            return buttons[0]
+        cancel = self.button(self.StandardButton.Cancel)
+        if cancel is not None:
+            return cancel
+        for role in (self.ButtonRole.RejectRole, self.ButtonRole.NoRole):
+            candidates = [button for button in buttons if self.buttonRole(button) == role]
+            if len(candidates) == 1:
+                return candidates[0]
         return None
 
     @classmethod

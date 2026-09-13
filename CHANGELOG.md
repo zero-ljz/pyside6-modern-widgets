@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Keep tab labels and pages synchronized when inserting an existing page again,
+  and disable the page content along with its tab.
+- Scope tab shortcuts to the nearest focused tab view, including nested views, preserving
+  platform-specific standard key bindings.
+- Clear deleted message-box default buttons before querying or replacing them.
+- Match QMessageBox completion signals to button roles, and honor its Escape
+  and window-close rules for standard and custom buttons.
 - Apply the Windows restore handling to `setWindowState(WindowNoState)` as well
   as `showNormal()`, preserving geometry and keeping hidden windows hidden.
 - Remove tab and navigation entries when their pages are destroyed or reparented,

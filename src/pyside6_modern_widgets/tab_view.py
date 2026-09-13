@@ -546,6 +546,9 @@ class TabView(QWidget):
         text: str | None = None,
     ) -> int:
         icon, label = self._parse_tab_arguments(icon_or_text, text)
+        existing_index = self.indexOf(widget)
+        if existing_index >= 0:
+            self.removeTab(existing_index)
         index = max(0, min(index, self.count()))
         old_widget = self.currentWidget()
         with self._suspend_sync():
@@ -630,6 +633,9 @@ class TabView(QWidget):
         return self._tab_bar.isTabEnabled(index)
 
     def setTabEnabled(self, index: int, enabled: bool) -> None:
+        page = self.widget(index)
+        if page is not None:
+            page.setEnabled(enabled)
         self._tab_bar.setTabEnabled(index, enabled)
 
     def setTabsClosable(self, closable: bool) -> None:
@@ -665,10 +671,28 @@ class TabView(QWidget):
         self._select_relative_tab(-1)
 
     def _setup_shortcuts(self) -> None:
-        QShortcut(QKeySequence.StandardKey.AddTab, self, self.addTabClicked.emit)
-        QShortcut(QKeySequence.StandardKey.Close, self, self._request_current_close)
-        QShortcut(QKeySequence("Ctrl+Tab"), self, self.nextTab)
-        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, self.previousTab)
+        self._shortcuts: list[QShortcut] = []
+        for sequence, callback in (
+            (QKeySequence.StandardKey.AddTab, self.addTabClicked.emit),
+            (QKeySequence.StandardKey.Close, self._request_current_close),
+            (QKeySequence("Ctrl+Tab"), self.nextTab),
+            (QKeySequence("Ctrl+Shift+Tab"), self.previousTab),
+        ):
+            shortcut = QShortcut(sequence, self, callback)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            self._shortcuts.append(shortcut)
+        app = cast(QApplication, QApplication.instance())
+        app.focusChanged.connect(self._update_shortcut_context)
+        self._update_shortcut_context()
+
+    def _update_shortcut_context(self, *_args) -> None:
+        owner = QApplication.focusWidget()
+        while owner is not None and not isinstance(owner, TabView):
+            owner = owner.parentWidget()
+        # Ancestor views share the child shortcut context; only the nearest
+        # view may register active shortcuts, otherwise Qt reports ambiguity.
+        for shortcut in self._shortcuts:
+            shortcut.setEnabled(owner is self)
 
     def _request_current_close(self) -> None:
         if self.currentIndex() >= 0 and self.tabsClosable():
