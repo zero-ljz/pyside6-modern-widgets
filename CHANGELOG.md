@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-09-13
+
 ### Changed
 
 - Make `ModernMessageBox` inherit directly from `QMessageBox`, retaining its
@@ -244,7 +246,9 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.3...v0.5.4
+[0.5.3]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.4.3...v0.5.0
