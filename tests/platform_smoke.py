@@ -118,22 +118,36 @@ def main() -> int:
 
         # Re-showing a frameless maximized window can set WS_MAXIMIZE and
         # overwrite Qt's normalGeometry with the maximized client rectangle.
-        for transition in ("direct", "minimize", "hide"):
-            for restore in ("drag", "button"):
+        for transition in ("direct", "minimize", "hide", "minimized"):
+            for restore in ("drag", "button", "state", "hidden_state"):
+                if transition == "minimized" and restore in ("drag", "button"):
+                    continue  # Caption controls are unavailable while minimized.
                 window.setGeometry(normal_geometry)
                 window.showMaximized()
                 _wait(app)
-                if transition == "minimize":
+                if transition in ("minimize", "minimized"):
                     window.showMinimized()
                     _wait(app)
-                    send_message(hwnd, WM_SYSCOMMAND, 0xF120, 0)
+                    if transition == "minimize":
+                        send_message(hwnd, WM_SYSCOMMAND, 0xF120, 0)
                 elif transition == "hide":
                     window.hide()
                     window.show()
                 _wait(app)
                 assert window.isMaximized()
 
-                if restore == "button":
+                if restore == "hidden_state":
+                    window.hide()
+                    window.setWindowState(Qt.WindowState.WindowNoState)
+                    assert not window.isVisible()
+                    assert not get_style(hwnd, -16) & 0x10000000  # WS_VISIBLE
+                    _wait(app)
+                    assert not window.isVisible()
+                    assert not get_style(hwnd, -16) & 0x10000000
+                    window.show()
+                elif restore == "state":
+                    window.setWindowState(Qt.WindowState.WindowNoState)
+                elif restore == "button":
                     window.titleBar.maximizeButton.click()
                 else:
                     press = QPoint(300, 20)
@@ -160,7 +174,7 @@ def main() -> int:
                 assert not window.isMaximized(), (transition, restore)
                 assert not is_window_maximized(hwnd), (transition, restore)
                 assert window.size() == normal_geometry.size(), (transition, restore)
-                if restore == "button":
+                if restore != "drag":
                     assert window.geometry() == normal_geometry, (transition, restore)
 
         lifecycle = _LifecycleProbe(window)

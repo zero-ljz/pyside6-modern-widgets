@@ -59,6 +59,21 @@ def test_restore_native_window_uses_show_window_restore(monkeypatch) -> None:
     assert calls == [(12345, 9)]
 
 
+def test_hidden_native_restore_preserves_visibility_and_other_style_bits(monkeypatch) -> None:
+    style = _windows_window.WS_MAXIMIZE | _windows_window.WS_CAPTION | 0x00080000
+    calls = []
+
+    class User32:
+        GetWindowLongPtrW = _NativeFunction(lambda hwnd, index: style)
+        SetWindowLongPtrW = _NativeFunction(
+            lambda hwnd, index, updated: calls.append((hwnd.value, index, updated))
+        )
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())
+    _windows_window.restore_native_window(12345, visible=False)
+    assert calls == [(12345, _windows_window.GWL_STYLE, style & ~_windows_window.WS_MAXIMIZE)]
+
+
 @pytest.mark.parametrize("on_top", [True, False])
 @pytest.mark.parametrize("succeeded", [True, False])
 def test_topmost_changes_only_native_z_order(monkeypatch, on_top, succeeded) -> None:

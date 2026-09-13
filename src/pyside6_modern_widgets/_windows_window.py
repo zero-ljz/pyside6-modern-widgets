@@ -13,6 +13,7 @@ WS_THICKFRAME = 0x00040000
 WS_SYSMENU = 0x00080000
 WS_MINIMIZEBOX = 0x00020000
 WS_MAXIMIZEBOX = 0x00010000
+WS_MAXIMIZE = 0x01000000
 
 WM_NCCALCSIZE = 0x0083
 WM_NCHITTEST = 0x0084
@@ -144,10 +145,25 @@ def is_window_maximized(hwnd: int) -> bool:
         return False
 
 
-def restore_native_window(hwnd: int) -> None:
+def restore_native_window(hwnd: int, *, visible: bool = True) -> None:
     """Clear native maximization before Qt restores a frameless window."""
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
+        if not visible:
+            # ShowWindow(SW_RESTORE) would reveal a hidden widget. Clear only
+            # the native state bit; Qt will apply its normal geometry on show.
+            user32.GetWindowLongPtrW.argtypes = (wintypes.HWND, ctypes.c_int)
+            user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+            user32.SetWindowLongPtrW.argtypes = (
+                wintypes.HWND,
+                ctypes.c_int,
+                ctypes.c_ssize_t,
+            )
+            user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+            window_handle = wintypes.HWND(hwnd)
+            style = int(user32.GetWindowLongPtrW(window_handle, GWL_STYLE))
+            user32.SetWindowLongPtrW(window_handle, GWL_STYLE, style & ~WS_MAXIMIZE)
+            return
         user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
         user32.ShowWindow.restype = wintypes.BOOL
         user32.ShowWindow(wintypes.HWND(hwnd), 9)  # SW_RESTORE

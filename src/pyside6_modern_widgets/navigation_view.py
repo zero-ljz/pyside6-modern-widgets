@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -90,6 +90,7 @@ class NavigationView(QWidget):
         self.sidebar.collapsedChanged.connect(self._sync_outside_click_filter)
         self.stackedWidget.currentChanged.connect(self.stackedWidget.updateGeometry)
         self.stackedWidget.currentChanged.connect(self._on_current_changed)
+        self.stackedWidget.widgetRemoved.connect(self._on_page_removed)
 
     def isSidebarOverlay(self) -> bool:
         return self._sidebar_overlay
@@ -205,20 +206,33 @@ class NavigationView(QWidget):
             raise RuntimeError("Navigation item and page indexes are out of sync")
         if selected or self.count() == 1:
             self.setCurrentIndex(page_index)
+        if self.count() == 1:
+            self._on_current_changed(self.currentIndex())
         return page_index
 
     def removePage(self, index: int) -> QWidget | None:
         page = self.widget(index)
         if page is None:
             return None
-        was_current = index == self.currentIndex()
         self.stackedWidget.removeWidget(page)
-        self.sidebar.removeItem(index)
-        self._sync_sidebar_minimum_height()
         page.setParent(None)
-        if self.count() and was_current:
-            self.setCurrentIndex(min(index, self.count() - 1))
         return page
+
+    def _on_page_removed(self, index: int) -> None:
+        old_index = self.sidebar.currentIndex()
+        new_index = min(index, self.count() - 1) if old_index == index else self.currentIndex()
+        with QSignalBlocker(self.sidebar), QSignalBlocker(self.stackedWidget):
+            button = self.sidebar.removeItem(index)
+            if button is not None:
+                button.deleteLater()
+            self.sidebar.setCurrentIndex(new_index)
+            self.stackedWidget.setCurrentIndex(new_index)
+        self._sync_sidebar_minimum_height()
+        self.stackedWidget.updateGeometry()
+        if old_index != new_index or old_index == index:
+            self._on_current_changed(new_index)
+        else:
+            self._update_automatic_sidebar_overlay()
 
     def count(self) -> int:
         return self.stackedWidget.count()
@@ -257,6 +271,10 @@ class NavigationView(QWidget):
         self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
 
     def _on_current_changed(self, index: int) -> None:
+        # QStackedWidget announces selection changes before widgetRemoved.
+        # Wait until the navigation entries have caught up before publishing.
+        if self.sidebar.count() != self.count():
+            return
         if index >= 0 and self.sidebar.currentIndex() != index:
             self.sidebar.setCurrentIndex(index)
         self._update_automatic_sidebar_overlay()

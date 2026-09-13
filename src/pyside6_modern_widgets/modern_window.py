@@ -523,6 +523,23 @@ class ModernWindow(QWidget):
             QWidget.showMaximized(self)
 
     def showNormal(self) -> None:
+        self.setWindowState(self.windowState() & Qt.WindowState.WindowActive)
+        self.show()
+
+    def setWindowState(self, state: Qt.WindowState) -> None:
+        non_normal = (
+            Qt.WindowState.WindowMinimized
+            | Qt.WindowState.WindowMaximized
+            | Qt.WindowState.WindowFullScreen
+        )
+        normal_geometry = None
+        if not state & non_normal:
+            normal_geometry = self._restore_native_maximize_state()
+        QWidget.setWindowState(self, state)
+        if normal_geometry is not None:
+            self.setGeometry(normal_geometry)
+
+    def _restore_native_maximize_state(self) -> QRect | None:
         normal_geometry = self._normal_geometry
         handle = self.windowHandle()
         native_maximized = (
@@ -535,10 +552,11 @@ class ModernWindow(QWidget):
             # a minimized/hidden window can make Windows set WS_MAXIMIZE too.
             # QWidget.showNormal() alone then leaves the HWND maximized. Restore
             # it first so queued native events cannot put Qt back into that state.
-            restore_native_window(int(handle.winId()))
-        QWidget.showNormal(self)
-        if native_maximized and normal_geometry is not None:
-            self.setGeometry(normal_geometry)
+            if self.isVisible():
+                restore_native_window(int(handle.winId()))
+            else:
+                restore_native_window(int(handle.winId()), visible=False)
+        return normal_geometry if self._uses_windows_window_state() else None
 
     def _window_constraints_changed(self) -> None:
         if not hasattr(self, "_native_frame_sync_timer"):

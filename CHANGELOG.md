@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Apply the Windows restore handling to `setWindowState(WindowNoState)` as well
+  as `showNormal()`, preserving geometry and keeping hidden windows hidden.
+- Remove tab and navigation entries when their pages are destroyed or reparented,
+  and publish selection changes only after the entries and pages are synchronized.
+- Emit `TabView.currentChanged` when the first tab becomes current.
 - Toggle Windows always-on-top status without hiding/re-showing the window or
   briefly exposing the system frame.
 - Restore maximized Windows windows to their original size before title-bar

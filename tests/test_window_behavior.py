@@ -428,7 +428,7 @@ def test_native_restore_from_minimized_preserves_previous_state(maximized) -> No
     window.close()
 
 
-@pytest.mark.parametrize("restore", ["drag", "button"])
+@pytest.mark.parametrize("restore", ["drag", "button", "state"])
 def test_restore_keeps_normal_geometry_when_native_reshow_overwrites_qt_cache(
     monkeypatch, restore
 ) -> None:
@@ -458,8 +458,11 @@ def test_restore_keeps_normal_geometry_when_native_reshow_overwrites_qt_cache(
     monkeypatch.setattr(modern_window_module, "restore_native_window", restore_native)
     monkeypatch.setattr(modern_window_module, "set_mouse_capture", lambda *_args: None)
     hwnd = int(window.winId())
-    if restore == "button":
-        window.titleBar.maximizeButton.click()
+    if restore in ("button", "state"):
+        if restore == "button":
+            window.titleBar.maximizeButton.click()
+        else:
+            window.setWindowState(Qt.WindowState.WindowNoState)
         assert window.geometry() == normal
     else:
         press = window.mapToGlobal(QPoint(100, 20))

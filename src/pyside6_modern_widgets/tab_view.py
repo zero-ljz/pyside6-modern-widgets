@@ -526,6 +526,7 @@ class TabView(QWidget):
         self._tab_bar.tabMoved.connect(self._move_page)
         self._tab_bar.tabMoved.connect(self.tabMoved.emit)
         self._stack.currentChanged.connect(self._stack_current_changed)
+        self._stack.widgetRemoved.connect(self._stack_widget_removed)
         self._setup_shortcuts()
         self._apply_theme()
 
@@ -557,6 +558,8 @@ class TabView(QWidget):
             else:
                 self._stack.setCurrentIndex(tab_index)
                 self._tab_bar.setCurrentIndex(tab_index)
+        if old_widget is None:
+            self.currentChanged.emit(self.currentIndex())
         return page_index
 
     def removeTab(self, index: int) -> None:
@@ -699,9 +702,20 @@ class TabView(QWidget):
         self.currentChanged.emit(index)
 
     def _stack_current_changed(self, index: int) -> None:
-        if self._syncing:
+        if self._syncing or self._tab_bar.count() != self.count():
             return
         self._tab_bar.setCurrentIndex(index)
+
+    def _stack_widget_removed(self, index: int) -> None:
+        if self._syncing:
+            return
+        old_index = self._tab_bar.currentIndex()
+        with self._suspend_sync():
+            self._tab_bar.removeTab(index)
+            self._tab_bar.setCurrentIndex(self._stack.currentIndex())
+        new_index = self.currentIndex()
+        if old_index != new_index or old_index == index:
+            self.currentChanged.emit(new_index)
 
     def _move_page(self, old_index: int, new_index: int) -> None:
         page = self.widget(old_index)
