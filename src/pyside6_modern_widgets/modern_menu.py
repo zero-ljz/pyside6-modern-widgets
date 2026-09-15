@@ -65,7 +65,11 @@ def _supports_windows_acrylic() -> bool:
 
 
 def _enable_windows_rounded_corners(menu: QWidget, radius: int, *, square: bool = False) -> bool:
-    if radius <= 0 or sys.platform != "win32" or QApplication.platformName() != "windows":
+    if (
+        (radius <= 0 and not square)
+        or sys.platform != "win32"
+        or QApplication.platformName() != "windows"
+    ):
         return False
     try:
         import ctypes
@@ -103,7 +107,7 @@ def _windows_acrylic_tint(palette: QPalette, widget: QWidget | None = None) -> Q
     return tint
 
 
-def _enable_windows_acrylic(menu: QWidget, *, enabled: bool = True) -> bool:
+def _enable_windows_acrylic(menu: QWidget) -> bool:
     if not _supports_windows_acrylic():
         return False
     try:
@@ -133,7 +137,7 @@ def _enable_windows_acrylic(menu: QWidget, *, enabled: bool = True) -> bool:
             | tint.red()
         )
         accent = AccentPolicy(
-            4 if enabled else 0,  # ACCENT_ENABLE_ACRYLICBLURBEHIND / ACCENT_DISABLED
+            4,  # ACCENT_ENABLE_ACRYLICBLURBEHIND
             2,
             gradient_color,
             0,

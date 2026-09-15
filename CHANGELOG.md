@@ -9,9 +9,8 @@ All notable changes to this project are documented in this file.
 - Match editable default-list row heights to ordinary modern combo rows and add
   8 logical pixels of horizontal padding per side and 2 pixels above/below the
   list, without changing closed controls.
-- Square the two editable combo popup corners facing the control, following
-  Qt's upward or downward popup placement. Use an opaque theme surface for editable
-  popups to avoid rectangular acrylic leaking beyond their asymmetric corners.
+- Use four square corners for editable combo controls and popups, with Windows 11
+  acrylic on the popup. Non-editable combos retain rounded corners.
 
 ### Added
 

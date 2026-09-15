@@ -15,9 +15,9 @@ python examples/combo_box_example.py
 It compares `ModernComboBox` and native `QComboBox` side by side, including icons,
 separators, placeholders, editing, disabled controls, long lists and right-to-left
 layout. Switch System/Light/Dark appearance and try the mouse, arrow keys, typing,
-Enter and Escape. The ordinary modern popup uses `ModernMenu`'s acrylic styling
-on Windows 11, with an opaque fallback elsewhere. Editable popups use a solid
-theme surface with two square corners facing the input. The status line
+Enter and Escape. Modern popups use `ModernMenu`'s acrylic styling
+on Windows 11, with an opaque fallback elsewhere. Editable controls and popups
+have four square corners; non-editable combos remain rounded. The status line
 displays Qt's `activated` signal.
 
 Run the window and navigation example. It includes interactive `ModernDialog`,

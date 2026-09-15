@@ -304,8 +304,8 @@ def test_popup_surface_remains_clickable_and_refreshes_acrylic_tint(
     for theme in (LIGHT_THEME, DARK_THEME):
         combo.setTheme(theme)
         _APP.processEvents()
-        assert combo._modern_style._native_acrylic == (acrylic and not editable)
-        if acrylic and not editable:
+        assert combo._modern_style._native_acrylic == acrylic
+        if acrylic:
             assert tints[-1] == QColor(theme.surface)
         pixmap = popup.grab()
         scale = pixmap.devicePixelRatio()
@@ -313,9 +313,8 @@ def test_popup_surface_remains_clickable_and_refreshes_acrylic_tint(
         row = combo.view().visualRect(combo.model().index(1, 0))
         point = combo.view().viewport().mapTo(popup, QPoint(180, row.center().y()))
         alpha = image.pixelColor(round(point.x() * scale), round(point.y() * scale)).alpha()
-        assert alpha == (_ACRYLIC_INPUT_ALPHA if acrylic and not editable else 255)
-        corner_y = image.height() - 1 if editable else 0
-        assert image.pixelColor(0, corner_y).alpha() == 0
+        assert alpha == (_ACRYLIC_INPUT_ALPHA if acrylic else 255)
+        assert (image.pixelColor(0, 0).alpha() > 0) == editable
 
 
 @pytest.mark.parametrize("editable", [False, True])
@@ -517,7 +516,7 @@ def test_closed_layout_remains_native_with_only_two_extra_pixels(combos, editabl
 
 
 @pytest.mark.parametrize("above", [False, True])
-def test_editable_popup_squares_only_the_edge_facing_the_combo(combos, above):
+def test_editable_popup_has_four_square_corners(combos, above):
     combo = combos[1]
     combo.setEditable(True)
     screen = combo.screen().availableGeometry()
@@ -527,17 +526,13 @@ def test_editable_popup_squares_only_the_edge_facing_the_combo(combos, above):
         combo.showPopup()
         _APP.processEvents()
         popup = combo.view().window()
-        assert combo._modern_style._square_top == (not above)
         assert popup.mask().isEmpty()
         image = popup.grab().toImage()
-        near_y = image.height() - 1 if above else 0
-        far_y = 0 if above else image.height() - 1
-        assert image.pixelColor(0, near_y).alpha() > 0
-        assert image.pixelColor(image.width() - 1, near_y).alpha() > 0
-        assert image.pixelColor(0, far_y).alpha() == 0
-        assert image.pixelColor(image.width() - 1, far_y).alpha() == 0
+        for x in (0, image.width() - 1):
+            for y in (0, image.height() - 1):
+                assert image.pixelColor(x, y).alpha() > 0
         combo.hidePopup()
     combo.setEditable(False)
     combo.showPopup()
     assert combo.view().window().mask().isEmpty()
-    assert combo._modern_style._square_top is None
+    assert combo.view().window().grab().toImage().pixelColor(0, 0).alpha() == 0
