@@ -23,7 +23,14 @@ from .modern_menu import (
     _RoundedMenuStyle,
     _supports_windows_acrylic,
 )
-from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme, palette_for_theme, theme_manager
+from .theme import (
+    DEFAULT_METRICS,
+    ModernMetrics,
+    ModernTheme,
+    inherited_theme,
+    palette_for_theme,
+    theme_manager,
+)
 
 
 class _ComboBoxStyle(_RoundedMenuStyle):
@@ -232,17 +239,7 @@ class ModernComboBox(QComboBox):
         self._apply_theme()
 
     def theme(self) -> ModernTheme:
-        if self._theme_override is not None:
-            return self._theme_override
-        ancestor = self.parentWidget()
-        while ancestor is not None:
-            get_theme = getattr(ancestor, "theme", None)
-            if callable(get_theme):
-                inherited = get_theme()
-                if isinstance(inherited, ModernTheme):
-                    return inherited
-            ancestor = ancestor.parentWidget()
-        return theme_manager().theme()
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
         """Override the theme locally, or pass None to resume inheritance."""

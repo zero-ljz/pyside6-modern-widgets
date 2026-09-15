@@ -28,12 +28,13 @@ from . import _resources, _system_menu  # noqa: F401
 from ._window_chrome import (
     BackgroundFrame,
     TitleBarButton,
+    WindowChrome,
     WindowChromeOverlay,
     WindowDpiState,
+    WindowResizeController,
     WindowSurfacePolicy,
     WindowTitleBar,
     current_window_surface_policy,
-    manual_resize_geometry,
     uses_windows_window_state,
 )
 from ._windows_window import (
@@ -86,7 +87,6 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
-    palette_for_theme,
     theme_manager,
     tinted_icon,
 )
@@ -334,7 +334,6 @@ class ModernWindow(QWidget):
         self._surface_policy: WindowSurfacePolicy = current_window_surface_policy()
         self._surface_policy.apply_to(self)
         self.setMouseTracking(True)
-        self._resize_cursor_active = False
         self._native_frame_enabled = False
         self._native_frame_refresh_pending = False
         self._native_dpi = WindowDpiState()
@@ -350,9 +349,11 @@ class ModernWindow(QWidget):
         self._screen_change_window: QWindow | None = None
         self._screen_metrics_screen: QScreen | None = None
         self._system_resize_active = False
-        self._manual_resize_edges = Qt.Edge(0)
-        self._manual_resize_start_position = QPoint()
-        self._manual_resize_start_geometry = QRect()
+        self._resize_controller = WindowResizeController(
+            self,
+            on_start=self._begin_system_resize_tracking,
+            on_finish=self._finish_system_resize_tracking,
+        )
         self._system_resize_watch_timer = QTimer(self)
         self._system_resize_watch_timer.setInterval(50)
         self._system_resize_watch_timer.timeout.connect(self._poll_system_resize_state)
@@ -449,6 +450,9 @@ class ModernWindow(QWidget):
             theme=self._theme,
             corner_radius=self.cornerRadius,
         )
+        self._chrome = WindowChrome(
+            self, self.frame, self.chromeOverlay, self.titleBar, self._surface_policy
+        )
         self.chromeOverlay.setGeometry(self.rect())
         self.chromeOverlay.show()
         self.chromeOverlay.raise_()
@@ -472,13 +476,8 @@ class ModernWindow(QWidget):
         self._application_event_filter_installed = enabled
 
     def _layout_chrome(self) -> None:
-        self.frame.setGeometry(self.rect())
-        self.frame.lower()
-        self.chromeOverlay.setGeometry(self.rect())
-        self.chromeOverlay.raise_()
-        if self.titleBar is not None:
-            self.titleBar.setGeometry(0, 0, self.width(), self.titleBar.height())
-            self.titleBar.raise_()
+        self._chrome.title_bar = self.titleBar
+        self._chrome.layout()
 
     def _sync_chrome_with_window_flags(self) -> None:
         if self.titleBar is None:
@@ -524,9 +523,8 @@ class ModernWindow(QWidget):
             force_refresh=force_refresh,
         )
         self._native_frame_enabled = enabled and applied
-        if self._native_frame_enabled and self._resize_cursor_active:
-            self.unsetCursor()
-            self._resize_cursor_active = False
+        if self._native_frame_enabled:
+            self._resize_controller.set_cursor(Qt.Edge(0))
 
     def _is_resizable(self) -> bool:
         return (
@@ -636,26 +634,11 @@ class ModernWindow(QWidget):
         self._window_constraints_changed()
 
     def apply_window_style(self) -> None:
-        """Apply the same Qt-painted watercolor style on every platform."""
-        corner_radius = (
-            0 if self.isMaximized() or self.isFullScreen() else max(0, self.cornerRadius)
-        )
-        paint_corner_radius = self._surface_policy.paint_corner_radius(corner_radius)
-        self.setPalette(palette_for_theme(self._theme, self.palette()))
-        self.frame.setTheme(self._theme)
-        self.frame.setCornerRadius(paint_corner_radius)
-        if hasattr(self, "chromeOverlay"):
-            self.chromeOverlay.setTheme(self._theme)
-            self.chromeOverlay.setCornerRadius(paint_corner_radius)
-        self._set_native_corner_preference(corner_radius > 0)
-        if hasattr(self, "titleBar") and self.titleBar:
-            self.titleBar.setTheme(self._theme)
-            self.titleBar.raise_()
+        self._chrome.title_bar = self.titleBar
+        self._chrome.apply(self._theme, self.cornerRadius)
         menu_bars: Iterable[ModernMenuBar] = self.findChildren(ModernMenuBar)
         for menu_bar in menu_bars:
             menu_bar._apply_theme()
-        self.frame.update()
-        self.update()
 
     def _set_native_corner_preference(self, rounded: bool) -> None:
         self._surface_policy.apply_native_corner_preference(self, rounded)
@@ -1338,7 +1321,7 @@ class ModernWindow(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if hasattr(self, "chromeOverlay"):
+        if hasattr(self, "_chrome"):
             self._layout_chrome()
 
     def moveEvent(self, event) -> None:
@@ -1377,111 +1360,29 @@ class ModernWindow(QWidget):
         super().hideEvent(event)
 
     def eventFilter(self, watched, event) -> bool:
-        if (
-            isinstance(watched, QWidget)
-            and watched.window() is self
-            and not watched.hasMouseTracking()
+        if self._resize_controller.handle_event(
+            watched, event, enabled=not self._native_frame_enabled, consume_manual_release=False
         ):
-            watched.setMouseTracking(True)
-
-        if (
-            not self._native_frame_enabled
-            and isinstance(watched, QWidget)
-            and watched.window() is self
-        ):
-            event_type = event.type()
-            if event_type == QEvent.Type.MouseMove:
-                if self._manual_resize_edges:
-                    if event.buttons() & Qt.MouseButton.LeftButton:
-                        self._update_manual_resize(event.globalPosition().toPoint())
-                        return True
-                    self._finish_manual_resize()
-                position = watched.mapTo(self, event.position().toPoint())
-                edges = self._resize_edges_at(position)
-                self._set_resize_cursor(edges)
-            elif event_type == QEvent.Type.MouseButtonPress:
-                position = watched.mapTo(self, event.position().toPoint())
-                edges = self._resize_edges_at(position)
-                if event.button() == Qt.MouseButton.LeftButton and edges:
-                    handle = self.windowHandle()
-                    if handle is not None and handle.startSystemResize(edges):
-                        self._begin_system_resize_tracking()
-                        return True
-                    if not QApplication.platformName().startswith("wayland"):
-                        self._begin_manual_resize(edges, event.globalPosition().toPoint())
-                        return True
-            elif event_type == QEvent.Type.MouseButtonRelease:
-                self._finish_manual_resize()
-                self._finish_system_resize_tracking()
+            return True
         return super().eventFilter(watched, event)
 
     def _begin_manual_resize(self, edges: Qt.Edge, global_position: QPoint) -> None:
-        self._manual_resize_edges = edges
-        self._manual_resize_start_position = global_position
-        self._manual_resize_start_geometry = self.geometry()
-        self._begin_system_resize_tracking()
+        self._resize_controller.begin(edges, global_position)
 
     def _update_manual_resize(self, global_position: QPoint) -> None:
-        delta = global_position - self._manual_resize_start_position
-        self.setGeometry(
-            manual_resize_geometry(
-                self,
-                self._manual_resize_start_geometry,
-                self._manual_resize_edges,
-                delta,
-            )
-        )
+        self._resize_controller.update(global_position)
 
     def _finish_manual_resize(self) -> None:
-        self._manual_resize_edges = Qt.Edge(0)
+        self._resize_controller.finish()
 
     def _install_resize_filters(self, widget: QWidget) -> None:
-        widget.setMouseTracking(True)
-        for child in widget.children():
-            if isinstance(child, QWidget):
-                self._install_resize_filters(child)
+        self._resize_controller.install_tracking(widget)
 
     def _resize_edges_at(self, position: QPoint) -> Qt.Edge:
-        if self.isMaximized() or self.isFullScreen():
-            return Qt.Edge(0)
-
-        border_width = 8
-        edges = Qt.Edge(0)
-        if self.minimumWidth() < self.maximumWidth():
-            if position.x() < border_width:
-                edges |= Qt.Edge.LeftEdge
-            elif position.x() >= self.width() - border_width:
-                edges |= Qt.Edge.RightEdge
-        if self.minimumHeight() < self.maximumHeight():
-            if position.y() < border_width:
-                edges |= Qt.Edge.TopEdge
-            elif position.y() >= self.height() - border_width:
-                edges |= Qt.Edge.BottomEdge
-        return edges
+        return self._resize_controller.edges_at(position)
 
     def _set_resize_cursor(self, edges: Qt.Edge) -> None:
-        if not edges:
-            if self._resize_cursor_active:
-                self.unsetCursor()
-                self._resize_cursor_active = False
-            return
-
-        if edges in (
-            Qt.Edge.TopEdge | Qt.Edge.LeftEdge,
-            Qt.Edge.BottomEdge | Qt.Edge.RightEdge,
-        ):
-            cursor = Qt.CursorShape.SizeFDiagCursor
-        elif edges in (
-            Qt.Edge.TopEdge | Qt.Edge.RightEdge,
-            Qt.Edge.BottomEdge | Qt.Edge.LeftEdge,
-        ):
-            cursor = Qt.CursorShape.SizeBDiagCursor
-        elif edges & (Qt.Edge.LeftEdge | Qt.Edge.RightEdge):
-            cursor = Qt.CursorShape.SizeHorCursor
-        else:
-            cursor = Qt.CursorShape.SizeVerCursor
-        self.setCursor(cursor)
-        self._resize_cursor_active = True
+        self._resize_controller.set_cursor(edges)
 
     def hideTitleBar(self) -> None:
         if hasattr(self, "titleBar") and self.titleBar:

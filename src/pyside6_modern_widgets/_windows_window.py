@@ -99,6 +99,21 @@ class _MinMaxInfo(ctypes.Structure):
     )
 
 
+def set_window_corner_preference(hwnd: int, *, rounded: bool) -> bool:
+    """Apply DWM corners consistently for top-level windows and popup surfaces."""
+    try:
+        preference = ctypes.c_int(2 if rounded else 1)
+        function = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        function.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+        function.restype = ctypes.c_long
+        return (
+            function(wintypes.HWND(hwnd), 33, ctypes.byref(preference), ctypes.sizeof(preference))
+            == 0
+        )
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+
+
 def window_dpi(hwnd: int) -> int | None:
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)

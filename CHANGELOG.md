@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Share edge resizing between windows and dialogs, chrome styling/layout across
+  windows, dialogs and message boxes, native DWM corner calls across windows and
+  popups, and ancestor theme lookup between menu bars and combo boxes.
 - Match editable default-list row heights to ordinary modern combo rows and add
   8 logical pixels of horizontal padding per side and 2 pixels above/below the
   list, without changing closed controls.
@@ -22,6 +25,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Apply the shared mixed-DPI protection to `ModernMessageBox`, including native
+  size constraints after expanding or collapsing detailed text.
 - Prevent `ModernDialog` from growing when dragged between Windows monitors with
   different DPI scales. Use the target DPI for native minimum/maximum sizing,
   including rapid boundary reversals. Share DPI tracking, Qt scale rounding and

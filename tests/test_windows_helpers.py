@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,30 @@ class _NativeFunction:
 
     def __call__(self, *args):
         return self._callback(*args)
+
+
+@pytest.mark.parametrize("rounded", [False, True])
+@pytest.mark.parametrize("result", [0, -1, "error"])
+def test_shared_corner_preference_reports_dwm_success(monkeypatch, rounded, result):
+    calls = []
+
+    def set_attribute(hwnd, attribute, value, size):
+        preference = ctypes.cast(value, ctypes.POINTER(ctypes.c_int)).contents.value
+        calls.append((hwnd.value, attribute, preference, size))
+        if result == "error":
+            raise OSError("DWM unavailable")
+        return result
+
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        SimpleNamespace(
+            dwmapi=SimpleNamespace(DwmSetWindowAttribute=_NativeFunction(set_attribute)),
+        ),
+        raising=False,
+    )
+    assert _windows_window.set_window_corner_preference(12345, rounded=rounded) == (result == 0)
+    assert calls == [(12345, 33, 2 if rounded else 1, ctypes.sizeof(ctypes.c_int))]
 
 
 class _MoveUser32:

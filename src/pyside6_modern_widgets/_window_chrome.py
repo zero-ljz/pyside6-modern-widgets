@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from math import ceil, floor
 from typing import Generic, Literal, TypeVar
@@ -45,8 +45,10 @@ from ._windows_window import (
     WindowsMessage,
     read_message,
     set_size_constraints,
+    set_window_corner_preference,
+    window_dpi,
 )
-from .theme import ModernMetrics, ModernTheme, _chrome_palette, tinted_icon
+from .theme import ModernMetrics, ModernTheme, _chrome_palette, palette_for_theme, tinted_icon
 
 WindowWidget = TypeVar("WindowWidget", bound=QWidget)
 
@@ -195,6 +197,21 @@ class WindowDpiState:
             return True
         return False
 
+    def sync_window(self, widget: QWidget) -> None:
+        self.reset()
+        handle = widget.windowHandle()
+        if uses_windows_window_state() and handle is not None:
+            self.reset(window_dpi(int(handle.winId())), widget.devicePixelRatioF())
+
+    def handle_native_event(self, widget: QWidget, message) -> bool:
+        if not uses_windows_window_state():
+            return False
+        try:
+            native = read_message(int(message))
+        except (TypeError, ValueError):
+            return False
+        return self.handle_message(widget, native)
+
 
 @dataclass(frozen=True)
 class WindowSurfacePolicy:
@@ -210,29 +227,8 @@ class WindowSurfacePolicy:
         return 0 if self.opaque_surface else max(0, radius)
 
     def apply_native_corner_preference(self, widget: QWidget, rounded: bool) -> None:
-        if not self.native_corners or widget.windowHandle() is None:
-            return
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            preference = ctypes.c_int(2 if rounded else 1)
-            set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
-            set_window_attribute.argtypes = [
-                wintypes.HWND,
-                wintypes.DWORD,
-                ctypes.c_void_p,
-                wintypes.DWORD,
-            ]
-            set_window_attribute.restype = ctypes.c_long
-            set_window_attribute(
-                wintypes.HWND(int(widget.winId())),
-                33,  # DWMWA_WINDOW_CORNER_PREFERENCE
-                ctypes.byref(preference),
-                ctypes.sizeof(preference),
-            )
-        except (AttributeError, OSError):
-            return
+        if self.native_corners and widget.windowHandle() is not None:
+            set_window_corner_preference(int(widget.winId()), rounded=rounded)
 
 
 def current_window_surface_policy() -> WindowSurfacePolicy:
@@ -285,6 +281,158 @@ def manual_resize_geometry(
             max(widget.minimumHeight(), min(widget.maximumHeight(), geometry.height() + delta.y()))
         )
     return geometry
+
+
+class WindowResizeController:
+    """Shared client-side resizing; native frame and live-paint policy stay with the host."""
+
+    def __init__(
+        self,
+        widget: QWidget,
+        *,
+        on_start: Callable[[], None] | None = None,
+        on_finish: Callable[[], None] | None = None,
+    ) -> None:
+        self.widget = widget
+        self.on_start = on_start
+        self.on_finish = on_finish
+        self.edges = Qt.Edge(0)
+        self.start_position = QPoint()
+        self.start_geometry = QRect()
+        self.cursor_active = False
+
+    def install_tracking(self, widget: QWidget) -> None:
+        widget.setMouseTracking(True)
+        for child in widget.children():
+            if isinstance(child, QWidget):
+                self.install_tracking(child)
+
+    def edges_at(self, position: QPoint) -> Qt.Edge:
+        widget = self.widget
+        if widget.isMaximized() or widget.isFullScreen():
+            return Qt.Edge(0)
+        edges = Qt.Edge(0)
+        if widget.minimumWidth() < widget.maximumWidth():
+            if position.x() < 8:
+                edges |= Qt.Edge.LeftEdge
+            elif position.x() >= widget.width() - 8:
+                edges |= Qt.Edge.RightEdge
+        if widget.minimumHeight() < widget.maximumHeight():
+            if position.y() < 8:
+                edges |= Qt.Edge.TopEdge
+            elif position.y() >= widget.height() - 8:
+                edges |= Qt.Edge.BottomEdge
+        return edges
+
+    def set_cursor(self, edges: Qt.Edge) -> None:
+        if not edges:
+            if self.cursor_active:
+                self.widget.unsetCursor()
+                self.cursor_active = False
+            return
+        if edges in (Qt.Edge.TopEdge | Qt.Edge.LeftEdge, Qt.Edge.BottomEdge | Qt.Edge.RightEdge):
+            cursor = Qt.CursorShape.SizeFDiagCursor
+        elif edges in (Qt.Edge.TopEdge | Qt.Edge.RightEdge, Qt.Edge.BottomEdge | Qt.Edge.LeftEdge):
+            cursor = Qt.CursorShape.SizeBDiagCursor
+        elif edges & (Qt.Edge.LeftEdge | Qt.Edge.RightEdge):
+            cursor = Qt.CursorShape.SizeHorCursor
+        else:
+            cursor = Qt.CursorShape.SizeVerCursor
+        self.widget.setCursor(cursor)
+        self.cursor_active = True
+
+    def begin(self, edges: Qt.Edge, position: QPoint) -> None:
+        self.edges = edges
+        self.start_position = position
+        self.start_geometry = self.widget.geometry()
+        if self.on_start is not None:
+            self.on_start()
+
+    def update(self, position: QPoint) -> None:
+        self.widget.setGeometry(
+            manual_resize_geometry(
+                self.widget,
+                self.start_geometry,
+                self.edges,
+                position - self.start_position,
+            )
+        )
+
+    def finish(self) -> None:
+        self.edges = Qt.Edge(0)
+
+    def handle_event(self, watched, event, *, enabled=True, consume_manual_release=True) -> bool:
+        if not isinstance(watched, QWidget) or watched.window() is not self.widget:
+            return False
+        if not watched.hasMouseTracking():
+            watched.setMouseTracking(True)
+        if not enabled:
+            return False
+        if event.type() == QEvent.Type.MouseMove:
+            if self.edges:
+                if event.buttons() & Qt.MouseButton.LeftButton:
+                    self.update(event.globalPosition().toPoint())
+                    return True
+                self.finish()
+            self.set_cursor(self.edges_at(watched.mapTo(self.widget, event.position().toPoint())))
+        elif event.type() == QEvent.Type.MouseButtonPress:
+            edges = self.edges_at(watched.mapTo(self.widget, event.position().toPoint()))
+            if event.button() == Qt.MouseButton.LeftButton and edges:
+                handle = self.widget.windowHandle()
+                if handle is not None and handle.startSystemResize(edges):
+                    if self.on_start is not None:
+                        self.on_start()
+                    return True
+                if not QApplication.platformName().startswith("wayland"):
+                    self.begin(edges, event.globalPosition().toPoint())
+                    return True
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            was_manual = bool(self.edges)
+            self.finish()
+            if self.on_finish is not None:
+                self.on_finish()
+            return was_manual and consume_manual_release
+        return False
+
+
+@dataclass
+class WindowChrome:
+    """Apply surface styling and stacking consistently without owning dialog behavior."""
+
+    widget: QWidget
+    background: BackgroundFrame
+    overlay: WindowChromeOverlay
+    title_bar: WindowTitleBar | None
+    policy: WindowSurfacePolicy
+
+    def raise_layers(self) -> None:
+        self.overlay.raise_()
+        if self.title_bar is not None:
+            self.title_bar.raise_()
+
+    def layout(self) -> None:
+        self.background.setGeometry(self.widget.rect())
+        self.background.lower()
+        self.overlay.setGeometry(self.widget.rect())
+        if self.title_bar is not None:
+            self.title_bar.setGeometry(0, 0, self.widget.width(), self.title_bar.height())
+        self.raise_layers()
+
+    def apply(self, theme: ModernTheme, corner_radius: int) -> None:
+        radius = (
+            0 if self.widget.isMaximized() or self.widget.isFullScreen() else max(0, corner_radius)
+        )
+        paint_radius = self.policy.paint_corner_radius(radius)
+        self.widget.setPalette(palette_for_theme(theme, self.widget.palette()))
+        self.background.setTheme(theme)
+        self.background.setCornerRadius(paint_radius)
+        self.overlay.setTheme(theme)
+        self.overlay.setCornerRadius(paint_radius)
+        if self.title_bar is not None:
+            self.title_bar.setTheme(theme)
+        self.policy.apply_native_corner_preference(self.widget, radius > 0)
+        self.layout()
+        self.widget.update()
 
 
 def paint_watercolor(

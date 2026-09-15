@@ -7,7 +7,9 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 
 from ._window_chrome import (
     BackgroundFrame,
+    WindowChrome,
     WindowChromeOverlay,
+    WindowDpiState,
     WindowTitleBar,
     current_window_surface_policy,
 )
@@ -15,7 +17,6 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
-    palette_for_theme,
     theme_manager,
 )
 
@@ -35,6 +36,7 @@ class ModernMessageBox(QMessageBox):
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
+        self._native_dpi = WindowDpiState()
         if isinstance(icon, QWidget):
             if title or text or buttons != self.StandardButton.NoButton or parent is not None:
                 raise TypeError("parent-only construction cannot include message-box arguments")
@@ -70,6 +72,13 @@ class ModernMessageBox(QMessageBox):
         self._chrome_overlay = WindowChromeOverlay(
             self, theme=self._theme, corner_radius=paint_radius
         )
+        self._chrome = WindowChrome(
+            self,
+            self._background_frame,
+            self._chrome_overlay,
+            self._title_bar,
+            self._surface_policy,
+        )
         self._background_frame.show()
         self._chrome_overlay.show()
         self.windowTitleChanged.connect(self._title_bar.setTitle)
@@ -91,17 +100,7 @@ class ModernMessageBox(QMessageBox):
         self.apply_window_style()
 
     def apply_window_style(self) -> None:
-        radius = 0 if self.isMaximized() or self.isFullScreen() else self._corner_radius
-        paint_radius = self._surface_policy.paint_corner_radius(radius)
-        self.setPalette(palette_for_theme(self._theme, self.palette()))
-        self._background_frame.setTheme(self._theme)
-        self._background_frame.setCornerRadius(paint_radius)
-        self._title_bar.setTheme(self._theme)
-        self._chrome_overlay.setTheme(self._theme)
-        self._chrome_overlay.setCornerRadius(paint_radius)
-        self._surface_policy.apply_native_corner_preference(self, radius > 0)
-        self._layout_chrome()
-        self.update()
+        self._chrome.apply(self._theme, self._corner_radius)
 
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
         if self._uses_global_theme:
@@ -110,13 +109,13 @@ class ModernMessageBox(QMessageBox):
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
         super().setWindowFlags(flags | Qt.WindowType.FramelessWindowHint)
-        if hasattr(self, "_chrome_overlay"):
+        if hasattr(self, "_chrome"):
             self._sync_chrome_with_window_flags()
 
     def setWindowFlag(self, flag: Qt.WindowType, on: bool = True) -> None:
         super().setWindowFlag(flag, on)
         super().setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
-        if hasattr(self, "_chrome_overlay"):
+        if hasattr(self, "_chrome"):
             self._sync_chrome_with_window_flags()
 
     def _sync_chrome_with_window_flags(self) -> None:
@@ -125,18 +124,15 @@ class ModernMessageBox(QMessageBox):
         self._layout_chrome()
 
     def _layout_chrome(self) -> None:
-        self._background_frame.setGeometry(self.rect())
-        self._background_frame.lower()
-        self._title_bar.setGeometry(0, 0, self.width(), self._title_bar.height())
-        self._chrome_overlay.setGeometry(self.rect())
-        self._chrome_overlay.raise_()
-        self._title_bar.raise_()
+        self._chrome.layout()
 
     def event(self, event) -> bool:
         handled = super().event(event)
         # QMessageBox can dispatch events while its C++ constructor is running.
-        if not hasattr(self, "_chrome_overlay"):
+        if not hasattr(self, "_chrome"):
             return handled
+        if event.type() in (QEvent.Type.Show, QEvent.Type.WinIdChange):
+            self._native_dpi.sync_window(self)
         if event.type() == QEvent.Type.Show:
             self._sync_chrome_with_window_flags()
             self.apply_window_style()
@@ -145,6 +141,11 @@ class ModernMessageBox(QMessageBox):
         elif event.type() == QEvent.Type.WindowStateChange:
             self.apply_window_style()
         return handled
+
+    def nativeEvent(self, event_type, message):
+        if self._native_dpi.handle_native_event(self, message):
+            return True, 0
+        return super().nativeEvent(event_type, message)
 
     @classmethod
     def _show_message(

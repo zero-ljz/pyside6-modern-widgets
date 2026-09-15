@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from ._wallpaper import (
     WallpaperSignature,
@@ -18,6 +18,19 @@ from ._wallpaper import (
     wallpaper_colors,
     wallpaper_signature,
 )
+
+
+def inherited_theme(widget: QWidget) -> ModernTheme:
+    """Find the nearest ancestor theme, falling back to the application theme."""
+    ancestor = widget.parentWidget()
+    while ancestor is not None:
+        get_theme = getattr(ancestor, "theme", None)
+        if callable(get_theme):
+            theme = get_theme()
+            if isinstance(theme, ModernTheme):
+                return theme
+        ancestor = ancestor.parentWidget()
+    return theme_manager().theme()
 
 
 @dataclass(frozen=True, slots=True)

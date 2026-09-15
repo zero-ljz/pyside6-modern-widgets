@@ -9,7 +9,14 @@ from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu, QMenuBar, QToolButton, QWidget
 
 from .modern_menu import ModernMenu
-from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme, _chrome_palette, theme_manager
+from .theme import (
+    DEFAULT_METRICS,
+    ModernMetrics,
+    ModernTheme,
+    _chrome_palette,
+    inherited_theme,
+    theme_manager,
+)
 
 
 def _menu_bar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
@@ -49,15 +56,7 @@ class ModernMenuBar(QMenuBar):
             extension.setMenu(ModernMenu(self, metrics=metrics))
 
     def _inherited_theme(self) -> ModernTheme:
-        ancestor = self.parentWidget()
-        while ancestor is not None:
-            get_theme = getattr(ancestor, "theme", None)
-            if callable(get_theme):
-                theme = get_theme()
-                if isinstance(theme, ModernTheme):
-                    return theme
-            ancestor = ancestor.parentWidget()
-        return theme_manager().theme()
+        return inherited_theme(self)
 
     def _apply_theme(self) -> None:
         theme = self._inherited_theme()

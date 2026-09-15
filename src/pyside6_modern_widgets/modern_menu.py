@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._windows_window import set_window_corner_preference
 from .theme import DEFAULT_METRICS, ModernMetrics, theme_manager
 
 _FALLBACK_BASE_STYLE = "fusion"
@@ -71,30 +72,7 @@ def _enable_windows_rounded_corners(menu: QWidget, radius: int, *, square: bool 
         or QApplication.platformName() != "windows"
     ):
         return False
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        preference = ctypes.c_int(1 if square else 2)  # DWMWCP_DONOTROUND / DWMWCP_ROUND
-        set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
-        set_window_attribute.argtypes = [
-            wintypes.HWND,
-            wintypes.DWORD,
-            ctypes.c_void_p,
-            wintypes.DWORD,
-        ]
-        set_window_attribute.restype = ctypes.c_long
-        return (
-            set_window_attribute(
-                wintypes.HWND(int(menu.winId())),
-                33,  # DWMWA_WINDOW_CORNER_PREFERENCE
-                ctypes.byref(preference),
-                ctypes.sizeof(preference),
-            )
-            == 0
-        )
-    except (AttributeError, OSError, ValueError):
-        return False
+    return set_window_corner_preference(int(menu.winId()), rounded=not square)
 
 
 def _windows_acrylic_tint(palette: QPalette, widget: QWidget | None = None) -> QColor:
