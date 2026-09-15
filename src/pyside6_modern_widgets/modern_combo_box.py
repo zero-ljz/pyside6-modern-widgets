@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QMargins, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -10,12 +10,14 @@ from PySide6.QtWidgets import (
     QFrame,
     QStyle,
     QStyleOption,
+    QStyleOptionMenuItem,
     QStyleOptionViewItem,
     QWidget,
 )
 
 from .modern_menu import (
     _MENU_ITEM_EXTRA_HEIGHT,
+    _MENU_VERTICAL_MARGIN,
     _enable_windows_acrylic,
     _enable_windows_rounded_corners,
     _RoundedMenuStyle,
@@ -36,6 +38,30 @@ class _ComboBoxStyle(_RoundedMenuStyle):
             self._surface_radius = 8
         self.setParent(combo)
         self._combo = combo
+        self._square_top: bool | None = None
+
+    def surfacePath(self, rect: QRectF) -> QPainterPath:
+        if self._square_top is None:
+            return super().surfacePath(rect)
+        radius = min(self._surface_radius, rect.width() / 2, rect.height() / 2)
+        top = 0 if self._square_top else radius
+        bottom = radius if self._square_top else 0
+        left, right, y1, y2 = rect.left(), rect.right(), rect.top(), rect.bottom()
+        path = QPainterPath(QPointF(left + top, y1))
+        path.lineTo(right - top, y1)
+        if top:
+            path.arcTo(right - 2 * top, y1, 2 * top, 2 * top, 90, -90)
+        path.lineTo(right, y2 - bottom)
+        if bottom:
+            path.arcTo(right - 2 * bottom, y2 - 2 * bottom, 2 * bottom, 2 * bottom, 0, -90)
+        path.lineTo(left + bottom, y2)
+        if bottom:
+            path.arcTo(left, y2 - 2 * bottom, 2 * bottom, 2 * bottom, 270, -90)
+        path.lineTo(left, y1 + top)
+        if top:
+            path.arcTo(left, y1, 2 * top, 2 * top, 180, -90)
+        path.closeSubpath()
+        return path
 
     def sizeFromContents(self, content_type, option, size, widget=None):
         result = super().sizeFromContents(content_type, option, size, widget)
@@ -43,7 +69,37 @@ class _ComboBoxStyle(_RoundedMenuStyle):
             result.setHeight(result.height() + 2)
         if content_type == QStyle.ContentsType.CT_ItemViewItem:
             result.setHeight(result.height() + _MENU_ITEM_EXTRA_HEIGHT)
+            if self._is_editable_default_item(widget):
+                # Ask the same style as the non-editable menu delegate for its
+                # font/icon-aware row height instead of imposing a fixed size.
+                menu = QStyleOptionMenuItem()
+                menu.font = option.font  # type: ignore[attr-defined]
+                menu.fontMetrics = option.fontMetrics  # type: ignore[attr-defined]
+                menu.icon = option.icon  # type: ignore[attr-defined]
+                menu_size = super().sizeFromContents(
+                    QStyle.ContentsType.CT_MenuItem, menu, size, self._combo
+                )
+                result.setHeight(max(result.height(), menu_size.height()))
+                result.setWidth(result.width() + 16)
         return result
+
+    def _is_editable_default_item(self, widget) -> bool:
+        return (
+            self._combo.isEditable()
+            and widget is not None
+            and widget is getattr(self._combo, "_default_view", None)
+        )
+
+    def subElementRect(self, element, option, widget=None):
+        if self._is_editable_default_item(widget) and element in (
+            QStyle.SubElement.SE_ItemViewItemText,
+            QStyle.SubElement.SE_ItemViewItemDecoration,
+            QStyle.SubElement.SE_ItemViewItemCheckIndicator,
+        ):
+            item = QStyleOptionViewItem(option)
+            item.rect = option.rect.adjusted(8, 0, -8, 0)  # type: ignore[attr-defined]
+            return super().subElementRect(element, item, widget)
+        return super().subElementRect(element, option, widget)
 
     def drawComplexControl(self, control, option, painter, widget=None) -> None:
         if control != QStyle.ComplexControl.CC_ComboBox:
@@ -66,6 +122,9 @@ class _ComboBoxStyle(_RoundedMenuStyle):
         border_width = 2 if focused else 1
         inset = border_width / 2
         rect = QRectF(option.rect).adjusted(inset, inset, -inset, -inset)
+        arrow_rect = self.subControlRect(
+            control, option, QStyle.SubControl.SC_ComboBoxArrow, widget
+        )
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -73,9 +132,20 @@ class _ComboBoxStyle(_RoundedMenuStyle):
         painter.setBrush(option.palette.brush(surface_role))
         painter.drawRoundedRect(rect, radius, radius)
         if enabled and (pressed or option.state & QStyle.StateFlag.State_MouseOver):
+            painter.save()
+            if option.editable:
+                # The native line edit paints an opaque rectangular base. Keep
+                # interaction tint on the button so it cannot outline that box.
+                button_rect = QRectF(option.rect)
+                if option.direction == Qt.LayoutDirection.RightToLeft:
+                    button_rect.setRight(arrow_rect.right() + 1)
+                else:
+                    button_rect.setLeft(arrow_rect.left())
+                painter.setClipRect(button_rect, Qt.ClipOperation.IntersectClip)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(theme.control_pressed if pressed else theme.control_hover))
             painter.drawRoundedRect(rect, radius, radius)
+            painter.restore()
 
         painter.setBrush(Qt.BrushStyle.NoBrush)
         border = option.palette.color(QPalette.ColorRole.Mid)
@@ -91,9 +161,15 @@ class _ComboBoxStyle(_RoundedMenuStyle):
         if not option.subControls & QStyle.SubControl.SC_ComboBoxArrow:
             painter.restore()
             return
-        arrow = self.subControlRect(
-            control, option, QStyle.SubControl.SC_ComboBoxArrow, widget
-        ).center()
+        if option.editable:
+            separator_x = (
+                arrow_rect.right() + 0.5
+                if option.direction == Qt.LayoutDirection.RightToLeft
+                else arrow_rect.left() + 0.5
+            )
+            painter.setPen(QPen(border, 1))
+            painter.drawLine(QPointF(separator_x, rect.top()), QPointF(separator_x, rect.bottom()))
+        arrow = arrow_rect.center()
         pen = QPen(option.palette.color(QPalette.ColorRole.ButtonText), 1.5)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -153,11 +229,13 @@ class ModernComboBox(QComboBox):
         self._palette_override = QPalette()
         self._theme_ancestors: list[QWidget] = []
         self._popup: QWidget | None = None
+        self._popup_margins: QMargins | None = None
         self._modern_style = _ComboBoxStyle(self)
         self.setStyle(self._modern_style)
         # Configure only Qt's initial list, once. A caller-supplied view and any
         # later changes to this list retain their own style, frame and palette.
         view = self.view()
+        self._default_view = view
         view.setFrameShape(QFrame.Shape.NoFrame)
         view.setAutoFillBackground(False)
         view.viewport().setAutoFillBackground(False)
@@ -210,6 +288,8 @@ class ModernComboBox(QComboBox):
 
     def eventFilter(self, watched, event) -> bool:
         if watched is self._popup:
+            if event.type() in (QEvent.Type.Show, QEvent.Type.Move, QEvent.Type.Resize):
+                self._update_popup_corners()
             if event.type() == QEvent.Type.Paint:
                 # Paint exactly one menu surface. The native container's frame
                 # painting would otherwise add a second border over the acrylic.
@@ -235,10 +315,34 @@ class ModernComboBox(QComboBox):
     def _refresh_popup_acrylic(self) -> None:
         if self._popup is None:
             return
+        if self.isEditable():
+            # DWM acrylic ignores the asymmetric window region and leaves a
+            # rectangular backdrop outside the painted corners. Use an opaque
+            # theme surface here; clear any acrylic left by a previous mode.
+            _enable_windows_rounded_corners(self._popup, self._metrics.control_radius, square=True)
+            _enable_windows_acrylic(self._popup, enabled=False)
+            self._modern_style.setNativeAcrylic(False)
+            self._popup.update()
+            return
         self._modern_style.setNativeAcrylic(
             _enable_windows_rounded_corners(self._popup, self._metrics.control_radius)
             and _enable_windows_acrylic(self._popup)
         )
+        self._popup.update()
+
+    def _update_popup_corners(self) -> None:
+        if self._popup is None:
+            return
+        style = self._modern_style
+        if not self.isEditable():
+            style._square_top = None
+        else:
+            combo_center = self.mapToGlobal(self.rect().center())
+            popup_center = self._popup.mapToGlobal(self._popup.rect().center())
+            style._square_top = popup_center.y() >= combo_center.y()
+            # With acrylic disabled, per-pixel alpha preserves the smooth Qt
+            # outline. Integer window regions would staircase the corners at
+            # fractional display scales.
         self._popup.update()
 
     def _apply_theme(self) -> None:
@@ -274,13 +378,22 @@ class ModernComboBox(QComboBox):
             if self._popup is not None:
                 self._popup.removeEventFilter(self)
             self._popup = popup
+            self._popup_margins = popup.contentsMargins()
             popup.setAttribute(Qt.WidgetAttribute.WA_WindowPropagation, True)
             popup.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
             popup.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
             popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             popup.installEventFilter(self)
-        # Qt's editable-combo animation uses a QRollEffect screenshot window,
-        # which cannot capture DWM acrylic and shows black on repeated opens.
+        if self._popup_margins is not None:
+            margins = self._popup_margins
+            spacing = (
+                _MENU_VERTICAL_MARGIN if self.isEditable() and view is self._default_view else 0
+            )
+            popup.setContentsMargins(
+                margins.left(), margins.top() + spacing, margins.right(), margins.bottom() + spacing
+            )
+        # Qt's editable-combo animation uses a rectangular QRollEffect screenshot
+        # window that cannot preserve this popup's transparent outer corners.
         # Qt exposes only an application-wide switch for this effect. Scope it
         # to this synchronous call and restore the user's preference immediately.
         animate = self.isEditable() and QApplication.isEffectEnabled(Qt.UIEffect.UI_AnimateCombo)

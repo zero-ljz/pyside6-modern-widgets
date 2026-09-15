@@ -35,7 +35,11 @@ from pyside6_modern_widgets import (
     palette_for_theme,
 )
 from pyside6_modern_widgets import modern_combo_box as combo_module
-from pyside6_modern_widgets.modern_menu import _ACRYLIC_INPUT_ALPHA, _MENU_ITEM_EXTRA_HEIGHT
+from pyside6_modern_widgets.modern_menu import (
+    _ACRYLIC_INPUT_ALPHA,
+    _MENU_ITEM_EXTRA_HEIGHT,
+    _MENU_VERTICAL_MARGIN,
+)
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -251,7 +255,8 @@ def test_popup_retains_qt_container_and_uses_menu_row_spacing(combos, editable):
     native.setStyle(native_style)
     heights = []
     for combo in (native, modern):
-        combo.setEditable(editable)
+        # Both modern modes now use the ordinary menu's vertical padding.
+        combo.setEditable(editable if combo is modern else False)
         original_popup = combo.view().window()
         original_delegate = combo.itemDelegate()
         original_margins = original_popup.contentsMargins()
@@ -262,6 +267,9 @@ def test_popup_retains_qt_container_and_uses_menu_row_spacing(combos, editable):
         popup = view.window()
         assert popup is original_popup
         assert combo.itemDelegate() is original_delegate
+        if combo is modern and editable:
+            original_margins.setTop(original_margins.top() + _MENU_VERTICAL_MARGIN)
+            original_margins.setBottom(original_margins.bottom() + _MENU_VERTICAL_MARGIN)
         assert popup.contentsMargins() == original_margins
         assert popup.windowType() == Qt.WindowType.Popup
         heights.append(view.visualRect(combo.model().index(0, 0)).height())
@@ -279,11 +287,14 @@ def test_popup_surface_remains_clickable_and_refreshes_acrylic_tint(
     combo.setTheme(LIGHT_THEME)
     combo.setEditable(editable)
     tints = []
-    monkeypatch.setattr(combo_module, "_enable_windows_rounded_corners", lambda *args: acrylic)
+    monkeypatch.setattr(
+        combo_module, "_enable_windows_rounded_corners", lambda *args, **kwargs: acrylic
+    )
 
-    def enable_acrylic(popup):
-        tints.append(popup.palette().color(QPalette.ColorRole.Window))
-        return True
+    def enable_acrylic(popup, *, enabled=True):
+        if enabled:
+            tints.append(popup.palette().color(QPalette.ColorRole.Window))
+        return enabled
 
     monkeypatch.setattr(combo_module, "_enable_windows_acrylic", enable_acrylic)
     combo.show()
@@ -293,8 +304,8 @@ def test_popup_surface_remains_clickable_and_refreshes_acrylic_tint(
     for theme in (LIGHT_THEME, DARK_THEME):
         combo.setTheme(theme)
         _APP.processEvents()
-        assert combo._modern_style._native_acrylic == acrylic
-        if acrylic:
+        assert combo._modern_style._native_acrylic == (acrylic and not editable)
+        if acrylic and not editable:
             assert tints[-1] == QColor(theme.surface)
         pixmap = popup.grab()
         scale = pixmap.devicePixelRatio()
@@ -302,8 +313,9 @@ def test_popup_surface_remains_clickable_and_refreshes_acrylic_tint(
         row = combo.view().visualRect(combo.model().index(1, 0))
         point = combo.view().viewport().mapTo(popup, QPoint(180, row.center().y()))
         alpha = image.pixelColor(round(point.x() * scale), round(point.y() * scale)).alpha()
-        assert alpha == (_ACRYLIC_INPUT_ALPHA if acrylic else 255)
-        assert image.pixelColor(0, 0).alpha() == 0
+        assert alpha == (_ACRYLIC_INPUT_ALPHA if acrylic and not editable else 255)
+        corner_y = image.height() - 1 if editable else 0
+        assert image.pixelColor(0, corner_y).alpha() == 0
 
 
 @pytest.mark.parametrize("editable", [False, True])
@@ -471,7 +483,9 @@ def test_open_state_changes_control_surface(combos, editable):
     pressed = _render_combo_control(
         combo, QStyle.StateFlag.State_Enabled | QStyle.StateFlag.State_On
     )
-    assert neutral.pixelColor(120, 16) != pressed.pixelColor(120, 16)
+    assert neutral.pixelColor(230, 8) != pressed.pixelColor(230, 8)
+    if editable:
+        assert neutral.pixelColor(120, 16) == pressed.pixelColor(120, 16)
 
 
 @pytest.mark.parametrize("editable", [False, True])
@@ -500,3 +514,30 @@ def test_closed_layout_remains_native_with_only_two_extra_pixels(combos, editabl
                     )
                 )
             assert rectangles[0] == rectangles[1]
+
+
+@pytest.mark.parametrize("above", [False, True])
+def test_editable_popup_squares_only_the_edge_facing_the_combo(combos, above):
+    combo = combos[1]
+    combo.setEditable(True)
+    screen = combo.screen().availableGeometry()
+    combo.move(screen.left() + 100, screen.bottom() - 50 if above else screen.top() + 50)
+    combo.show()
+    for _ in range(2):
+        combo.showPopup()
+        _APP.processEvents()
+        popup = combo.view().window()
+        assert combo._modern_style._square_top == (not above)
+        assert popup.mask().isEmpty()
+        image = popup.grab().toImage()
+        near_y = image.height() - 1 if above else 0
+        far_y = 0 if above else image.height() - 1
+        assert image.pixelColor(0, near_y).alpha() > 0
+        assert image.pixelColor(image.width() - 1, near_y).alpha() > 0
+        assert image.pixelColor(0, far_y).alpha() == 0
+        assert image.pixelColor(image.width() - 1, far_y).alpha() == 0
+        combo.hidePopup()
+    combo.setEditable(False)
+    combo.showPopup()
+    assert combo.view().window().mask().isEmpty()
+    assert combo._modern_style._square_top is None

@@ -6,7 +6,7 @@ import sys
 from typing import Protocol, cast, overload
 
 from PySide6.QtCore import QEvent, QRect, QRectF, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QMenu,
@@ -64,14 +64,14 @@ def _supports_windows_acrylic() -> bool:
     return get_windows_version is not None and get_windows_version().build >= 22000
 
 
-def _enable_windows_rounded_corners(menu: QWidget, radius: int) -> bool:
+def _enable_windows_rounded_corners(menu: QWidget, radius: int, *, square: bool = False) -> bool:
     if radius <= 0 or sys.platform != "win32" or QApplication.platformName() != "windows":
         return False
     try:
         import ctypes
         from ctypes import wintypes
 
-        preference = ctypes.c_int(2)  # DWMWCP_ROUND
+        preference = ctypes.c_int(1 if square else 2)  # DWMWCP_DONOTROUND / DWMWCP_ROUND
         set_window_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
         set_window_attribute.argtypes = [
             wintypes.HWND,
@@ -103,7 +103,7 @@ def _windows_acrylic_tint(palette: QPalette, widget: QWidget | None = None) -> Q
     return tint
 
 
-def _enable_windows_acrylic(menu: QWidget) -> bool:
+def _enable_windows_acrylic(menu: QWidget, *, enabled: bool = True) -> bool:
     if not _supports_windows_acrylic():
         return False
     try:
@@ -133,7 +133,7 @@ def _enable_windows_acrylic(menu: QWidget) -> bool:
             | tint.red()
         )
         accent = AccentPolicy(
-            4,  # ACCENT_ENABLE_ACRYLICBLURBEHIND
+            4 if enabled else 0,  # ACCENT_ENABLE_ACRYLICBLURBEHIND / ACCENT_DISABLED
             2,
             gradient_color,
             0,
@@ -170,6 +170,11 @@ class _RoundedMenuStyle(QProxyStyle):
 
     def setNativeAcrylic(self, enabled: bool) -> None:
         self._native_acrylic = enabled
+
+    def surfacePath(self, rect: QRectF) -> QPainterPath:
+        path = QPainterPath()
+        path.addRoundedRect(rect, self._surface_radius, self._surface_radius)
+        return path
 
     def drawSelection(self, option, painter, widget=None) -> None:
         rect = QRectF(option.rect).adjusted(4, 2, -4, -2)
@@ -214,7 +219,7 @@ class _RoundedMenuStyle(QProxyStyle):
             painter.setBrush(surface)
             painter.setPen(QPen(_soft_line_color(option.palette, _OUTLINE_ALPHA), 1))
             rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)
-            painter.drawRoundedRect(rect, self._surface_radius, self._surface_radius)
+            painter.drawPath(self.surfacePath(rect))
             painter.restore()
             return
         super().drawPrimitive(element, option, painter, widget)

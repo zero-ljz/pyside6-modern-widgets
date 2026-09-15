@@ -49,7 +49,7 @@ def _verify_editable_opening(combo):
         for _ in range(2):
             combo.showPopup()
             popup = combo.view().window()
-            assert popup.isVisible() and combo._modern_style._native_acrylic
+            assert popup.isVisible() and not combo._modern_style._native_acrylic
             assert QApplication.isEffectEnabled(effect)
             assert not any(
                 widget.metaObject().className() == "QRollEffect" and widget.isVisible()
@@ -122,9 +122,14 @@ def main(style="Fusion"):
                 # Sample both halves of a static backdrop. DWM may cache the
                 # acrylic backdrop when the obscured widget repaints in place.
                 QTest.qWait(600)
-                assert popup_style._native_acrylic
+                opaque = isinstance(control, ModernComboBox) and control.isEditable()
+                assert popup_style._native_acrylic == (not opaque)
                 samples = [_sample_popup(popup, x) for x in (80, popup.width() - 50)]
                 red, blue = samples
+                if opaque:
+                    assert max(abs(a - b) for a, b in zip(red, blue)) < 3, samples
+                    print(f"{mode.value} {name} opaque={samples}")
+                    continue
                 contrast = 24 if mode == ThemeMode.LIGHT else 10
                 assert red[0] - blue[0] > contrast and blue[2] - red[2] > contrast, (
                     "The popup does not transmit backdrop colors",

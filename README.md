@@ -86,7 +86,7 @@ The control uses a full focus border with Qt Fusion's focus timing and system
 highlight-derived color: keyboard focus for non-editable combos, and input focus
 for editable combos. Its popup shares `ModernMenu`'s rounded
 surface, subtle outline, row spacing and selection background, including Windows
-11 system acrylic and an opaque fallback elsewhere. It retains Qt's popup
+11 system acrylic for non-editable combos and an opaque fallback elsewhere. It retains Qt's popup
 container, item delegates, keyboard/mouse/wheel input, models, separators, icons and signals.
 `setView()` and `setItemDelegate()` remain
 available; custom views and delegates control their own painting. The initial
@@ -99,8 +99,16 @@ and scrolling follow Qt's Fusion behavior, including Qt's platform-dependent
 handling of `maxVisibleItems` for non-editable combos.
 
 Editable modern combos open directly: Qt's screenshot-based slide animation
-cannot capture the system acrylic backdrop. The application's animation
+does not preserve the transparent outer corners. The application's animation
 preference is restored immediately after opening.
+The popup's two corners facing the editable control are square: the top pair
+when opening below, or the bottom pair when opening above. Qt still determines
+popup placement; the opposite pair remains rounded. Editable popups use an opaque
+theme surface so the Windows acrylic layer cannot protrude beyond those corners.
+Editable default-list items use the same font-aware minimum row height as
+ordinary modern combo items, with an extra 8 logical pixels of padding on each
+side and 2 pixels of spacing above and below the list. Closed-control spacing
+and caller-supplied views remain unchanged.
 
 It inherits its containing modern widget's theme, or the global theme when used
 on its own. Use `setTheme(DARK_THEME)` for a local override and `setTheme(None)` to
