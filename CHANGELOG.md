@@ -22,6 +22,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Prevent `ModernDialog` from growing when dragged between Windows monitors with
+  different DPI scales. Use the target DPI for native minimum/maximum sizing,
+  including rapid boundary reversals. Share DPI tracking, Qt scale rounding and
+  native size constraints with `ModernWindow` through one internal implementation.
 - Preserve caller-supplied combo palettes and list configuration through opening
   and theme changes. Honor native frameless rendering and Qt's expanded-state flag.
 - Match native Fusion combo box focus-border timing and palette-derived system

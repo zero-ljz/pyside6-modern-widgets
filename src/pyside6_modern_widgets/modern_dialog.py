@@ -9,10 +9,16 @@ from PySide6.QtWidgets import QApplication, QDialog, QWidget
 from ._window_chrome import (
     BackgroundFrame,
     WindowChromeOverlay,
+    WindowDpiState,
     WindowSurfacePolicy,
     WindowTitleBar,
     current_window_surface_policy,
     manual_resize_geometry,
+    uses_windows_window_state,
+)
+from ._windows_window import (
+    read_message,
+    window_dpi,
 )
 from .theme import (
     DEFAULT_METRICS,
@@ -41,6 +47,7 @@ class ModernDialog(QDialog):
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
+        self._native_dpi = WindowDpiState()
         QDialog.__init__(self, parent, f | Qt.WindowType.FramelessWindowHint)
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
@@ -135,6 +142,7 @@ class ModernDialog(QDialog):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        self._sync_windows_dpi()
         self._set_application_event_filter_enabled(True)
         if not event.spontaneous():
             self.apply_window_style()
@@ -153,6 +161,30 @@ class ModernDialog(QDialog):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._layout_chrome()
+
+    def event(self, event) -> bool:
+        handled = super().event(event)
+        if event.type() == QEvent.Type.WinIdChange:
+            self._sync_windows_dpi()
+        return handled
+
+    def _sync_windows_dpi(self) -> None:
+        self._native_dpi.reset()
+        handle = self.windowHandle()
+        if uses_windows_window_state() and handle is not None:
+            self._native_dpi.reset(window_dpi(int(handle.winId())), self.devicePixelRatioF())
+
+    def nativeEvent(self, event_type, message):
+        if not uses_windows_window_state():
+            return super().nativeEvent(event_type, message)
+        try:
+            native = read_message(int(message))
+        except (TypeError, ValueError):
+            return super().nativeEvent(event_type, message)
+
+        if self._native_dpi.handle_message(self, native):
+            return True, 0
+        return super().nativeEvent(event_type, message)
 
     def eventFilter(self, watched, event) -> bool:
         if isinstance(watched, QWidget) and watched.window() is self:

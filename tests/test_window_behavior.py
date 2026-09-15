@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QVBoxLayout,
 
 from pyside6_modern_widgets import ModernDialog, ModernMenuBar, ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
+from pyside6_modern_widgets._window_chrome import _rounded_dpi_scale
 from pyside6_modern_widgets._windows_window import (
     HTCAPTION,
     HTCLIENT,
@@ -155,8 +156,7 @@ def test_dpi_change_uses_new_minimum_before_qt_updates_screen(
     message = [WindowsMessage(1, WM_DPICHANGED, new_dpi | (new_dpi << 16), 0)]
     monkeypatch.setattr(modern_window_module, "read_message", lambda _: message[0])
     window._native_frame_enabled = True
-    window._native_window_dpi = old_dpi
-    window._native_window_scale = old_scale
+    window._native_dpi.reset(old_dpi, old_scale)
 
     # Windows requests constraints inside its DPI resize while Qt still reports
     # the old screen/scale. It must not clamp 477px to the old 835px minimum.
@@ -172,7 +172,7 @@ def test_dpi_change_uses_new_minimum_before_qt_updates_screen(
 
     monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
     window._sync_windows_native_frame()
-    assert window._native_dpi_scale is None
+    assert window._native_dpi.scale is None
     window.close()
 
 
@@ -186,7 +186,7 @@ def test_native_dpi_constraints_follow_qt_rounding(monkeypatch, policy, expected
         "highDpiScaleFactorRoundingPolicy",
         lambda: getattr(Qt.HighDpiScaleFactorRoundingPolicy, policy),
     )
-    assert modern_window_module._rounded_dpi_scale(144) == expected
+    assert _rounded_dpi_scale(144) == expected
 
 
 def test_title_visibility_preserves_menu_order_buttons_and_drag_area() -> None:

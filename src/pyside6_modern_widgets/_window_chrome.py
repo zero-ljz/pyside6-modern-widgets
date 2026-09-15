@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
+from math import ceil, floor
 from typing import Generic, Literal, TypeVar
 
 from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QRect, QRectF, QSize, Qt, QVariantAnimation
@@ -36,7 +37,15 @@ from PySide6.QtWidgets import (
 )
 
 from . import _resources  # noqa: F401
-from ._windows_window import HTTRANSPARENT, WM_NCHITTEST, read_message
+from ._windows_window import (
+    HTTRANSPARENT,
+    WM_DPICHANGED,
+    WM_GETMINMAXINFO,
+    WM_NCHITTEST,
+    WindowsMessage,
+    read_message,
+    set_size_constraints,
+)
 from .theme import ModernMetrics, ModernTheme, _chrome_palette, tinted_icon
 
 WindowWidget = TypeVar("WindowWidget", bound=QWidget)
@@ -133,6 +142,58 @@ class _TitleBarCloseButton(TitleBarButton):
 
 def uses_windows_window_state() -> bool:
     return sys.platform == "win32" and QApplication.platformName() == "windows"
+
+
+def _rounded_dpi_scale(dpi: int) -> float:
+    """Match Qt's per-monitor scaling before its QScreen catches up with Windows."""
+    scale = dpi / 96
+    policy = QApplication.highDpiScaleFactorRoundingPolicy()
+    if policy == Qt.HighDpiScaleFactorRoundingPolicy.Round:
+        return max(1, floor(scale + 0.5))
+    if policy == Qt.HighDpiScaleFactorRoundingPolicy.Ceil:
+        return max(1, ceil(scale))
+    if policy == Qt.HighDpiScaleFactorRoundingPolicy.Floor:
+        return max(1, floor(scale))
+    if policy == Qt.HighDpiScaleFactorRoundingPolicy.RoundPreferFloor:
+        return max(1, floor(scale + 0.25))
+    return scale
+
+
+@dataclass
+class WindowDpiState:
+    """Shared native DPI tracking for frameless windows and dialogs."""
+
+    dpi: int | None = None
+    scale: float | None = None
+    _changed: bool = False
+
+    def reset(self, dpi: int | None = None, scale: float | None = None) -> None:
+        """Synchronize once Qt and the native handle agree on the current screen."""
+        self.dpi = dpi
+        self.scale = scale
+        self._changed = False
+
+    def handle_message(self, widget: QWidget, message: WindowsMessage) -> bool:
+        if message.message == WM_DPICHANGED:
+            dpi = (message.w_param >> 16) & 0xFFFF
+            if dpi and self.dpi and self.scale is not None:
+                # Qt's screen may still have the old DPI, or may already have
+                # the new DPI. Chain native changes independently, including
+                # rapid reversals, while preserving Qt's global scale/rounding.
+                self.scale *= _rounded_dpi_scale(dpi) / _rounded_dpi_scale(self.dpi)
+                self.dpi = dpi
+                self._changed = True
+        elif message.message == WM_GETMINMAXINFO and self._changed and self.scale is not None:
+            # Prevent the previous screen's physical minimum from enlarging
+            # Windows' correctly scaled rectangle during the native move loop.
+            set_size_constraints(
+                message.l_param,
+                (widget.minimumWidth(), widget.minimumHeight()),
+                (widget.maximumWidth(), widget.maximumHeight()),
+                self.scale,
+            )
+            return True
+        return False
 
 
 @dataclass(frozen=True)

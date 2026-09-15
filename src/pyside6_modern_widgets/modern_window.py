@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from math import ceil, floor
 from typing import Literal
 from weakref import ref
 
@@ -30,6 +29,7 @@ from ._window_chrome import (
     BackgroundFrame,
     TitleBarButton,
     WindowChromeOverlay,
+    WindowDpiState,
     WindowSurfacePolicy,
     WindowTitleBar,
     current_window_surface_policy,
@@ -54,7 +54,6 @@ from ._windows_window import (
     WM_DPICHANGED,
     WM_ENTERSIZEMOVE,
     WM_EXITSIZEMOVE,
-    WM_GETMINMAXINFO,
     WM_LBUTTONUP,
     WM_MOUSEMOVE,
     WM_NCCALCSIZE,
@@ -76,7 +75,6 @@ from ._windows_window import (
     screen_position_from_l_param,
     set_mouse_capture,
     set_native_frame,
-    set_size_constraints,
     set_window_topmost,
     start_system_move,
     track_non_client_mouse_leave,
@@ -127,20 +125,6 @@ class _NativeChildHitTestFilter(QAbstractNativeEventFilter):
                 # child. HTTRANSPARENT lets Windows reach the owning HWND.
                 return True, HTTRANSPARENT
         return False, 0
-
-
-def _rounded_dpi_scale(dpi: int) -> float:
-    scale = dpi / 96
-    policy = QApplication.highDpiScaleFactorRoundingPolicy()
-    if policy == Qt.HighDpiScaleFactorRoundingPolicy.Round:
-        return max(1, floor(scale + 0.5))
-    if policy == Qt.HighDpiScaleFactorRoundingPolicy.Ceil:
-        return max(1, ceil(scale))
-    if policy == Qt.HighDpiScaleFactorRoundingPolicy.Floor:
-        return max(1, floor(scale))
-    if policy == Qt.HighDpiScaleFactorRoundingPolicy.RoundPreferFloor:
-        return max(1, floor(scale + 0.25))
-    return scale
 
 
 def _resource_icon(name: str, theme: ModernTheme) -> QIcon:
@@ -353,9 +337,7 @@ class ModernWindow(QWidget):
         self._resize_cursor_active = False
         self._native_frame_enabled = False
         self._native_frame_refresh_pending = False
-        self._native_window_dpi: int | None = None
-        self._native_window_scale = self.devicePixelRatioF()
-        self._native_dpi_scale: float | None = None
+        self._native_dpi = WindowDpiState()
         self._native_maximize_button_pressed = False
         self._native_caption_press_position: QPoint | None = None
         self._native_caption_anchor_x = 0
@@ -514,7 +496,7 @@ class ModernWindow(QWidget):
             self._native_frame_sync_timer.start(0)
 
     def _sync_windows_native_frame(self) -> None:
-        self._native_dpi_scale = None
+        self._native_dpi.reset()
         force_refresh = self._native_frame_refresh_pending
         self._native_frame_refresh_pending = False
         if not self._uses_windows_window_state():
@@ -528,8 +510,7 @@ class ModernWindow(QWidget):
         if window_handle is None:
             self._native_frame_enabled = False
             return
-        self._native_window_dpi = window_dpi(int(window_handle.winId()))
-        self._native_window_scale = self.devicePixelRatioF()
+        self._native_dpi.reset(window_dpi(int(window_handle.winId())), self.devicePixelRatioF())
         # Set this before SWP_FRAMECHANGED synchronously delivers WM_NCCALCSIZE.
         self._native_frame_enabled = enabled
         applied = set_native_frame(
@@ -885,30 +866,7 @@ class ModernWindow(QWidget):
                 QTimer.singleShot(0, self._restore_from_native_command)
                 return True, 0
 
-        if native_message.message == WM_DPICHANGED and self._native_frame_enabled:
-            dpi = (native_message.w_param >> 16) & 0xFFFF
-            if dpi and self._native_window_dpi:
-                # During a drag, Qt can still associate the window with the old
-                # screen when SetWindowPos queries WM_GETMINMAXINFO. Its old
-                # physical minimum then enlarges the correctly scaled rectangle.
-                # Keep Qt's global scale multiplier and rounding policy intact.
-                self._native_dpi_scale = (
-                    (self._native_dpi_scale or self._native_window_scale)
-                    * _rounded_dpi_scale(dpi)
-                    / _rounded_dpi_scale(self._native_window_dpi)
-                )
-                self._native_window_dpi = dpi
-        if (
-            native_message.message == WM_GETMINMAXINFO
-            and self._native_frame_enabled
-            and self._native_dpi_scale is not None
-        ):
-            set_size_constraints(
-                native_message.l_param,
-                self.minimumSize().toTuple(),
-                self.maximumSize().toTuple(),
-                self._native_dpi_scale,
-            )
+        if self._native_frame_enabled and self._native_dpi.handle_message(self, native_message):
             return True, 0
         if native_message.message in (WM_DISPLAYCHANGE, WM_DPICHANGED):
             self._schedule_native_frame_sync(force_refresh=True)
