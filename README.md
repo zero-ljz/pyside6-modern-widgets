@@ -12,6 +12,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   opaque fallback elsewhere) plus rounded outer and selected-item
   backgrounds.
 - `ModernMenuBar`: a `QMenuBar` that creates `ModernMenu` drop-down menus.
+- `ModernComboBox`: a modern `QComboBox` with rounded surfaces,
+  a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -61,6 +63,52 @@ using these widgets can be frozen normally without package-specific
 ```shell
 pyinstaller your_app.py
 ```
+
+## Modern combo box
+
+Replace `QComboBox` with `ModernComboBox` and keep the usual Qt APIs and signals:
+
+```python
+from pyside6_modern_widgets import ModernComboBox
+
+combo = ModernComboBox(parent)
+combo.addItem("Windows 11", userData="win11")
+combo.addItem("Linux", userData="linux")
+combo.setPlaceholderText("Choose a platform")
+combo.setCurrentIndex(-1)
+combo.currentIndexChanged.connect(lambda index: print(index, combo.currentData()))
+
+# Optional: native editing, completion, validation and insertion policies.
+combo.setEditable(True)
+```
+
+The control uses a full focus border with Qt Fusion's focus timing and system
+highlight-derived color: keyboard focus for non-editable combos, and input focus
+for editable combos. Its popup shares `ModernMenu`'s rounded
+surface, subtle outline, row spacing and selection background, including Windows
+11 system acrylic and an opaque fallback elsewhere. It retains Qt's popup
+container, item delegates, keyboard/mouse/wheel input, models, separators, icons and signals.
+`setView()` and `setItemDelegate()` remain
+available; custom views and delegates control their own painting. The initial
+Qt list receives the modern defaults once; opening does not overwrite later
+view styles, frames, background fills or palettes. An opaque custom view can
+cover the acrylic surface beneath it. Explicit `setPalette()` roles take
+precedence over theme defaults, and `setPalette(QPalette())` restores them.
+`setFrame(False)` uses native frameless rendering. Popup placement, closing
+and scrolling follow Qt's Fusion behavior, including Qt's platform-dependent
+handling of `maxVisibleItems` for non-editable combos.
+
+Editable modern combos open directly: Qt's screenshot-based slide animation
+cannot capture the system acrylic backdrop. The application's animation
+preference is restored immediately after opening.
+
+It inherits its containing modern widget's theme, or the global theme when used
+on its own. Use `setTheme(DARK_THEME)` for a local override and `setTheme(None)` to
+restore inheritance. The optional `metrics` argument uses `ModernMetrics`.
+Qt paints the control and popup foreground; Windows supplies the acrylic backdrop.
+
+Run `python examples/combo_box_example.py` for a native/modern comparison with
+editable, disabled, placeholder, icon, long-list and right-to-left examples.
 
 ## Example
 

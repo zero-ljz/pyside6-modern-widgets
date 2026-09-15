@@ -1,5 +1,6 @@
 """Public API for pyside6-modern-widgets."""
 
+from .modern_combo_box import ModernComboBox
 from .modern_dialog import ModernDialog
 from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
@@ -25,6 +26,7 @@ __all__ = [
     "DARK_THEME",
     "DEFAULT_METRICS",
     "LIGHT_THEME",
+    "ModernComboBox",
     "ModernDialog",
     "ModernMenu",
     "ModernMenuBar",

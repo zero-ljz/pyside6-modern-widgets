@@ -6,6 +6,19 @@ Install the package in editable mode from the repository root:
 python -m pip install -e .
 ```
 
+Run the modern combo box example:
+
+```shell
+python examples/combo_box_example.py
+```
+
+It compares `ModernComboBox` and native `QComboBox` side by side, including icons,
+separators, placeholders, editing, disabled controls, long lists and right-to-left
+layout. Switch System/Light/Dark appearance and try the mouse, arrow keys, typing,
+Enter and Escape. The modern popup uses the same acrylic and rounded styling as
+`ModernMenu` on Windows 11, with an opaque fallback elsewhere. The status line
+displays Qt's `activated` signal.
+
 Run the window and navigation example. It includes interactive `ModernDialog`,
 `ModernMessageBox`, and side-by-side `ModernMenu`/native `QMenu` examples:
 

@@ -64,7 +64,7 @@ def _supports_windows_acrylic() -> bool:
     return get_windows_version is not None and get_windows_version().build >= 22000
 
 
-def _enable_windows_rounded_corners(menu: QMenu, radius: int) -> bool:
+def _enable_windows_rounded_corners(menu: QWidget, radius: int) -> bool:
     if radius <= 0 or sys.platform != "win32" or QApplication.platformName() != "windows":
         return False
     try:
@@ -103,7 +103,7 @@ def _windows_acrylic_tint(palette: QPalette, widget: QWidget | None = None) -> Q
     return tint
 
 
-def _enable_windows_acrylic(menu: QMenu) -> bool:
+def _enable_windows_acrylic(menu: QWidget) -> bool:
     if not _supports_windows_acrylic():
         return False
     try:
@@ -165,10 +165,24 @@ class _RoundedMenuStyle(QProxyStyle):
     def __init__(self, radius: int, base_style_name: str) -> None:
         super().__init__(base_style_name)
         self._radius = max(0, radius)
+        self._surface_radius = self._radius
         self._native_acrylic = False
 
     def setNativeAcrylic(self, enabled: bool) -> None:
         self._native_acrylic = enabled
+
+    def drawSelection(self, option, painter, widget=None) -> None:
+        rect = QRectF(option.rect).adjusted(4, 2, -4, -2)
+        window_color = _surface_color(
+            option.palette, widget if isinstance(widget, QWidget) else None
+        )
+        hover = QColor(255, 255, 255, 20) if window_color.lightness() < 128 else QColor(0, 0, 0, 13)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(hover)
+        painter.drawRoundedRect(rect, self._radius, self._radius)
+        painter.restore()
 
     def sizeFromContents(self, content_type, option, size, widget=None):
         result = super().sizeFromContents(content_type, option, size, widget)
@@ -200,7 +214,7 @@ class _RoundedMenuStyle(QProxyStyle):
             painter.setBrush(surface)
             painter.setPen(QPen(_soft_line_color(option.palette, _OUTLINE_ALPHA), 1))
             rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)
-            painter.drawRoundedRect(rect, self._radius, self._radius)
+            painter.drawRoundedRect(rect, self._surface_radius, self._surface_radius)
             painter.restore()
             return
         super().drawPrimitive(element, option, painter, widget)
@@ -232,20 +246,7 @@ class _RoundedMenuStyle(QProxyStyle):
             and option.state & QStyle.StateFlag.State_Selected
             and self._radius > 0
         ):
-            rect = QRectF(option.rect).adjusted(4, 2, -4, -2)
-            window_color = _surface_color(
-                option.palette,
-                widget if isinstance(widget, QWidget) else None,
-            )
-            hover = (
-                QColor(255, 255, 255, 20) if window_color.lightness() < 128 else QColor(0, 0, 0, 13)
-            )
-            painter.save()
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(hover)
-            painter.drawRoundedRect(rect, self._radius, self._radius)
-            painter.restore()
+            self.drawSelection(option, painter, widget)
 
             native_option = QStyleOptionMenuItem(option)
             native_option.state &= ~QStyle.StateFlag.State_Selected  # type: ignore[attr-defined]

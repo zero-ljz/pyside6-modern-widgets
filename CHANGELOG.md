@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add `ModernComboBox`, a `QComboBox` subclass with rounded
+  controls, full focus borders and a popup sharing `ModernMenu`'s Windows 11
+  acrylic, rounded surface and selection styling. Preserve Qt's popup container,
+  models, delegates, signals, editing and input handling, with inherited or local themes.
+- Add a native/modern combo box comparison example and behavior regression tests.
+
+### Fixed
+
+- Preserve caller-supplied combo palettes and list configuration through opening
+  and theme changes. Honor native frameless rendering and Qt's expanded-state flag.
+- Match native Fusion combo box focus-border timing and palette-derived system
+  highlight colors, including the different editable and non-editable behavior.
+- Prevent black flashes when opening editable modern combo boxes by skipping Qt's
+  screenshot-based popup animation, which cannot capture the acrylic backdrop.
+  Restore the application's animation preference immediately after opening.
+
 ## [0.5.5] - 2026-09-13
 
 ### Fixed
