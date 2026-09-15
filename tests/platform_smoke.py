@@ -9,14 +9,17 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton, QWidget
 
 from pyside6_modern_widgets import ModernMessageBox, ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
 from pyside6_modern_widgets._windows_window import (
     HTCAPTION,
+    HTCLIENT,
     HTMAXBUTTON,
+    HTTRANSPARENT,
     WM_MOUSEMOVE,
+    WM_NCHITTEST,
     WM_NCLBUTTONDBLCLK,
     WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP,
@@ -226,6 +229,52 @@ def main() -> int:
         resizable_style = int(get_style(hwnd, -16))
         assert resizable_style & WS_THICKFRAME
         assert resizable_style & WS_MAXIMIZEBOX
+
+        # Calling winId() on a descendant (including via accessibility) can
+        # promote the title bar and content to native sibling HWNDs at runtime.
+        content = QWidget()
+        window.setCentralWidget(content)
+        status = window.statusBar()
+        button = QPushButton("Custom")
+        window.titleBar.addCustomWidget(button)
+        content.winId()
+        window.titleBar.winId()
+        status.winId()
+        button.winId()
+        _wait(app)
+
+        def child_hit(child, position):
+            screen_position = screen_position_from_client(
+                hwnd, position.x(), position.y(), window.width(), window.height()
+            )
+            assert screen_position is not None
+            x, y = screen_position
+            return send_message(
+                int(child.winId()), WM_NCHITTEST, 0, (x & 0xFFFF) | ((y & 0xFFFF) << 16)
+            )
+
+        caption = QPoint(200, window.titleBar.height() // 2)
+        corner = QPoint(window.width() - 2, window.height() - 2)
+        button_center = button.mapTo(window, button.rect().center())
+        maximize_center = window.titleBar.maximizeButton.mapTo(
+            window, window.titleBar.maximizeButton.rect().center()
+        )
+        assert child_hit(window.titleBar, caption) == HTTRANSPARENT
+        assert child_hit(status, corner) == HTTRANSPARENT
+        assert child_hit(content, QPoint(2, window.height() // 2)) == HTTRANSPARENT
+        assert child_hit(window.titleBar, maximize_center) == HTTRANSPARENT
+        assert child_hit(button, button_center) == HTCLIENT
+        assert child_hit(content, QPoint(window.width() // 2, window.height() // 2)) == HTCLIENT
+        assert child_hit(window, caption) == HTCAPTION
+
+        window.setFixedSize(window.size())
+        _wait(app)
+        assert child_hit(status, corner) == HTCLIENT
+        assert child_hit(window.titleBar, caption) == HTTRANSPARENT
+        window.hide()
+        window.show()
+        _wait(app)
+        assert child_hit(window.titleBar, caption) == HTTRANSPARENT
 
     window._handle_screen_metrics_changed()
     _wait(app, 150)

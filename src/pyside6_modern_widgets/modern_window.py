@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from math import ceil, floor
 from typing import Literal
+from weakref import ref
 
-from PySide6.QtCore import QEvent, QPoint, QRect, Qt, QTimer
+from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import (
     QCursor,
     QIcon,
@@ -47,6 +48,7 @@ from ._windows_window import (
     HTTOP,
     HTTOPLEFT,
     HTTOPRIGHT,
+    HTTRANSPARENT,
     WM_CAPTURECHANGED,
     WM_DISPLAYCHANGE,
     WM_DPICHANGED,
@@ -92,6 +94,39 @@ from .theme import (
 )
 
 _DEFAULT_WINDOW_FLAGS = Qt.WindowType.Widget
+
+
+class _NativeChildHitTestFilter(QAbstractNativeEventFilter):
+    """Let native child HWNDs pass window-chrome hits to the top-level window."""
+
+    def __init__(self, window: ModernWindow) -> None:
+        super().__init__()
+        self._window = ref(window)
+
+    def nativeEventFilter(self, event_type, message):
+        window = self._window()
+        if window is None or not window._native_frame_enabled:
+            return False, 0
+        native_message = read_message(int(message))
+        if native_message.message != WM_NCHITTEST:
+            return False, 0
+        child = QWidget.find(native_message.hwnd)
+        if child is None or child is window or child.window() is not window:
+            return False, 0
+        hwnd = int(window.winId())
+        position = client_position_from_l_param(
+            hwnd, native_message.l_param, window.width(), window.height()
+        )
+        if position is not None:
+            hit = window._native_hit_test_at(
+                QPoint(round(position[0]), round(position[1])),
+                is_maximized=window._is_maximized_for_native_event(hwnd),
+            )
+            if hit is not None and hit != HTCLIENT:
+                # Returning HTCAPTION/HTLEFT on a child would move/resize that
+                # child. HTTRANSPARENT lets Windows reach the owning HWND.
+                return True, HTTRANSPARENT
+        return False, 0
 
 
 def _rounded_dpi_scale(dpi: int) -> float:
@@ -329,6 +364,7 @@ class ModernWindow(QWidget):
         self._native_caption_manual_move_offset: QPoint | None = None
         self._normal_geometry: QRect | None = None
         self._application_event_filter_installed = False
+        self._native_child_event_filter = _NativeChildHitTestFilter(self)
         self._screen_change_window: QWindow | None = None
         self._screen_metrics_screen: QScreen | None = None
         self._system_resize_active = False
@@ -446,8 +482,11 @@ class ModernWindow(QWidget):
             return
         if enabled:
             application.installEventFilter(self)
+            if self._uses_windows_window_state():
+                application.installNativeEventFilter(self._native_child_event_filter)
         else:
             application.removeEventFilter(self)
+            application.removeNativeEventFilter(self._native_child_event_filter)
         self._application_event_filter_installed = enabled
 
     def _layout_chrome(self) -> None:
