@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add `ModernNotification`, `NotificationManager`, `NotificationKind`, and
+  `NotificationPosition`: non-activating desktop notifications, per-screen FIFO
+  stacks and bounded queues, timed/persistent delivery, hover/focus/manual pause,
+  actions, progress and ID-based updates, thread-safe posting, screen-change
+  handling, animated placement, theme inheritance, and Windows 11 acrylic.
+  Include in-window delivery with automatic Wayland fallback, lifecycle cleanup,
+  and an interactive Notifications gallery page.
 - Add `ModernFlyout` and `FlyoutPlacement` for non-blocking anchored panels with
   arbitrary widget content, four preferred sides, screen-edge fallback, scrolling,
   native popup dismissal and keyboard focus, inherited/local themes, and Windows

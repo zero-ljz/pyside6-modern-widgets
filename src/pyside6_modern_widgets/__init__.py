@@ -6,10 +6,12 @@ from .modern_flyout import FlyoutPlacement, ModernFlyout
 from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
+from .modern_notification import ModernNotification, NotificationKind
 from .modern_switch import ModernSwitch
 from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar
 from .navigation_view import NavigationView
+from .notification_manager import NotificationManager, NotificationPosition
 from .tab_view import TabView
 from .theme import (
     DARK_THEME,
@@ -36,12 +38,16 @@ __all__ = [
     "ModernMenuBar",
     "ModernMessageBox",
     "ModernMetrics",
+    "ModernNotification",
     "ModernSwitch",
     "ModernTheme",
     "ModernWindow",
     "NavigationPosition",
     "NavigationSidebar",
     "NavigationView",
+    "NotificationKind",
+    "NotificationManager",
+    "NotificationPosition",
     "TabView",
     "ThemeManager",
     "ThemeMode",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -35,6 +35,9 @@ from pyside6_modern_widgets import (
     ModernWindow,
     NavigationPosition,
     NavigationView,
+    NotificationKind,
+    NotificationManager,
+    NotificationPosition,
     ThemeMode,
     theme_manager,
 )
@@ -93,6 +96,11 @@ class ExampleWindow(ModernWindow):
             standard_icon(QStyle.StandardPixmap.SP_TitleBarShadeButton),
         )
         self.navigation.addPage(
+            self._create_notification_page(),
+            "Notifications",
+            standard_icon(QStyle.StandardPixmap.SP_MessageBoxInformation),
+        )
+        self.navigation.addPage(
             self._create_settings_page(),
             "Settings",
             QIcon(":/pyside6_modern_widgets/icons/settings.png"),
@@ -120,7 +128,7 @@ class ExampleWindow(ModernWindow):
     def _create_home_page(self) -> QWidget:
         page, layout = self._create_page("Modern Widgets")
         description = QLabel(
-            "Window, navigation, menu, dialog, message box, combo box, switch, and flyout examples."
+            "Modern windows, navigation, menus, dialogs, controls, flyouts, and desktop notifications."
         )
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -211,6 +219,226 @@ class ExampleWindow(ModernWindow):
         layout.addWidget(long_button, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addStretch()
         return page
+
+    def _create_notification_page(self) -> QWidget:
+        page, layout = self._create_page("Notifications")
+        description = QLabel(
+            "Show a quiet update without interrupting your work. Hover to keep a notification "
+            "open, or dismiss it to make room for the next one."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        layout.addLayout(self._create_appearance_controls())
+        desktop_manager = NotificationManager(self)
+        page_manager = NotificationManager(page, desktop=False)
+        self.notification_managers = (desktop_manager, page_manager)
+
+        options = QFormLayout()
+        delivery = ModernComboBox()
+        delivery.addItems(
+            [
+                "Desktop" if desktop_manager.isDesktop() else "Window (automatic)",
+                "Inside this page",
+            ]
+        )
+        placement = ModernComboBox()
+        for position in NotificationPosition:
+            placement.addItem(position.value.replace("-", " ").title(), position)
+        placement.setCurrentIndex(3)
+        screens = ModernComboBox()
+        screens.addItem("Follow this window", None)
+        for screen in QApplication.screens():
+            screens.addItem(screen.name(), screen)
+        options.addRow("Show on", delivery)
+        options.addRow("Corner", placement)
+        options.addRow("Screen", screens)
+        layout.addLayout(options)
+
+        def current_manager() -> NotificationManager:
+            return self.notification_managers[delivery.currentIndex()]
+
+        placement.currentIndexChanged.connect(
+            lambda _index: [
+                manager.setPosition(placement.currentData())
+                for manager in self.notification_managers
+            ]
+        )
+        screens.currentIndexChanged.connect(
+            lambda _index: desktop_manager.setScreen(screens.currentData())
+        )
+        paused = ModernSwitch("Pause notifications")
+        paused.toggled.connect(
+            lambda checked: [
+                manager.setEnabled(not checked) for manager in self.notification_managers
+            ]
+        )
+        layout.addWidget(paused)
+        status = QLabel()
+        status.setWordWrap(True)
+
+        def update_counts(*_args) -> None:
+            manager = current_manager()
+            status.setText(
+                f"{len(manager.visibleIds())} showing · {len(manager.queuedIds())} waiting"
+            )
+
+        activity = QLabel("Action results appear here.")
+        activity.setWordWrap(True)
+        for manager in self.notification_managers:
+            manager.countChanged.connect(update_counts)
+            manager.actionTriggered.connect(
+                lambda _key, action: activity.setText(f"Action: {action}")
+            )
+            manager.notificationActivated.connect(
+                lambda _key: activity.setText("Notification selected.")
+            )
+        delivery.currentIndexChanged.connect(update_counts)
+        delivery.currentIndexChanged.connect(lambda index: screens.setEnabled(index == 0))
+        update_counts()
+
+        examples = (
+            (
+                "Information",
+                NotificationKind.INFO,
+                "A new version is available",
+                "You can install it when you are ready.",
+            ),
+            (
+                "Success",
+                NotificationKind.SUCCESS,
+                "Export complete",
+                "Your report is ready to open.",
+            ),
+            (
+                "Warning",
+                NotificationKind.WARNING,
+                "Connection interrupted",
+                "Your changes are saved. We will retry shortly.",
+            ),
+            (
+                "Error",
+                NotificationKind.ERROR,
+                "Upload failed",
+                "Check your connection and try again.",
+            ),
+        )
+        buttons = QHBoxLayout()
+        for text, kind, title, message in examples:
+            button = QPushButton(text)
+            button.clicked.connect(
+                lambda _checked=False, kind=kind, title=title, message=message: (
+                    current_manager().notify(
+                        title,
+                        message,
+                        kind=kind,
+                        actions={"open": "View details"},
+                    )
+                )
+            )
+            buttons.addWidget(button)
+        layout.addLayout(buttons)
+
+        more = QHBoxLayout()
+        burst = QPushButton("Queue 8 updates")
+        burst.clicked.connect(
+            lambda: [
+                current_manager().notify(
+                    f"Task {i + 1} complete", "The next update appears when there is room."
+                )
+                for i in range(8)
+            ]
+        )
+        persistent = QPushButton("Keep until dismissed")
+        persistent.clicked.connect(
+            lambda: current_manager().notify(
+                "Waiting for your review",
+                "This notification stays until you dismiss it.",
+                duration=0,
+                actions={"review": "Review"},
+            )
+        )
+        long_text = QPushButton("Long message")
+        long_text.clicked.connect(
+            lambda: current_manager().notify(
+                "Import summary",
+                "Imported records successfully. Review the following details.\n\n" * 25,
+                duration=0,
+                actions={"done": "Done"},
+            )
+        )
+        for button in (burst, persistent, long_text):
+            more.addWidget(button)
+        layout.addLayout(more)
+
+        progress_timer = QTimer(self)
+        progress_timer.setInterval(120)
+        progress_state: dict = {}
+
+        def advance_download() -> None:
+            manager, key = progress_state["manager"], progress_state["key"]
+            if manager.notification(key) is None:
+                progress_timer.stop()
+                return
+            progress_state["value"] += 2
+            value = progress_state["value"]
+            if value >= 100:
+                progress_timer.stop()
+                manager.updateNotification(
+                    key,
+                    title="Download complete",
+                    message="Your file is ready.",
+                    kind=NotificationKind.SUCCESS,
+                    progress=None,
+                    actions={"open": "Open file"},
+                    duration=5000,
+                )
+            else:
+                manager.updateNotification(key, message=f"Downloading… {value}%", progress=value)
+
+        def start_download() -> None:
+            if progress_state:
+                progress_state["manager"].dismiss(progress_state["key"])
+            manager = current_manager()
+            key = manager.notify(
+                "Downloading", "Starting…", duration=0, progress=0, actions={"cancel": "Cancel"}
+            )
+            progress_state.update(manager=manager, key=key, value=0)
+            progress_timer.start()
+
+        progress_timer.timeout.connect(advance_download)
+        bottom = QHBoxLayout()
+        progress = QPushButton("Simulate download")
+        progress.clicked.connect(start_download)
+        minimized = QPushButton("Notify after minimizing")
+        minimized.setEnabled(desktop_manager.isDesktop())
+
+        def notify_minimized() -> None:
+            self.showMinimized()
+            QTimer.singleShot(
+                700,
+                lambda: desktop_manager.notify(
+                    "Background task complete",
+                    "Notifications remain available while the window is minimized.",
+                    kind=NotificationKind.SUCCESS,
+                ),
+            )
+
+        minimized.clicked.connect(notify_minimized)
+        clear = QPushButton("Clear all")
+        clear.clicked.connect(lambda: [manager.clear() for manager in self.notification_managers])
+        for button in (progress, minimized, clear):
+            bottom.addWidget(button)
+        layout.addLayout(bottom)
+        layout.addWidget(status)
+        layout.addWidget(activity)
+        layout.addStretch()
+        return page
+
+    def closeEvent(self, event) -> None:
+        super().closeEvent(event)
+        if event.isAccepted():
+            for manager in self.notification_managers:
+                manager.clear()
 
     def _create_message_box_page(self) -> QWidget:
         page, layout = self._create_page("ModernMessageBox")

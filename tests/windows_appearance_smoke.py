@@ -15,6 +15,7 @@ from pyside6_modern_widgets import (
     ModernComboBox,
     ModernFlyout,
     ModernMenu,
+    ModernNotification,
     ModernWindow,
     ThemeMode,
     theme_manager,
@@ -109,9 +110,18 @@ def main(style="Fusion"):
     content = QWidget()
     content.setMinimumSize(216, 136)
     flyout.setContentWidget(content)
+    notification = ModernNotification()
+    notification._configure_desktop()
+    notification.resize(240, 160)
     try:
-        for control in (menu, submenu, *combos, flyout):
-            if isinstance(control, ModernFlyout):
+        for control in (menu, submenu, *combos, flyout, notification):
+            if isinstance(control, ModernNotification):
+                control.move(window.mapToGlobal(QPoint(150, 100)))
+                control.show()
+                popup = control
+                popup_style = control
+                name = "notification"
+            elif isinstance(control, ModernFlyout):
                 control.popup(anchor)
                 popup = control
                 popup_style = control
@@ -150,6 +160,7 @@ def main(style="Fusion"):
                 control.hidePopup()
                 control.hide()
     finally:
+        notification.close()
         flyout.close()
         menu.close()
         submenu.close()

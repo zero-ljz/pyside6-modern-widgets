@@ -13,7 +13,16 @@ python examples/navigation_view_example.py
 ```
 
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
-`ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, and **Flyout** pages.
+`ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**, and
+**Notifications** pages.
+
+The **Notifications** page demonstrates desktop and in-window delivery, four
+severity levels, all four corners, screen selection, and a queue of eight updates.
+Try a persistent notification, a long scrollable message, or a simulated download
+with a Cancel action and completion update. Hover pauses expiry. The pause switch
+suspends delivery, and Clear all removes visible and queued cards. Native desktop
+notifications stay visible after minimizing the main window; Wayland defaults to
+window delivery. Appearance controls update visible cards immediately.
 
 The **Flyout** page opens quick settings at each side of a button. Try text input,
 Tab navigation, nested combo popups, and switching appearance inside the panel.

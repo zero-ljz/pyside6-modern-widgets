@@ -18,6 +18,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   checkbox interaction, sized to sit alongside combo boxes and line edits.
 - `ModernFlyout`: an anchored popup for arbitrary widgets, with automatic screen
   edge placement, scrollable content, and light dismiss.
+- `ModernNotification` / `NotificationManager`: custom desktop or in-window
+  notifications with actions, progress, bounded queues, and non-activating delivery.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -210,6 +212,120 @@ controls the outer corner radius.
 Run `python examples/navigation_view_example.py` and open **Flyout** to try all
 four placements, editable settings, nested combo popups, live appearance changes,
 and a long scrollable panel.
+
+## Notifications
+
+`NotificationManager` delivers custom notification cards without taking keyboard
+focus. Keep one manager for the application; it owns the cards, their timers,
+and their per-screen stacks. Its parent controls lifetime and theme inheritance.
+Desktop cards stay visible when that parent is minimized or hidden.
+
+```python
+from pyside6_modern_widgets import NotificationManager
+
+notifications = NotificationManager(window)
+notifications.notify("Export complete", "Your report is ready.", kind="success")
+
+job = notifications.notify(
+    "Downloading", "Starting…", notification_id="download-1",
+    duration=0, progress=0, actions={"cancel": "Cancel"},
+)
+notifications.updateNotification(job, message="Downloading… 65%", progress=65)
+notifications.updateNotification(
+    job, title="Download complete", message="Your file is ready.",
+    kind="success", progress=None, actions={"open": "Open file"}, duration=5000,
+)
+notifications.actionTriggered.connect(
+    lambda notification_id, action_id: print(notification_id, action_id)
+)
+```
+
+Kinds accept `"info"`, `"success"`, `"warning"`, `"error"`, or `NotificationKind`.
+Titles and messages are plain text, including text containing markup. Titles
+elide with the full text available in a tooltip; long bodies and action lists
+scroll while the close button stays visible. Progress accepts `0..100`, `-1` for
+busy, or `None` to hide it. An optional `icon=QIcon(...)` replaces the severity icon.
+Cards include accessible names, descriptions, action labels, and progress values.
+
+| Constructor option | Default / behavior |
+| --- | --- |
+| `position` | `NotificationPosition.BOTTOM_RIGHT`; all four screen corners supported, also as strings such as `"top-left"`. |
+| `max_visible` | 3 per screen; available height can reduce this further. |
+| `max_queued` | 100 across the manager; overflow dismisses the oldest queued card. |
+| `width`, `margin`, `spacing` | 360, 16, 12 logical pixels. Cards fit the available area and are at most 360 pixels tall. |
+| `default_duration` | 5000 milliseconds. `notify(duration=0)` makes a persistent card. |
+| `desktop` | Automatic desktop delivery on Windows/macOS/X11; in-window delivery on Wayland. `False` explicitly selects in-window delivery. |
+| `theme`, `metrics` | Inherited theme and `ModernMetrics()`; set `animation_duration=0` to disable entry and stack movement animations. |
+
+Delivery is FIFO within each screen, with the oldest visible card nearest the
+selected corner. Screen placement excludes taskbars/docks through Qt's available
+geometry. `setScreen(screen)` changes the default destination;
+`notify(screen=screen)` pins one notification to that display. Otherwise the
+manager follows its parent window's screen, then the primary screen. Screen
+removal migrates affected cards to the default destination. Geometry and DPI
+changes reflow the stacks. Use `setPosition()` and `setMaxVisible()` for runtime
+changes. Independently created managers do not coordinate their stacks.
+
+Expiry starts when a queued card becomes visible, pauses while hovered or while
+an in-window action has keyboard focus, and resumes with the remaining time.
+`pause(id)` / `resume(id)` add an independent manual pause. `setEnabled(False)`
+hides cards and pauses delivery/expiry while retaining a bounded queue; enabling
+resumes them. In-window cards also pause while their host is hidden or minimized.
+
+`notify(notification_id=existing_id, ...)` replaces that notification's contents
+and restarts its timeout without changing FIFO order. `updateNotification()`
+changes only supplied fields and preserves time unless `duration` is provided;
+it returns `False` for an unknown ID. `actions={}` clears the actions, and an
+explicit `progress=None` clears progress. Progress completion does not implicitly
+close a persistent notification: supply a new duration when the task completes.
+
+`notification(id)` returns the owned `ModernNotification` while registered;
+`notificationIds()`, `visibleIds()`, and `queuedIds()` return snapshots.
+`dismiss(id)` closes one card; `clear()` closes all registered and queued cards.
+Dismissed cards are deleted with `deleteLater()` and must not be reused. Use the
+manager for delivery, geometry, and visibility instead of reparenting or hiding
+its cards. Deleting the manager deletes its desktop windows too; notification
+windows do not prevent normal application exit. A parent window merely closing
+without being deleted does not destroy a manager—call `clear()` if desired.
+
+| Signal | Meaning |
+| --- | --- |
+| `notificationShown(id)` | First delivery of a card, after it becomes visible. Resuming a hidden card does not emit again. |
+| `notificationClosed(id, reason)` | Card removed; standard reasons are `dismissed`, `expired`, `action`, `cleared`, `overflow`, or `destroyed`. |
+| `actionTriggered(id, action_id)` | An action was clicked. Standard actions close the card after emitting this signal. |
+| `notificationActivated(id)` | The body was clicked; no application action or automatic dismissal is performed. |
+| `countChanged(visible, queued)` | Total counts changed across all screens. |
+| `deliveryFailed(id, message)` | An asynchronous `post()` could not be delivered. |
+
+The returned card supports `setTitle()`, `setMessage()`, `setKind()`, `setIcon()`,
+`setProgress()`, and `setTheme()`. Add persistent actions with
+`card.addActionButton("retry", "Retry", close_on_trigger=False)`; it returns a
+normal `QPushButton`. `removeActionButton()` and `clearActionButtons()` manage
+these buttons without replacing QWidget's native QAction API. A card-level
+`setTheme()` overrides the manager; `None` resumes inheritance. Global and host
+theme changes update existing cards, including native acrylic on Windows 11.
+
+Create and operate managers on the QApplication GUI thread. Worker threads may
+call `post(title, message, ...)`, which validates and copies the data, returns
+an ID immediately, and queues delivery on the GUI thread. It accepts `kind`,
+`duration`, `actions`, `progress`, and `notification_id`, and uses the manager's
+default screen. Reposting the same ID updates it. Posts not yet delivered are
+not part of `notificationIds()` or `clear()`; stop producers before clearing
+when shutting down a job.
+
+Custom desktop notifications exist only while the application runs. They do not
+enter the OS notification center or automatically follow its do-not-disturb
+settings. Desktop action buttons accept mouse input without activating the
+notification window; use in-window delivery for Tab/Space/Enter/Escape keyboard
+interaction. Wayland requires a host QWidget and uses the in-window fallback;
+requesting `desktop=True` there raises `ValueError`. Desktop positioning/stacking
+on other platforms remains subject to window-manager policy.
+
+Run `python examples/navigation_view_example.py` and open **Notifications** for
+severity samples, corner/screen selection, queue overflow into waiting delivery,
+persistent cards, long messages, simulated download progress, and delivery after
+minimizing. `python tests/notification_smoke.py` checks native focus and stacking;
+`python tests/windows_appearance_smoke.py` also verifies Windows 11 acrylic.
 
 ## Example
 
