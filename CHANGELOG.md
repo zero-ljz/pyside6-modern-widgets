@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Show switch focus outlines only during keyboard interaction, hiding them on
+  mouse clicks. Consolidate the switch and combo box demos into dedicated pages
+  of the navigation example and remove the standalone examples.
 - Share edge resizing between windows and dialogs, chrome styling/layout across
   windows, dialogs and message boxes, native DWM corner calls across windows and
   popups, and ancestor theme lookup between menu bars and combo boxes.
@@ -17,6 +20,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add `ModernSwitch` with an animated thumb, system accent colors, native checkbox
+  signals and keyboard input, theme inheritance, disabled/RTL states, and a
+  compact track and room for large-font labels. Include a comparison example.
 - Add `ModernComboBox`, a `QComboBox` subclass with rounded
   controls, full focus borders and a popup sharing `ModernMenu`'s Windows 11
   acrylic, rounded surface and selection styling. Preserve Qt's popup container,
@@ -25,6 +31,12 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Preserve the active accent and thumb contrast for checked switches when their
+  window loses activation; disabled controls still use the disabled colors.
+- Keep combo popup rows transparent under application style sheets, preserving
+  Windows acrylic instead of covering it with opaque menu-item backgrounds.
+- Guard combo event filters during base construction and keep switch tracks at
+  36 by 18 logical pixels independently of font and unrelated form-control QSS.
 - Apply the shared mixed-DPI protection to `ModernMessageBox`, including native
   size constraints after expanding or collapsing detailed text.
 - Prevent `ModernDialog` from growing when dragged between Windows monitors with

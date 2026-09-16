@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
     QStyle,
+    QStyledItemDelegate,
     QStyleOption,
     QStyleOptionMenuItem,
     QStyleOptionViewItem,
@@ -196,6 +197,48 @@ class _ComboBoxStyle(_RoundedMenuStyle):
         super().drawPrimitive(element, option, painter, widget)
 
 
+class _ComboBoxDelegate(QStyledItemDelegate):
+    """Draw default rows without Qt's QSS-wrapped menu delegate's opaque fill."""
+
+    def __init__(self, combo):
+        super().__init__(combo)
+        self._combo = combo
+
+    def _menu_option(self, option, index):
+        item = QStyleOptionViewItem(option)
+        self.initStyleOption(item, index)
+        menu = QStyleOptionMenuItem()
+        menu.rect = item.rect
+        menu.palette = item.palette
+        menu.state = item.state
+        menu.font = item.font
+        menu.fontMetrics = item.fontMetrics
+        menu.icon = item.icon
+        if index.data(Qt.ItemDataRole.AccessibleDescriptionRole) == "separator":
+            menu.menuItemType = QStyleOptionMenuItem.MenuItemType.Separator
+        return menu
+
+    def sizeHint(self, option, index):
+        menu = self._menu_option(option, index)
+        size = super().sizeHint(option, index)
+        menu_size = self._combo._modern_style.sizeFromContents(
+            QStyle.ContentsType.CT_MenuItem, menu, size, self._combo
+        )
+        if menu.menuItemType == QStyleOptionMenuItem.MenuItemType.Separator:
+            return menu_size
+        size.setHeight(max(size.height(), menu_size.height()))
+        return size
+
+    def paint(self, painter, option, index):
+        if index.data(Qt.ItemDataRole.AccessibleDescriptionRole) == "separator":
+            self._combo._modern_style.drawControl(
+                QStyle.ControlElement.CE_MenuItem,
+                self._menu_option(option, index), painter, self._combo,
+            )
+            return
+        super().paint(painter, option, index)
+
+
 class ModernComboBox(QComboBox):
     """A ``QComboBox`` with rounded surfaces and native Qt semantics.
 
@@ -233,6 +276,7 @@ class ModernComboBox(QComboBox):
         view_palette = QPalette()
         view_palette.setColor(QPalette.ColorRole.Window, Qt.GlobalColor.transparent)
         view.setPalette(view_palette)
+        self.setItemDelegate(_ComboBoxDelegate(self))
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         theme_manager().themeChanged.connect(self._on_theme_changed)
         self._watch_theme_ancestors()
@@ -267,6 +311,9 @@ class ModernComboBox(QComboBox):
             ancestor = ancestor.parentWidget()
 
     def eventFilter(self, watched, event) -> bool:
+        # QComboBox may invoke this virtual method from its base constructor.
+        if not hasattr(self, "_popup"):
+            return super().eventFilter(watched, event)
         if watched is self._popup:
             if event.type() == QEvent.Type.Paint:
                 # Paint exactly one menu surface. The native container's frame

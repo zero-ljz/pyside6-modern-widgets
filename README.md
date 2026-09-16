@@ -14,6 +14,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernMenuBar`: a `QMenuBar` that creates `ModernMenu` drop-down menus.
 - `ModernComboBox`: a modern `QComboBox` with rounded surfaces,
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
+- `ModernSwitch`: an animated switch with system accent colors and native
+  checkbox interaction, sized to sit alongside combo boxes and line edits.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -87,7 +89,9 @@ highlight-derived color: keyboard focus for non-editable combos, and input focus
 for editable combos. Its popup shares `ModernMenu`'s
 surface, subtle outline, row spacing and selection background, including Windows
 11 system acrylic and an opaque fallback elsewhere. It retains Qt's popup
-container, item delegates, keyboard/mouse/wheel input, models, separators, icons and signals.
+container, keyboard/mouse/wheel input, models, separators, icons and signals.
+The default item delegate keeps rows transparent under application style sheets,
+so they do not cover the acrylic surface.
 `setView()` and `setItemDelegate()` remain
 available; custom views and delegates control their own painting. The initial
 Qt list receives the modern defaults once; opening does not overwrite later
@@ -114,8 +118,41 @@ on its own. Use `setTheme(DARK_THEME)` for a local override and `setTheme(None)`
 restore inheritance. The optional `metrics` argument uses `ModernMetrics`.
 Qt paints the control and popup foreground; Windows supplies the acrylic backdrop.
 
-Run `python examples/combo_box_example.py` for a native/modern comparison with
-editable, disabled, placeholder, icon, long-list and right-to-left examples.
+Run `python examples/navigation_view_example.py` and open **Combo box** for a
+native/modern comparison with editable, disabled, placeholder, icon, long-list
+and right-to-left examples.
+
+## Modern switch
+
+`ModernSwitch` accepts the same text/parent constructor forms as `QCheckBox` and
+uses its standard `setChecked()`, `isChecked()`, `toggled(bool)`, and `clicked(bool)`
+APIs. Click the track or label, or use Tab and Space from the keyboard.
+
+```python
+from pyside6_modern_widgets import ModernSwitch
+
+switch = ModernSwitch("Enable notifications")
+switch.setChecked(True)
+switch.toggled.connect(lambda enabled: print("Notifications:", enabled))
+```
+
+The capsule stays 36 by 18 logical pixels regardless of font or native style;
+Qt still scales it for the display DPI. The minimum widget height is 22 logical
+pixels, growing to fit larger labels without enlarging the track. Layouts remain
+free to resize the widget. Labels, keyboard focus, hover/pressed states, disabled states,
+and right-to-left layouts are supported. The focus outline appears during keyboard
+interaction and hides on mouse clicks. For a switch without visible text, use
+`setAccessibleName()` to describe its purpose to assistive tools.
+
+The enabled track reads the current Qt `QPalette.Accent` color, including system
+accent updates. It inherits its containing modern widget's theme or the global
+theme; `setTheme(DARK_THEME)` overrides it locally and `setTheme(None)` restores
+inheritance. Explicit theme `accent` / `on_accent` tokens override the track/thumb
+colors. Optional `metrics=ModernMetrics(...)` controls animation duration.
+
+Run `python examples/navigation_view_example.py` and open **Switch** to compare
+the default heights with native form controls and try System/Light/Dark appearance
+and enabled/disabled switches.
 
 ## Example
 

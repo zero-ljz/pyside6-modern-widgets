@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
 from PySide6.QtCore import QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import (
@@ -42,6 +44,28 @@ from pyside6_modern_widgets.modern_menu import (
 )
 
 _APP = QApplication.instance() or QApplication([])
+
+
+def test_construction_with_application_stylesheet_has_no_callback_errors(monkeypatch):
+    errors = []
+    monkeypatch.setattr(sys, "excepthook", lambda *args: errors.append(args))
+    previous = _APP.styleSheet()
+    widget = None
+    try:
+        _APP.setStyleSheet("QLineEdit { padding: 3px 5px; }")
+        widget = ModernComboBox()
+        widget.addItems(["First", "Second"])
+        widget.show()
+        widget.showPopup()
+        _APP.processEvents()
+        assert errors == []
+    finally:
+        if widget is not None:
+            widget.hidePopup()
+            widget.close()
+            widget.deleteLater()
+        _APP.setStyleSheet(previous)
+        _APP.processEvents()
 
 
 @pytest.fixture
@@ -280,10 +304,15 @@ def test_popup_retains_qt_container_and_uses_menu_row_spacing(combos, editable):
 
 @pytest.mark.parametrize("editable", [False, True])
 @pytest.mark.parametrize("acrylic", [False, True])
+@pytest.mark.parametrize("stylesheet", [False, True])
 def test_popup_surface_remains_clickable_and_refreshes_acrylic_tint(
-    combos, monkeypatch, editable, acrylic
+    combos, monkeypatch, editable, acrylic, stylesheet
 ):
     combo = combos[1]
+    if stylesheet:
+        # An unrelated ancestor stylesheet wraps Qt's native menu delegate.
+        # Previously it filled every non-editable row with opaque white.
+        combo.setStyleSheet("QLineEdit { padding: 3px 5px; }")
     combo.setTheme(LIGHT_THEME)
     combo.setEditable(editable)
     tints = []

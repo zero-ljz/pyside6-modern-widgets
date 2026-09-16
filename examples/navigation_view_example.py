@@ -1,4 +1,4 @@
-"""Interactive example for the modern window, navigation, menus, and dialogs."""
+"""Interactive gallery for modern windows, navigation, menus, dialogs, and controls."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialogButtonBox,
+    QFormLayout,
+    QGridLayout,
+    QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMenu,
     QPushButton,
     QStyle,
@@ -20,10 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from pyside6_modern_widgets import (
+    ModernComboBox,
     ModernDialog,
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
+    ModernSwitch,
     ModernWindow,
     NavigationPosition,
     NavigationView,
@@ -70,6 +76,16 @@ class ExampleWindow(ModernWindow):
             standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
         )
         self.navigation.addPage(
+            self._create_combo_box_page(),
+            "Combo box",
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
+        )
+        self.navigation.addPage(
+            self._create_switch_page(),
+            "Switch",
+            standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
+        )
+        self.navigation.addPage(
             self._create_settings_page(),
             "Settings",
             QIcon(":/pyside6_modern_widgets/icons/settings.png"),
@@ -96,7 +112,11 @@ class ExampleWindow(ModernWindow):
 
     def _create_home_page(self) -> QWidget:
         page, layout = self._create_page("Modern Widgets")
-        layout.addWidget(QLabel("Window, navigation, menu, dialog, and message box examples."))
+        description = QLabel(
+            "Window, navigation, menu, dialog, message box, combo box, and switch examples."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
         layout.addStretch()
         return page
 
@@ -146,6 +166,112 @@ class ExampleWindow(ModernWindow):
             button.setFixedWidth(220)
             button.clicked.connect(callback)
             layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addStretch()
+        return page
+
+    @staticmethod
+    def _create_appearance_controls() -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.addWidget(QLabel("Appearance"))
+        for mode in ThemeMode:
+            button = QPushButton(mode.value.title())
+            button.clicked.connect(lambda _checked=False, mode=mode: theme_manager().setMode(mode))
+            layout.addWidget(button)
+        layout.addStretch()
+        return layout
+
+    def _create_combo_box_page(self) -> QWidget:
+        page, layout = self._create_page("ModernComboBox")
+        layout.addWidget(QLabel("Rounded controls, familiar Qt interactions."))
+        layout.addLayout(self._create_appearance_controls())
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(16)
+        grid.addWidget(QLabel("Native QComboBox"), 0, 1)
+        grid.addWidget(QLabel("ModernComboBox"), 0, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        layout.addLayout(grid)
+        status = QLabel("Choose an item to see the native activated signal.")
+        status.setWordWrap(True)
+        for row, label in enumerate(
+            (
+                "Standard",
+                "Icons",
+                "Placeholder",
+                "Editable",
+                "Disabled",
+                "Long list",
+                "Right to left",
+            ),
+            start=1,
+        ):
+            grid.addWidget(QLabel(label), row, 0)
+            for column, widget_type in enumerate((QComboBox, ModernComboBox), start=1):
+                combo = widget_type()
+                combo.setMinimumWidth(230)
+                combo.addItems(["Windows 11", "Windows 10", "Linux", "macOS"])
+                if label == "Icons":
+                    combo.setItemIcon(0, QIcon(":/pyside6_modern_widgets/icons/settings.png"))
+                    combo.setItemIcon(1, QIcon(":/pyside6_modern_widgets/icons/application.png"))
+                    combo.insertSeparator(2)
+                elif label == "Placeholder":
+                    combo.setPlaceholderText("Choose an operating system")
+                    combo.setCurrentIndex(-1)
+                elif label == "Editable":
+                    combo.setEditable(True)
+                    combo.setInsertPolicy(QComboBox.InsertPolicy.InsertAtBottom)
+                elif label == "Disabled":
+                    combo.setEnabled(False)
+                elif label == "Long list":
+                    combo.clear()
+                    combo.addItems([f"Option {number:02d}" for number in range(1, 51)])
+                    combo.setMaxVisibleItems(8)
+                elif label == "Right to left":
+                    combo.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+                combo.activated.connect(
+                    lambda index, combo=combo, label=label: status.setText(
+                        f"{type(combo).__name__} / {label}: index={index}, text={combo.currentText()}"
+                    )
+                )
+                grid.addWidget(combo, row, column)
+        layout.addStretch()
+        layout.addWidget(status)
+        return page
+
+    def _create_switch_page(self) -> QWidget:
+        page, layout = self._create_page("ModernSwitch")
+        hint = QLabel("Click to toggle. Use Tab and Space to try the keyboard focus indicator.")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addLayout(self._create_appearance_controls())
+        form = QFormLayout()
+        form.setVerticalSpacing(14)
+        form.addRow("QLineEdit", QLineEdit("Native text field"))
+        for widget_type in (QComboBox, ModernComboBox):
+            combo = widget_type()
+            combo.addItems(["Default size", "No fixed height"])
+            form.addRow(widget_type.__name__, combo)
+        switch = ModernSwitch("Enable notifications")
+        switch.setChecked(True)
+        form.addRow("ModernSwitch", switch)
+        states = QHBoxLayout()
+        for checked in (False, True):
+            disabled = ModernSwitch("Disabled")
+            disabled.setChecked(checked)
+            disabled.setEnabled(False)
+            states.addWidget(disabled)
+        form.addRow("Disabled states", states)
+        rtl = ModernSwitch("Right to left")
+        rtl.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        rtl.setChecked(True)
+        form.addRow("RTL", rtl)
+        layout.addLayout(form)
+        status = QLabel("Notifications: on")
+        switch.toggled.connect(
+            lambda checked: status.setText(f"Notifications: {'on' if checked else 'off'}")
+        )
+        layout.addWidget(status)
         layout.addStretch()
         return page
 

@@ -6,13 +6,16 @@ Install the package in editable mode from the repository root:
 python -m pip install -e .
 ```
 
-Run the modern combo box example:
+Run the window and navigation example:
 
 ```shell
-python examples/combo_box_example.py
+python examples/navigation_view_example.py
 ```
 
-It compares `ModernComboBox` and native `QComboBox` side by side, including icons,
+It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
+`ModernMenu`/native `QMenu` examples, plus **Combo box** and **Switch** pages.
+
+The **Combo box** page compares `ModernComboBox` and native `QComboBox` side by side, including icons,
 separators, placeholders, editing, disabled controls, long lists and right-to-left
 layout. Switch System/Light/Dark appearance and try the mouse, arrow keys, typing,
 Enter and Escape. Modern popups use `ModernMenu`'s acrylic styling
@@ -20,12 +23,11 @@ on Windows 11, with an opaque fallback elsewhere. Editable controls and popups
 have four square corners; non-editable combos remain rounded. The status line
 displays Qt's `activated` signal.
 
-Run the window and navigation example. It includes interactive `ModernDialog`,
-`ModernMessageBox`, and side-by-side `ModernMenu`/native `QMenu` examples:
-
-```shell
-python examples/navigation_view_example.py
-```
+The **Switch** page compares `ModernSwitch` with `QLineEdit`, `QComboBox`, and
+`ModernComboBox` without fixed heights. Try System/Light/Dark appearance, system
+accent colors, clicking the label, Tab/Space input, disabled states, and
+right-to-left layout. The switch focus outline appears for keyboard interaction
+and hides on mouse clicks. Both control pages include appearance buttons.
 
 The example places a `ModernMenuBar` in the title bar's left custom-widget area
 and hides the title text while keeping the window icon visible. Narrow the
