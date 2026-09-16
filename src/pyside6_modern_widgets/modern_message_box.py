@@ -13,6 +13,7 @@ from ._window_chrome import (
     WindowTitleBar,
     current_window_surface_policy,
 )
+from .modern_menu import _enable_windows_rounded_corners
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -102,6 +103,17 @@ class ModernMessageBox(QMessageBox):
     def apply_window_style(self) -> None:
         self._chrome.apply(self._theme, self._corner_radius)
 
+    def _refresh_native_surface(self) -> None:
+        """Apply Windows 11 acrylic and rounded corners when the native handle exists."""
+        if not self.isWindow():
+            return
+        # Message boxes use a clean surface; the watercolor background belongs to
+        # the main window.
+        self._background_frame.setVisible(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAutoFillBackground(True)
+        _enable_windows_rounded_corners(self, self._corner_radius)
+
     def _on_global_theme_changed(self, theme: ModernTheme) -> None:
         if self._uses_global_theme:
             self._theme = theme
@@ -136,6 +148,9 @@ class ModernMessageBox(QMessageBox):
         if event.type() == QEvent.Type.Show:
             self._sync_chrome_with_window_flags()
             self.apply_window_style()
+            self._refresh_native_surface()
+        elif event.type() == QEvent.Type.PaletteChange:
+            self._refresh_native_surface()
         elif event.type() == QEvent.Type.Resize:
             self._layout_chrome()
         elif event.type() == QEvent.Type.WindowStateChange:
