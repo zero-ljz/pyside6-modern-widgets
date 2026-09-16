@@ -13,7 +13,13 @@ python examples/navigation_view_example.py
 ```
 
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
-`ModernMenu`/native `QMenu` examples, plus **Combo box** and **Switch** pages.
+`ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, and **Flyout** pages.
+
+The **Flyout** page opens quick settings at each side of a button. Try text input,
+Tab navigation, nested combo popups, and switching appearance inside the panel.
+Click outside or press Escape to dismiss; values persist on reopening. Move the
+window near a screen edge to test placement fallback, or open the long panel to
+test scrolling. Escape closes a nested combo popup before closing the panel.
 
 The **Combo box** page compares `ModernComboBox` and native `QComboBox` side by side, including icons,
 separators, placeholders, editing, disabled controls, long lists and right-to-left

@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add `ModernFlyout` and `FlyoutPlacement` for non-blocking anchored panels with
+  arbitrary widget content, four preferred sides, screen-edge fallback, scrolling,
+  native popup dismissal and keyboard focus, inherited/local themes, and Windows
+  11 acrylic with an opaque fallback. Include a Flyout page in the navigation gallery.
+
 ## [0.5.7] - 2026-09-16
 
 ### Changed

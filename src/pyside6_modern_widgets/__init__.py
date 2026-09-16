@@ -2,6 +2,7 @@
 
 from .modern_combo_box import ModernComboBox
 from .modern_dialog import ModernDialog
+from .modern_flyout import FlyoutPlacement, ModernFlyout
 from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
@@ -27,8 +28,10 @@ __all__ = [
     "DARK_THEME",
     "DEFAULT_METRICS",
     "LIGHT_THEME",
+    "FlyoutPlacement",
     "ModernComboBox",
     "ModernDialog",
+    "ModernFlyout",
     "ModernMenu",
     "ModernMenuBar",
     "ModernMessageBox",

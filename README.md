@@ -16,6 +16,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `ModernSwitch`: an animated switch with system accent colors and native
   checkbox interaction, sized to sit alongside combo boxes and line edits.
+- `ModernFlyout`: an anchored popup for arbitrary widgets, with automatic screen
+  edge placement, scrollable content, and light dismiss.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -153,6 +155,61 @@ colors. Optional `metrics=ModernMetrics(...)` controls animation duration.
 Run `python examples/navigation_view_example.py` and open **Switch** to compare
 the default heights with native form controls and try System/Light/Dark appearance
 and enabled/disabled switches.
+
+## Modern flyout
+
+`ModernFlyout` hosts any `QWidget`, including forms, switches, and combo boxes.
+Opening is non-blocking; click outside or press Escape to close. Values remain
+in the content when the panel is reopened.
+
+```python
+from PySide6.QtWidgets import QLineEdit, QPushButton, QVBoxLayout, QWidget
+from pyside6_modern_widgets import ModernFlyout
+
+button = QPushButton("Quick settings", window)
+flyout = ModernFlyout(window)
+content = QWidget()
+layout = QVBoxLayout(content)
+layout.addWidget(QLineEdit("Workspace name"))
+done = QPushButton("Done")
+done.clicked.connect(flyout.close)
+layout.addWidget(done)
+flyout.setContentWidget(content)
+button.clicked.connect(lambda: flyout.popup(button))
+```
+
+Use `popup(anchor, placement="bottom", gap=8)` with a visible anchor. Placement
+accepts `"bottom"`, `"top"`, `"left"`, `"right"`, or the corresponding
+`FlyoutPlacement` enum. Top/bottom align to the anchor's leading edge, including
+right-to-left layouts; left/right center vertically. If there is insufficient
+room, the opposite side is tried first, followed by the other sides. Placement
+stays within the anchor screen's available area with an 8-logical-pixel margin.
+Oversized content gets scrollbars. Leave the panel's minimum size unconstrained
+to allow it to fit small screens; set content size hints or minimum sizes instead.
+
+Moving or resizing the anchor or its ancestors updates placement. Hiding,
+destroying, or reparenting the anchor dismisses the panel. Keyboard focus enters
+the content; Qt restores the previous focus on dismissal. Nested menus and combo
+popups keep their normal behavior: Escape dismisses the inner popup first.
+`opened` and `closed` signal visibility transitions. `close()` hides the panel
+without deleting it unless Qt's `WA_DeleteOnClose` is explicitly enabled.
+
+`setContentWidget()` takes ownership and deletes the previous content, like
+`QScrollArea.setWidget()`. `contentWidget()` returns it; `takeContentWidget()`
+detaches it and transfers ownership back to the caller. Install the content's
+layout before passing it to the panel. The panel supplies 12 pixels of padding
+around its scroll area. Transparent content preserves the backdrop; deliberately
+opaque content can cover it.
+
+The panel follows its anchor's theme, or its parent/global theme before the first
+opening. `setTheme(DARK_THEME)` overrides it and `setTheme(None)` restores
+inheritance. Windows 11 uses the same native acrylic surface as `ModernMenu`;
+other platforms use an opaque rounded surface. Optional `metrics=ModernMetrics(...)`
+controls the outer corner radius.
+
+Run `python examples/navigation_view_example.py` and open **Flyout** to try all
+four placements, editable settings, nested combo popups, live appearance changes,
+and a long scrollable panel.
 
 ## Example
 

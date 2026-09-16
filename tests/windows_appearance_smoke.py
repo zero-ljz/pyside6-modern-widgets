@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from pyside6_modern_widgets import (
     ModernComboBox,
+    ModernFlyout,
     ModernMenu,
     ModernWindow,
     ThemeMode,
@@ -101,9 +102,21 @@ def main(style="Fusion"):
         combo.resize(240, 32)
         combo.addItems([f"Option {index}" for index in range(7)])
         combos.append(combo)
+    anchor = QWidget(backdrop)
+    anchor.setGeometry(150, 68, 240, 24)
+    anchor.show()
+    flyout = ModernFlyout(window)
+    content = QWidget()
+    content.setMinimumSize(216, 136)
+    flyout.setContentWidget(content)
     try:
-        for control in (menu, submenu, *combos):
-            if isinstance(control, ModernComboBox):
+        for control in (menu, submenu, *combos, flyout):
+            if isinstance(control, ModernFlyout):
+                control.popup(anchor)
+                popup = control
+                popup_style = control
+                name = "flyout"
+            elif isinstance(control, ModernComboBox):
                 control.show()
                 if control.isEditable():
                     _verify_editable_opening(control)
@@ -137,6 +150,7 @@ def main(style="Fusion"):
                 control.hidePopup()
                 control.hide()
     finally:
+        flyout.close()
         menu.close()
         submenu.close()
         window.close()

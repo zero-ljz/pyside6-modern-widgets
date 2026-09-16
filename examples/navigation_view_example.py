@@ -24,8 +24,10 @@ from PySide6.QtWidgets import (
 )
 
 from pyside6_modern_widgets import (
+    FlyoutPlacement,
     ModernComboBox,
     ModernDialog,
+    ModernFlyout,
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
@@ -86,6 +88,11 @@ class ExampleWindow(ModernWindow):
             standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
         )
         self.navigation.addPage(
+            self._create_flyout_page(),
+            "Flyout",
+            standard_icon(QStyle.StandardPixmap.SP_TitleBarShadeButton),
+        )
+        self.navigation.addPage(
             self._create_settings_page(),
             "Settings",
             QIcon(":/pyside6_modern_widgets/icons/settings.png"),
@@ -113,7 +120,7 @@ class ExampleWindow(ModernWindow):
     def _create_home_page(self) -> QWidget:
         page, layout = self._create_page("Modern Widgets")
         description = QLabel(
-            "Window, navigation, menu, dialog, message box, combo box, and switch examples."
+            "Window, navigation, menu, dialog, message box, combo box, switch, and flyout examples."
         )
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -129,6 +136,79 @@ class ExampleWindow(ModernWindow):
         open_button.setFixedWidth(220)
         open_button.clicked.connect(self._show_dialog)
         layout.addWidget(open_button, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addStretch()
+        return page
+
+    def _create_flyout_page(self) -> QWidget:
+        page, layout = self._create_page("ModernFlyout")
+        description = QLabel(
+            "Open quick settings beside a button. Click outside or press Escape to close. "
+            "Move the window near a screen edge to try automatic placement."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        layout.addLayout(self._create_appearance_controls())
+        status = QLabel("Settings are kept when the panel closes.")
+        status.setWordWrap(True)
+
+        self.flyout = ModernFlyout(self)
+        self.flyout.setAccessibleName("Quick settings")
+        content = QWidget()
+        content.setMinimumWidth(280)
+        form = QFormLayout(content)
+        form.setContentsMargins(4, 4, 4, 4)
+        heading = QLabel("Quick settings")
+        font = heading.font()
+        font.setBold(True)
+        heading.setFont(font)
+        form.addRow(heading)
+        name = QLineEdit()
+        name.setPlaceholderText("Workspace name")
+        form.addRow("Name", name)
+        mode = ModernComboBox()
+        mode.addItems(["Balanced", "Performance", "Quiet"])
+        form.addRow("Mode", mode)
+        notifications = ModernSwitch("Enable notifications")
+        notifications.setChecked(True)
+        form.addRow(notifications)
+        appearance = ModernComboBox()
+        for theme_mode in ThemeMode:
+            appearance.addItem(theme_mode.value.title(), theme_mode)
+        appearance.setCurrentIndex(appearance.findData(theme_manager().mode()))
+        appearance.activated.connect(
+            lambda _index: theme_manager().setMode(appearance.currentData())
+        )
+        form.addRow("Appearance", appearance)
+        apply_button = QPushButton("Apply")
+        apply_button.clicked.connect(
+            lambda: status.setText(f"{name.text() or 'Workspace'}: {mode.currentText()}")
+        )
+        apply_button.clicked.connect(self.flyout.close)
+        form.addRow(apply_button)
+        self.flyout.setContentWidget(content)
+
+        buttons = QHBoxLayout()
+        for placement in FlyoutPlacement:
+            button = QPushButton(placement.value.title())
+            button.clicked.connect(
+                lambda _checked=False, anchor=button, side=placement: self.flyout.popup(
+                    anchor, side
+                )
+            )
+            buttons.addWidget(button)
+        buttons.addStretch()
+        layout.addLayout(buttons)
+        layout.addWidget(status)
+
+        self.long_flyout = ModernFlyout(self)
+        long_content = QWidget()
+        long_layout = QVBoxLayout(long_content)
+        for index in range(40):
+            long_layout.addWidget(ModernSwitch(f"Option {index + 1}"))
+        self.long_flyout.setContentWidget(long_content)
+        long_button = QPushButton("Open scrollable panel")
+        long_button.clicked.connect(lambda: self.long_flyout.popup(long_button))
+        layout.addWidget(long_button, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addStretch()
         return page
 
