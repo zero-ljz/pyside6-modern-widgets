@@ -60,7 +60,9 @@ class _ComboBoxStyle(_RoundedMenuStyle):
             result.setHeight(result.height() + 2)
         if content_type == QStyle.ContentsType.CT_ItemViewItem:
             result.setHeight(result.height() + _MENU_ITEM_EXTRA_HEIGHT)
-            if self._is_editable_default_item(widget):
+            if self._is_default_item(widget):
+                result.setWidth(result.width() + 16)
+            if self._combo.isEditable() and self._is_default_item(widget):
                 # Ask the same style as the non-editable menu delegate for its
                 # font/icon-aware row height instead of imposing a fixed size.
                 menu = QStyleOptionMenuItem()
@@ -71,18 +73,16 @@ class _ComboBoxStyle(_RoundedMenuStyle):
                     QStyle.ContentsType.CT_MenuItem, menu, size, self._combo
                 )
                 result.setHeight(max(result.height(), menu_size.height()))
-                result.setWidth(result.width() + 16)
         return result
 
-    def _is_editable_default_item(self, widget) -> bool:
+    def _is_default_item(self, widget) -> bool:
         return (
-            self._combo.isEditable()
-            and widget is not None
+            widget is not None
             and widget is getattr(self._combo, "_default_view", None)
         )
 
     def subElementRect(self, element, option, widget=None):
-        if self._is_editable_default_item(widget) and element in (
+        if self._is_default_item(widget) and element in (
             QStyle.SubElement.SE_ItemViewItemText,
             QStyle.SubElement.SE_ItemViewItemDecoration,
             QStyle.SubElement.SE_ItemViewItemCheckIndicator,
