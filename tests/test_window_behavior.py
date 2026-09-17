@@ -8,7 +8,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QCursor, QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
@@ -31,20 +31,6 @@ from pyside6_modern_widgets._windows_window import (
 )
 
 _APP = QApplication.instance() or QApplication([])
-
-
-def test_window_menu_clears_stale_hover_after_popup_closes(monkeypatch) -> None:
-    window = ModernWindow()
-    button = window.titleBar.menuButton
-    outside = button.mapToGlobal(QPoint(-10, -10))
-    monkeypatch.setattr(QCursor, "pos", lambda: outside)
-    button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, True)
-
-    window.titleBar.windowMenu.aboutToHide.emit()
-    _APP.processEvents()
-
-    assert not button.underMouse()
-    window.close()
 
 
 @pytest.mark.parametrize("window_class", [ModernWindow, ModernDialog])
@@ -294,7 +280,7 @@ def test_title_visibility_preserves_menu_order_buttons_and_drag_area() -> None:
         else:
             assert title_bar.iconLabel.geometry().right() < title_bar.titleLabel.x()
             assert title_bar.titleLabel.geometry().right() < menu_bar.x()
-        assert menu_bar.geometry().right() < title_bar.menuButton.geometry().left() - 100
+        assert menu_bar.geometry().right() < title_bar.pinButton.geometry().left() - 100
         window._native_frame_enabled = True
         assert (
             window._native_hit_test_at(
@@ -331,7 +317,7 @@ def test_space_after_title_bar_menus_can_drag_window(monkeypatch, title_visible,
     gap_end = (
         title_bar.titleLabel.x()
         if title_visible and alignment == "center"
-        else title_bar.menuButton.x()
+        else title_bar.pinButton.x()
     )
     gap = QPoint((menu_end + gap_end) // 2, title_bar.height() // 2)
     window._native_frame_enabled = True
@@ -395,7 +381,7 @@ def test_title_stays_centered_when_menus_change_and_avoids_controls_when_narrow(
     _APP.processEvents()
     assert title_bar.titleLabel.width() < title_bar.titleLabel.sizeHint().width()
     assert menu_bar.geometry().right() < title_bar.titleLabel.x()
-    assert title_bar.titleLabel.geometry().right() < title_bar.menuButton.x()
+    assert title_bar.titleLabel.geometry().right() < title_bar.pinButton.x()
 
     window.resize(1000, 400)
     window.setTitleVisible(False)

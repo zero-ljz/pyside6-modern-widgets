@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the default `ModernWindow` title-bar More menu and its button, including
+  the built-in application exit action and confirmation dialog.
+
 ### Added
 
 - Add `ModernWindow.setDragRegion()` and `startSystemMove()` so tool content can

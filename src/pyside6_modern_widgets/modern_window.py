@@ -151,13 +151,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             metrics=metrics,
             allows_maximize=True,
         )
-        self.windowMenu = self._create_window_menu()
-        self.windowMenu.aboutToHide.connect(self._schedule_menu_button_hover_refresh)
-        self.menuButton = self._create_button(
-            _resource_icon("menu-vertical.png", self._theme),
-            "窗口菜单",
-            self.showWindowMenu,
-        )
         self.pinButton = self._create_button(
             _resource_icon("pin.png", self._theme),
             "置顶",
@@ -175,7 +168,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             self.changeMaximize,
         )
         for button in (
-            self.menuButton,
             self.pinButton,
             self.minimizeButton,
             self.maximizeButton,
@@ -198,43 +190,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         button.clicked.connect(callback)
         return button
 
-    def _create_window_menu(self) -> ModernMenu:
-        menu = ModernMenu(self, metrics=self._metrics)
-        self.quitAction = menu.addAction(
-            _resource_icon("shutdown.png", self._theme),
-            "退出程序",
-        )
-
-        def confirm_exit() -> None:
-            from .modern_message_box import ModernMessageBox
-
-            answer = ModernMessageBox.question(
-                self,
-                "确认退出",
-                "确定要退出吗？",
-                ModernMessageBox.StandardButton.Yes | ModernMessageBox.StandardButton.No,
-            )
-            if answer == ModernMessageBox.StandardButton.Yes:
-                QApplication.quit()
-
-        self.quitAction.triggered.connect(confirm_exit)
-        return menu
-
-    def showWindowMenu(self) -> None:
-        position = self.menuButton.mapToGlobal(QPoint(0, self.menuButton.height()))
-        self.windowMenu.popup(position)
-
-    def _schedule_menu_button_hover_refresh(self) -> None:
-        QTimer.singleShot(0, self._refresh_menu_button_hover)
-
-    def _refresh_menu_button_hover(self) -> None:
-        position = self.menuButton.mapFromGlobal(QCursor.pos())
-        self.menuButton.setAttribute(
-            Qt.WidgetAttribute.WA_UnderMouse,
-            self.menuButton.rect().contains(position),
-        )
-        self.menuButton.update()
-
     def contextMenuEvent(self, event) -> None:
         self.parent_window.showSystemWindowMenu(event.globalPos())
         event.accept()
@@ -249,9 +204,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         regular_window = window_type == Qt.WindowType.Window
         customized = bool(flags & Qt.WindowType.CustomizeWindowHint)
 
-        self.menuButton.setVisible(
-            regular_window and bool(flags & Qt.WindowType.WindowSystemMenuHint)
-        )
         self.pinButton.setVisible(
             regular_window
             and not customized
@@ -281,8 +233,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
                 theme,
             )
         )
-        self.menuButton.setIcon(_resource_icon("menu-vertical.png", theme))
-        self.quitAction.setIcon(_resource_icon("shutdown.png", theme))
         self.minimizeButton.setIcon(_resource_icon("minimize.png", theme))
         self.updateMaximizeIcon(self.parent_window.isMaximized())
 
