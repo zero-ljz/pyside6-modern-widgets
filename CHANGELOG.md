@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add `ModernWindow.setDragRegion()` and `startSystemMove()` so tool content can
+  use native cross-monitor movement with a portable fallback.
 - Add `ModernToolBar` with native toolbar geometry, themed controls, a `ModernMenu` popup,
   shared Qt actions and widget-action factories, horizontal/vertical and RTL
   layouts, theme inheritance and local overrides. Include a Toolbar gallery
@@ -13,6 +15,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Apply native mixed-DPI tracking and size constraints to `Qt.Tool` modern
+  windows without changing their taskbar, Alt+Tab or native-frame semantics.
 - Apply shared mixed-DPI size constraints during `WM_GETDPISCALEDSIZE`, before
   `WM_DPICHANGED`, so an early minimum-size query cannot enlarge a window,
   dialog or message box using the previous monitor's scale. Discard speculative

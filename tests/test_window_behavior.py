@@ -176,6 +176,73 @@ def test_dpi_change_uses_new_minimum_before_qt_updates_screen(
     window.close()
 
 
+def test_tool_window_handles_native_dpi_without_regular_native_frame(monkeypatch) -> None:
+    window = ModernWindow(None, Qt.WindowType.Tool)
+    window.setMinimumSize(320, 180)
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(QWidget, "nativeEvent", lambda *_args: (False, 0))
+    message = [WindowsMessage(1, WM_DPICHANGED, 144 | (144 << 16), 0)]
+    monkeypatch.setattr(modern_window_module, "read_message", lambda _: message[0])
+    window._native_frame_enabled = False
+    window._native_dpi.reset(96, 1.0)
+
+    assert window.nativeEvent(b"windows_generic_MSG", 0) == (False, 0)
+    assert window._native_dpi.dpi == 144
+    assert window._native_dpi.scale == 1.5
+
+    info = _MinMaxInfo()
+    message[0] = WindowsMessage(1, WM_GETMINMAXINFO, 0, ctypes.addressof(info))
+    assert window.nativeEvent(b"windows_generic_MSG", 0) == (True, 0)
+    assert info.ptMinTrackSize.x == 480
+    assert info.ptMinTrackSize.y == 270
+    window.close()
+
+
+def test_registered_drag_region_uses_native_move_and_portable_fallback(monkeypatch) -> None:
+    window = ModernWindow(None, Qt.WindowType.Tool)
+    region = QWidget(window)
+    region.setGeometry(0, 40, 300, 160)
+    window.resize(300, 200)
+    window.setDragRegion(region)
+    window.show()
+    _APP.processEvents()
+    handle = window.windowHandle()
+    assert handle is not None
+    native_calls = []
+    monkeypatch.setattr(handle, "startSystemMove", lambda: native_calls.append(True) or True)
+
+    QTest.mousePress(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+    assert native_calls == [True]
+    QTest.mouseRelease(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+
+    monkeypatch.setattr(handle, "startSystemMove", lambda: False)
+    original_position = window.pos()
+    QTest.mousePress(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+    QTest.mouseMove(region, QPoint(60, 50))
+    QTest.mouseRelease(region, Qt.MouseButton.LeftButton, pos=QPoint(60, 50))
+    assert window.pos() == original_position + QPoint(40, 30)
+
+    window.setDragRegion(region, False)
+    QTest.mousePress(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+    assert window._drag_move_offset is None
+
+    original_position = window.pos()
+    assert window.startSystemMove(region.mapToGlobal(QPoint(20, 20)))
+    QTest.mouseMove(region, QPoint(50, 45))
+    QTest.mouseRelease(region, Qt.MouseButton.LeftButton, pos=QPoint(50, 45))
+    assert window.pos() == original_position + QPoint(30, 25)
+    window.close()
+
+
+def test_drag_region_must_belong_to_window() -> None:
+    window = ModernWindow()
+    foreign = QWidget()
+    with pytest.raises(ValueError, match="belong"):
+        window.setDragRegion(foreign)
+    foreign.close()
+    window.close()
+
+
 @pytest.mark.parametrize(
     ("policy", "expected"),
     [("PassThrough", 1.5), ("Round", 2), ("Ceil", 2), ("Floor", 1), ("RoundPreferFloor", 1)],

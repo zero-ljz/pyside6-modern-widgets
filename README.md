@@ -457,8 +457,18 @@ class ToolWindow(ModernWindow):
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Tool)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Tool content"))
+        content = QLabel("Tool content")
+        layout.addWidget(content)
+        self.setDragRegion(content)
 ```
+
+`setDragRegion(widget)` makes left-button drags on a non-interactive content
+surface use the platform's system window movement, including monitor and DPI
+transitions. Pass `False` as the second argument to unregister it. Subclasses
+with custom hit testing can call `startSystemMove(global_position)` directly;
+it uses native movement when available and a client-side fallback elsewhere.
+On Windows, tool windows receive the same mixed-DPI size protection as regular
+modern windows without acquiring taskbar or Alt+Tab behavior.
 
 Use either a layout installed directly on `ModernWindow` or its optional
 `menuBar()`, `addToolBar()`, `statusBar()`, and `setCentralWidget()` compatibility

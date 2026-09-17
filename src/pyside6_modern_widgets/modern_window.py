@@ -344,6 +344,8 @@ class ModernWindow(QWidget):
         self._native_caption_anchor_from_right = False
         self._native_caption_anchor_y = 0
         self._native_caption_manual_move_offset: QPoint | None = None
+        self._drag_region_ids: set[int] = set()
+        self._drag_move_offset: QPoint | None = None
         self._normal_geometry: QRect | None = None
         self._application_event_filter_installed = False
         self._native_child_event_filter = _NativeChildHitTestFilter(self)
@@ -767,6 +769,41 @@ class ModernWindow(QWidget):
         if self.titleBar is not None:
             self.titleBar.setTitleVisible(visible)
 
+    def setDragRegion(self, widget: QWidget, enabled: bool = True) -> None:
+        """Use left-button drags on ``widget`` to start a system window move."""
+        if widget is not self and widget.window() is not self:
+            raise ValueError("drag regions must belong to this ModernWindow")
+        region_id = id(widget)
+        if enabled:
+            if region_id in self._drag_region_ids:
+                return
+            self._drag_region_ids.add(region_id)
+            widget.setMouseTracking(True)
+            if widget is not self:
+                widget.destroyed.connect(
+                    lambda _object=None, region_id=region_id: self._drag_region_ids.discard(
+                        region_id
+                    )
+                )
+        else:
+            self._drag_region_ids.discard(region_id)
+
+    def startSystemMove(self, global_position: QPoint | None = None) -> bool:
+        """Start native window movement, with a portable client-side fallback."""
+        self._drag_move_offset = None
+        handle = self.windowHandle()
+        if handle is not None and handle.startSystemMove():
+            return True
+        if (
+            QApplication.platformName().startswith("wayland")
+            or self.isMaximized()
+            or self.isFullScreen()
+        ):
+            return False
+        position = global_position if global_position is not None else QCursor.pos()
+        self._drag_move_offset = position - self.frameGeometry().topLeft()
+        return True
+
     def isTitleVisible(self) -> bool:
         """Return whether title text is enabled, even in a hidden window."""
         return self.titleBar is not None and self.titleBar.isTitleVisible()
@@ -853,7 +890,7 @@ class ModernWindow(QWidget):
                 QTimer.singleShot(0, self._restore_from_native_command)
                 return True, 0
 
-        if self._native_frame_enabled and self._native_dpi.handle_message(self, native_message):
+        if self._native_dpi.handle_message(self, native_message):
             return True, 0
         if native_message.message in (WM_DISPLAYCHANGE, WM_DPICHANGED):
             self._schedule_native_frame_sync(force_refresh=True)
@@ -1358,6 +1395,7 @@ class ModernWindow(QWidget):
             self._finish_system_resize_tracking()
 
     def hideEvent(self, event) -> None:
+        self._drag_move_offset = None
         self._finish_manual_resize()
         self._finish_system_resize_tracking()
         self._disconnect_screen_change_signals()
@@ -1369,6 +1407,30 @@ class ModernWindow(QWidget):
             watched, event, enabled=not self._native_frame_enabled, consume_manual_release=False
         ):
             return True
+        if isinstance(watched, QWidget):
+            if (
+                id(watched) in self._drag_region_ids
+                and event.type() == QEvent.Type.MouseButtonPress
+            ):
+                if event.button() == Qt.MouseButton.LeftButton:
+                    return self.startSystemMove(event.globalPosition().toPoint())
+            elif (
+                self._drag_move_offset is not None
+                and watched.window() is self
+                and event.type() == QEvent.Type.MouseMove
+            ):
+                if event.buttons() & Qt.MouseButton.LeftButton:
+                    self.move(event.globalPosition().toPoint() - self._drag_move_offset)
+                    return True
+                self._drag_move_offset = None
+            elif (
+                self._drag_move_offset is not None
+                and watched.window() is self
+                and event.type() == QEvent.Type.MouseButtonRelease
+            ):
+                was_moving = self._drag_move_offset is not None
+                self._drag_move_offset = None
+                return was_moving
         return super().eventFilter(watched, event)
 
     def _begin_manual_resize(self, edges: Qt.Edge, global_position: QPoint) -> None:
