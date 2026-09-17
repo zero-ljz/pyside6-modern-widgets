@@ -40,6 +40,8 @@ from . import _resources  # noqa: F401
 from ._windows_window import (
     HTTRANSPARENT,
     WM_DPICHANGED,
+    WM_EXITSIZEMOVE,
+    WM_GETDPISCALEDSIZE,
     WM_GETMINMAXINFO,
     WM_NCHITTEST,
     WindowsMessage,
@@ -168,15 +170,32 @@ class WindowDpiState:
     dpi: int | None = None
     scale: float | None = None
     _changed: bool = False
+    _pending_scale: float | None = None
 
     def reset(self, dpi: int | None = None, scale: float | None = None) -> None:
         """Synchronize once Qt and the native handle agree on the current screen."""
         self.dpi = dpi
         self.scale = scale
         self._changed = False
+        self._pending_scale = None
 
     def handle_message(self, widget: QWidget, message: WindowsMessage) -> bool:
-        if message.message == WM_DPICHANGED:
+        if message.message == WM_GETDPISCALEDSIZE:
+            # Windows can query minimum/maximum sizes while preparing the new
+            # rectangle, before WM_DPICHANGED commits the monitor transition.
+            # Leave Qt responsible for the suggested size and keep speculative
+            # queries separate from the committed DPI (queries may be repeated
+            # or cancelled at the monitor boundary).
+            dpi = message.w_param
+            self._pending_scale = None
+            if dpi and self.dpi and self.scale is not None:
+                self._pending_scale = (
+                    self.scale * _rounded_dpi_scale(dpi) / _rounded_dpi_scale(self.dpi)
+                )
+        elif message.message == WM_EXITSIZEMOVE:
+            self._pending_scale = None
+        elif message.message == WM_DPICHANGED:
+            self._pending_scale = None
             dpi = (message.w_param >> 16) & 0xFFFF
             if dpi and self.dpi and self.scale is not None:
                 # Qt's screen may still have the old DPI, or may already have
@@ -185,14 +204,19 @@ class WindowDpiState:
                 self.scale *= _rounded_dpi_scale(dpi) / _rounded_dpi_scale(self.dpi)
                 self.dpi = dpi
                 self._changed = True
-        elif message.message == WM_GETMINMAXINFO and self._changed and self.scale is not None:
+        elif message.message == WM_GETMINMAXINFO:
+            scale = self._pending_scale if self._pending_scale is not None else (
+                self.scale if self._changed else None
+            )
+            if scale is None:
+                return False
             # Prevent the previous screen's physical minimum from enlarging
             # Windows' correctly scaled rectangle during the native move loop.
             set_size_constraints(
                 message.l_param,
                 (widget.minimumWidth(), widget.minimumHeight()),
                 (widget.maximumWidth(), widget.maximumHeight()),
-                self.scale,
+                scale,
             )
             return True
         return False

@@ -13,6 +13,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Apply shared mixed-DPI size constraints during `WM_GETDPISCALEDSIZE`, before
+  `WM_DPICHANGED`, so an early minimum-size query cannot enlarge a window,
+  dialog or message box using the previous monitor's scale. Discard speculative
+  sizing on drag cancellation and avoid compounding repeated DPI queries.
 - Keep checked menu-icon backgrounds translucent instead of drawing opaque
   native button panels on acrylic menus.
 - Use equal padding on all four sides of the window title bar.
