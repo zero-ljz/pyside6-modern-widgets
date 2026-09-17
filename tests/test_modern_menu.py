@@ -6,11 +6,11 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QColor, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication
 
-from pyside6_modern_widgets import ModernMenu
+from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ModernMenu, palette_for_theme
 from pyside6_modern_widgets.modern_menu import _ACRYLIC_INPUT_ALPHA, _windows_acrylic_tint
 
 _APP = QApplication.instance() or QApplication([])
@@ -72,3 +72,40 @@ def test_acrylic_menu_keeps_blank_action_space_in_the_input_surface() -> None:
     assert _pixel_at_logical_position(menu, blank_point).alpha() == _ACRYLIC_INPUT_ALPHA
     assert _pixel_at_logical_position(menu, QPoint(0, 0)).alpha() == 0
     menu.hide()
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+@pytest.mark.parametrize("selected", [False, True])
+def test_fusion_checked_icon_has_translucent_backdrop_on_acrylic(theme, selected, monkeypatch):
+    # Exercise the Fusion checked-icon panel used by the application's theme,
+    # independently of the test host's default native style.
+    monkeypatch.setattr("pyside6_modern_widgets.modern_menu._base_style_name", lambda _: "fusion")
+    menu = ModernMenu()
+    menu.setPalette(palette_for_theme(theme))
+    # A transparent icon exposes the entire checked panel drawn by the base style.
+    pixmap = QPixmap(16, 16)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    action = menu.addAction(QIcon(pixmap), "Checked action")
+    action.setCheckable(True)
+    action.setChecked(True)
+    menu.show()
+    _APP.processEvents()
+    try:
+        menu._rounded_style.setNativeAcrylic(True)
+        if selected:
+            menu.setActiveAction(action)
+        rect = menu.actionGeometry(action)
+        rendered = menu.grab()
+        scale = rendered.devicePixelRatio()
+        image = rendered.toImage()
+        pixels = [
+            image.pixelColor(round(x * scale), round(y * scale))
+            for x in range(8, 20)
+            for y in range(rect.center().y() - 4, rect.center().y() + 5)
+        ]
+        assert all(0 < pixel.alpha() < 60 for pixel in pixels)
+        assert action.isChecked()
+        action.trigger()
+        assert not action.isChecked()
+    finally:
+        menu.close()

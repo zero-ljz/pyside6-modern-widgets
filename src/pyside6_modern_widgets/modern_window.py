@@ -83,6 +83,7 @@ from ._windows_window import (
 )
 from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
+from .modern_tool_bar import ModernToolBar
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -639,6 +640,9 @@ class ModernWindow(QWidget):
         menu_bars: Iterable[ModernMenuBar] = self.findChildren(ModernMenuBar)
         for menu_bar in menu_bars:
             menu_bar._apply_theme()
+        tool_bars: Iterable[ModernToolBar] = self.findChildren(ModernToolBar)
+        for tool_bar in tool_bars:
+            tool_bar._apply_theme()
 
     def _set_native_corner_preference(self, rounded: bool) -> None:
         self._surface_policy.apply_native_corner_preference(self, rounded)
@@ -1229,7 +1233,7 @@ class ModernWindow(QWidget):
         if len(args) == 1 and isinstance(args[0], QToolBar):
             toolbar = args[0]
         elif len(args) == 1 and isinstance(args[0], str):
-            toolbar = QToolBar(args[0], self)
+            toolbar = ModernToolBar(args[0], self)
         elif (
             len(args) == 2 and isinstance(args[0], Qt.ToolBarArea) and isinstance(args[1], QToolBar)
         ):
@@ -1248,7 +1252,8 @@ class ModernWindow(QWidget):
 
         self._ensure_compatibility_layout()
         assert self.toolbarLayout is not None
-        toolbar.setStyleSheet("QToolBar { background: transparent; border: none; }")
+        if not isinstance(toolbar, ModernToolBar):
+            toolbar.setStyleSheet("QToolBar { background: transparent; border: none; }")
         if area == Qt.ToolBarArea.TopToolBarArea:
             self.toolbarLayout.addWidget(toolbar)
         else:

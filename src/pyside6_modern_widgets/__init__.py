@@ -8,6 +8,7 @@ from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
 from .modern_notification import ModernNotification, NotificationKind
 from .modern_switch import ModernSwitch
+from .modern_tool_bar import ModernToolBar
 from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar
 from .navigation_view import NavigationView
@@ -41,6 +42,7 @@ __all__ = [
     "ModernNotification",
     "ModernSwitch",
     "ModernTheme",
+    "ModernToolBar",
     "ModernWindow",
     "NavigationPosition",
     "NavigationSidebar",

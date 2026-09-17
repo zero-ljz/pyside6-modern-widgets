@@ -14,7 +14,14 @@ python examples/navigation_view_example.py
 
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
 `ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**, and
-**Notifications** pages.
+**Notifications** and **Toolbar** pages.
+
+The **Toolbar** page compares native `QToolBar` and `ModernToolBar` side by side,
+using matching actions and icon sizes. The shared width slider, text-beside-icons
+option, and right-to-left toggle update both toolbars. Open each overflow to try
+a checkable action, disabled action and native/modern submenu. Appearance buttons
+on the page switch between System, Light, and Dark; the status line identifies
+which toolbar triggered an action.
 
 The **Notifications** page demonstrates desktop and in-window delivery, four
 severity levels, all four corners, screen selection, and a queue of eight updates.

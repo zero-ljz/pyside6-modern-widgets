@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add `ModernToolBar` with native toolbar geometry, themed controls, a `ModernMenu` popup,
+  shared Qt actions and widget-action factories, horizontal/vertical and RTL
+  layouts, theme inheritance and local overrides. Include a Toolbar gallery
+  page. `ModernWindow.addToolBar(title)` now creates this modern toolbar.
+
+### Fixed
+
+- Keep checked menu-icon backgrounds translucent instead of drawing opaque
+  native button panels on acrylic menus.
+- Use equal padding on all four sides of the window title bar.
+
 ## [0.5.8] - 2026-09-16
 
 ### Added

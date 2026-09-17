@@ -12,6 +12,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   opaque fallback elsewhere) plus rounded outer and selected-item
   backgrounds.
 - `ModernMenuBar`: a `QMenuBar` that creates `ModernMenu` drop-down menus.
+- `ModernToolBar`: a `QToolBar` with modern controls and an accessible overflow
+  button that opens a `ModernMenu` instead of Qt's default toolbar popup.
 - `ModernComboBox`: a modern `QComboBox` with rounded surfaces,
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `ModernSwitch`: an animated switch with system accent colors and native
@@ -227,13 +229,22 @@ notifications = NotificationManager(window)
 notifications.notify("Export complete", "Your report is ready.", kind="success")
 
 job = notifications.notify(
-    "Downloading", "Starting…", notification_id="download-1",
-    duration=0, progress=0, actions={"cancel": "Cancel"},
+    "Downloading",
+    "Starting…",
+    notification_id="download-1",
+    duration=0,
+    progress=0,
+    actions={"cancel": "Cancel"},
 )
 notifications.updateNotification(job, message="Downloading… 65%", progress=65)
 notifications.updateNotification(
-    job, title="Download complete", message="Your file is ready.",
-    kind="success", progress=None, actions={"open": "Open file"}, duration=5000,
+    job,
+    title="Download complete",
+    message="Your file is ready.",
+    kind="success",
+    progress=None,
+    actions={"open": "Open file"},
+    duration=5000,
 )
 notifications.actionTriggered.connect(
     lambda notification_id, action_id: print(notification_id, action_id)
@@ -369,6 +380,51 @@ menu_bar.addMenu("&File").addAction("Open")
 window.titleBar.addCustomWidget(menu_bar, align="left")
 window.setTitleVisible(False)
 ```
+
+### Modern toolbar
+
+`ModernToolBar` accepts `(parent)` or `(title, parent)` like `QToolBar`. It keeps
+the standard action, orientation, docking, icon-size and tool-button APIs. For
+title-bar tools:
+
+```python
+from PySide6.QtCore import QSize, Qt
+from pyside6_modern_widgets import ModernToolBar
+
+toolbar = ModernToolBar(window)
+toolbar.setMovable(False)
+toolbar.setFloatable(False)
+toolbar.setIconSize(QSize(18, 18))
+toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+toolbar.addAction(open_action)  # Reuse the QAction from your menu.
+toolbar.addAction(save_action)
+window.titleBar.addCustomWidget(toolbar, align="left")
+```
+
+`window.addToolBar("Tools")` also creates a `ModernToolBar`. Existing toolbar
+instances passed to `addToolBar()` keep their type.
+
+Button sizes, spacing, menu-arrow hit regions and overflow thresholds follow
+the native `QToolBar` style, including horizontal, vertical and right-to-left
+layouts. Modern drawing changes colors and rounded state backgrounds without
+adding padding or enlarging the extension button. Overflow actions retain their shortcuts,
+enabled/checked states, submenus and `actionTriggered` connections. Resizing or
+changing actions updates the popup; leading, trailing and repeated separators
+are removed. Windows 11 uses the same acrylic surface as `ModernMenu`, with an
+opaque fallback on other platforms.
+
+Colors follow the containing modern window or global theme; use
+`toolbar.setTheme(custom_theme)` for an override and `setTheme(None)` to restore
+inheritance. `overflowButton()` exposes the button for tooltip/localization
+changes; `overflowMenu()` exposes the managed popup. Do not add independent
+actions to that popup: its contents come from hidden toolbar actions.
+`addWidget()` controls remain owned by the toolbar and are not duplicated in
+the overflow. Use a `QWidgetAction` subclass implementing `createWidget()` when
+a control needs separate toolbar and popup instances; Qt can request additional
+instances for its internal layout.
+
+Run the navigation example's **Toolbar** page to vary the available width,
+toggle text labels and right-to-left layout, and try the overflow actions.
 
 `setTitleVisible()` controls only title text. `setIconVisible()` independently
 controls the title bar icon. Both default to `True` and preserve the actual

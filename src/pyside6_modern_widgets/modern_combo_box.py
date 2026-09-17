@@ -76,10 +76,7 @@ class _ComboBoxStyle(_RoundedMenuStyle):
         return result
 
     def _is_default_item(self, widget) -> bool:
-        return (
-            widget is not None
-            and widget is getattr(self._combo, "_default_view", None)
-        )
+        return widget is not None and widget is getattr(self._combo, "_default_view", None)
 
     def subElementRect(self, element, option, widget=None):
         if self._is_default_item(widget) and element in (
@@ -233,7 +230,9 @@ class _ComboBoxDelegate(QStyledItemDelegate):
         if index.data(Qt.ItemDataRole.AccessibleDescriptionRole) == "separator":
             self._combo._modern_style.drawControl(
                 QStyle.ControlElement.CE_MenuItem,
-                self._menu_option(option, index), painter, self._combo,
+                self._menu_option(option, index),
+                painter,
+                self._combo,
             )
             return
         super().paint(painter, option, index)

@@ -171,7 +171,9 @@ def test_checked_colors_survive_window_deactivation(switch):
         assert _track_color(switch) == accent
         pixmap = switch.grab()
         scale = pixmap.devicePixelRatio()
-        assert pixmap.toImage().pixelColor(round(30 * scale), round(11 * scale)) == QColor("#ffffff")
+        assert pixmap.toImage().pixelColor(round(30 * scale), round(11 * scale)) == QColor(
+            "#ffffff"
+        )
         switch.setEnabled(False)
         assert _track_color(switch) != accent
     finally:

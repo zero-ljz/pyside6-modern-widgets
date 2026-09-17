@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,7 +18,9 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPushButton,
+    QSlider,
     QStyle,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +34,7 @@ from pyside6_modern_widgets import (
     ModernMenuBar,
     ModernMessageBox,
     ModernSwitch,
+    ModernToolBar,
     ModernWindow,
     NavigationPosition,
     NavigationView,
@@ -79,6 +82,11 @@ class ExampleWindow(ModernWindow):
             self._create_menu_page(),
             "Menu",
             standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
+        )
+        self.navigation.addPage(
+            self._create_toolbar_page(),
+            "Toolbar",
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogContentsView),
         )
         self.navigation.addPage(
             self._create_combo_box_page(),
@@ -614,6 +622,93 @@ class ExampleWindow(ModernWindow):
         self.theme_mode_combo.blockSignals(True)
         self.theme_mode_combo.setCurrentIndex(self.theme_mode_combo.findData(mode.value))
         self.theme_mode_combo.blockSignals(False)
+
+    def _create_toolbar_page(self) -> QWidget:
+        page, layout = self._create_page("Toolbars")
+        hint = QLabel(
+            "Compare the same actions in native and modern toolbars. "
+            "Narrow both to compare overflow, or hover and click to compare button states."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addLayout(self._create_appearance_controls())
+        comparison = QGridLayout()
+        comparison.setHorizontalSpacing(24)
+        comparison.setVerticalSpacing(8)
+        layout.addLayout(comparison)
+        status = QLabel("Choose an action")
+        status.setWordWrap(True)
+        toolbars = []
+        for column, (label, toolbar_type, menu_type) in enumerate(
+            (("Native QToolBar", QToolBar, QMenu), ("ModernToolBar", ModernToolBar, ModernMenu))
+        ):
+            comparison.addWidget(QLabel(label), 0, column)
+            toolbar = toolbar_type("Editing", page)
+            toolbar.setMovable(False)
+            toolbar.setFloatable(False)
+            toolbar.setIconSize(QSize(18, 18))
+            toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+            toolbar.setFixedWidth(260)
+            for text, icon in (
+                ("Open", QStyle.StandardPixmap.SP_DialogOpenButton),
+                ("Save", QStyle.StandardPixmap.SP_DialogSaveButton),
+                ("Back", QStyle.StandardPixmap.SP_ArrowBack),
+                ("Forward", QStyle.StandardPixmap.SP_ArrowForward),
+            ):
+                toolbar.addAction(standard_icon(icon), text)
+            toolbar.addSeparator()
+            toggle = toolbar.addAction(
+                standard_icon(QStyle.StandardPixmap.SP_FileDialogListView), "Panel"
+            )
+            toggle.setCheckable(True)
+            toggle.setChecked(True)
+            toolbar.addAction(
+                standard_icon(QStyle.StandardPixmap.SP_DialogCancelButton), "Unavailable"
+            ).setEnabled(False)
+            more = menu_type("More", page)
+            more.addAction("Details")
+            more.setIcon(standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+            toolbar.addAction(more.menuAction())
+            toolbar.actionTriggered.connect(
+                lambda action, label=label: status.setText(f"{label}: {action.text()}")
+            )
+            more.triggered.connect(
+                lambda action, label=label: status.setText(f"{label}: {action.text()}")
+            )
+            comparison.addWidget(toolbar, 1, column, Qt.AlignmentFlag.AlignLeft)
+            comparison.setColumnMinimumWidth(column, 320)
+            comparison.setColumnStretch(column, 1)
+            toolbars.append(toolbar)
+        width_label = QLabel("Width of each toolbar: 260 px")
+        layout.addWidget(width_label)
+        width = QSlider(Qt.Orientation.Horizontal)
+        width.setRange(100, 320)
+        width.setValue(260)
+        width.valueChanged.connect(
+            lambda value: width_label.setText(f"Width of each toolbar: {value} px")
+        )
+        layout.addWidget(width)
+        text = QCheckBox("Show text beside icons")
+        layout.addWidget(text)
+        rtl = QCheckBox("Right-to-left layout")
+        for toolbar in toolbars:
+            width.valueChanged.connect(toolbar.setFixedWidth)
+            text.toggled.connect(
+                lambda checked, toolbar=toolbar: toolbar.setToolButtonStyle(
+                    Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+                    if checked
+                    else Qt.ToolButtonStyle.ToolButtonIconOnly
+                )
+            )
+            rtl.toggled.connect(
+                lambda checked, toolbar=toolbar: toolbar.setLayoutDirection(
+                    Qt.LayoutDirection.RightToLeft if checked else Qt.LayoutDirection.LeftToRight
+                )
+            )
+        layout.addWidget(rtl)
+        layout.addWidget(status)
+        layout.addStretch()
+        return page
 
     def _create_menu_page(self) -> QWidget:
         page, layout = self._create_page("Menus")

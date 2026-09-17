@@ -676,15 +676,15 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self._init_ui()
 
     def _init_ui(self) -> None:
-        vertical_padding = 2
+        padding = 5
         title_bar_height = max(
             self._metrics.title_bar_height,
-            self._metrics.title_button_size + vertical_padding * 2,
+            self._metrics.title_button_size + padding * 2,
         )
         self.setFixedHeight(title_bar_height)
 
         self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(5, vertical_padding, 5, vertical_padding)
+        self.main_layout.setContentsMargins(padding, padding, padding, padding)
         self.main_layout.setSpacing(5)
 
         self.iconLabel = _TitleBarIconLabel(self)

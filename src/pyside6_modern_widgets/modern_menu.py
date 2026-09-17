@@ -187,6 +187,20 @@ class _RoundedMenuStyle(QProxyStyle):
         return super().pixelMetric(metric, option, widget)
 
     def drawPrimitive(self, element, option, painter, widget=None) -> None:
+        if element == QStyle.PrimitiveElement.PE_PanelButtonCommand and isinstance(widget, QMenu):
+            # Fusion paints checked menu icons as sunken push buttons. That
+            # native panel becomes an opaque dark block on an acrylic surface.
+            # Retain the native icon/check state, replacing only its backdrop.
+            rect = QRectF(option.rect)
+            side = min(rect.width(), rect.height())
+            rect = QRectF(rect.center().x() - side / 2, rect.center().y() - side / 2, side, side)
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(_soft_line_color(option.palette, 20))
+            painter.drawRoundedRect(rect, self._radius, self._radius)
+            painter.restore()
+            return
         if element == QStyle.PrimitiveElement.PE_PanelMenu:
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
