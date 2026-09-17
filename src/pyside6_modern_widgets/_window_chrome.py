@@ -205,8 +205,10 @@ class WindowDpiState:
                 self.dpi = dpi
                 self._changed = True
         elif message.message == WM_GETMINMAXINFO:
-            scale = self._pending_scale if self._pending_scale is not None else (
-                self.scale if self._changed else None
+            scale = (
+                self._pending_scale
+                if self._pending_scale is not None
+                else (self.scale if self._changed else None)
             )
             if scale is None:
                 return False

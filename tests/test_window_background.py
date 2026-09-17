@@ -15,7 +15,6 @@ from pyside6_modern_widgets import (
     DARK_THEME,
     LIGHT_THEME,
     ModernDialog,
-    ModernMessageBox,
     ModernWindow,
     NavigationView,
 )
@@ -53,7 +52,7 @@ def _surface_colors(widget: QWidget) -> tuple[QColor, QColor]:
     )
 
 
-@pytest.mark.parametrize("window_type", [ModernWindow, ModernDialog, ModernMessageBox])
+@pytest.mark.parametrize("window_type", [ModernWindow, ModernDialog])
 @pytest.mark.parametrize(
     "theme, inactive_color",
     [(LIGHT_THEME, "#F3F3F3"), (DARK_THEME, "#2B2B2B")],

@@ -29,7 +29,7 @@ _APP = QApplication.instance() or QApplication([])
 def test_native_dpi_size_query_uses_target_bounds_before_dpi_change():
     # Exercise Qt's actual WM_GETDPISCALEDSIZE and WM_GETMINMAXINFO handlers in
     # a separate native process, without changing the user's display settings.
-    script = textwrap.dedent('''
+    script = textwrap.dedent("""
         import ctypes
         from ctypes import wintypes
         from PySide6.QtCore import Qt
@@ -76,12 +76,18 @@ def test_native_dpi_size_query_uses_target_bounds_before_dpi_change():
             expected = tuple(int(v * scale + 0.5) for v in minimum)
             assert (info.ptMinTrackSize.x, info.ptMinTrackSize.y) == expected, cls.__name__
             window.close()
-    ''')
+    """)
     result = subprocess.run(
         [sys.executable, "-c", script],
-        env={**os.environ, "QT_QPA_PLATFORM": "windows",
-             "QT_SCALE_FACTOR_ROUNDING_POLICY": "PassThrough"},
-        capture_output=True, text=True, timeout=30, check=False,
+        env={
+            **os.environ,
+            "QT_QPA_PLATFORM": "windows",
+            "QT_SCALE_FACTOR_ROUNDING_POLICY": "PassThrough",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Traceback" not in result.stderr, result.stderr
@@ -96,7 +102,8 @@ def test_target_constraints_apply_during_dpi_size_query_and_clear_on_cancel(
     module = window_module if window_class is ModernWindow else chrome_module
     monkeypatch.setattr(QWidget, "nativeEvent", lambda *_: (False, 0))
     monkeypatch.setattr(
-        QApplication, "highDpiScaleFactorRoundingPolicy",
+        QApplication,
+        "highDpiScaleFactorRoundingPolicy",
         lambda: Qt.HighDpiScaleFactorRoundingPolicy.PassThrough,
     )
     window = window_class()
@@ -127,10 +134,12 @@ def test_target_constraints_apply_during_dpi_size_query_and_clear_on_cancel(
                 handled, info = constraints()
                 assert handled == (True, 0)
                 assert (info.ptMinTrackSize.x, info.ptMinTrackSize.y) == (
-                    int(480 * dpi / 96 + 0.5), int(350 * dpi / 96 + 0.5),
+                    int(480 * dpi / 96 + 0.5),
+                    int(350 * dpi / 96 + 0.5),
                 )
                 assert (info.ptMaxTrackSize.x, info.ptMaxTrackSize.y) == (
-                    int(1000 * dpi / 96 + 0.5), int(800 * dpi / 96 + 0.5),
+                    int(1000 * dpi / 96 + 0.5),
+                    int(800 * dpi / 96 + 0.5),
                 )
             assert window._native_dpi.dpi == 168
             assert window._native_dpi.scale == 1.75
