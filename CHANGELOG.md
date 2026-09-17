@@ -15,6 +15,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restore minimized maximized windows reliably on Windows. Do not reapply
+  `WS_MAXIMIZE` while minimized: Qt retains `WindowMaximized` only as the restore
+  target. Standard Qt restore calls now recover the native window and preserve
+  its maximized state and normal geometry without application workarounds.
 - Apply native mixed-DPI tracking and size constraints to `Qt.Tool` modern
   windows without changing their taskbar, Alt+Tab or native-frame semantics.
 - Apply shared mixed-DPI size constraints during `WM_GETDPISCALEDSIZE`, before

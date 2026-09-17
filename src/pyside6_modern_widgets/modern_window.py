@@ -522,7 +522,9 @@ class ModernWindow(QWidget):
             system_menu=bool(flags & Qt.WindowType.WindowSystemMenuHint),
             minimizable=bool(flags & Qt.WindowType.WindowMinimizeButtonHint),
             maximizable=self._can_maximize(),
-            maximized=self.isMaximized() and not self.isFullScreen(),
+            # Qt retains WindowMaximized while minimized as the restore target.
+            # Reapplying WS_MAXIMIZE then can leave the HWND stuck minimized.
+            maximized=self.isMaximized() and not self.isMinimized() and not self.isFullScreen(),
             force_refresh=force_refresh,
         )
         self._native_frame_enabled = enabled and applied
