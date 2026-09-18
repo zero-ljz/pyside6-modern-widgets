@@ -1037,6 +1037,16 @@ class ModernWindow(QWidget):
         if self.isFullScreen():
             return HTCLIENT
 
+        # Qt replays a popup's outside press to the widget underneath it. Keep
+        # that entire gesture in the client area, even after the popup closes:
+        # a non-client release cannot clear Qt's pressed-widget state and leaves
+        # title-bar controls without hover until another client click.
+        if (
+            QApplication.activePopupWidget() is not None
+            or QApplication.mouseButtons() != Qt.MouseButton.NoButton
+        ):
+            return HTCLIENT
+
         if is_maximized is None:
             is_maximized = self.isMaximized()
         if not is_maximized:

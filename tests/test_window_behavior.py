@@ -16,6 +16,7 @@ from pyside6_modern_widgets import ModernDialog, ModernMenuBar, ModernWindow
 from pyside6_modern_widgets import modern_window as modern_window_module
 from pyside6_modern_widgets._window_chrome import _rounded_dpi_scale
 from pyside6_modern_widgets._windows_window import (
+    HTBOTTOMLEFT,
     HTCAPTION,
     HTCLIENT,
     HTMAXBUTTON,
@@ -341,6 +342,67 @@ def test_space_after_title_bar_menus_can_drag_window(monkeypatch, title_visible,
     assert menu_bar.actions()[0].menu().isVisible()
     menu_bar.actions()[0].menu().close()
     window.close()
+
+
+@pytest.mark.parametrize("maximized", [False, True])
+@pytest.mark.parametrize("dismiss_at", ["caption", "maximize", "resize"])
+def test_popup_dismissal_keeps_client_mouse_release(maximized, dismiss_at) -> None:
+    window = ModernWindow()
+    window.resize(900, 400)
+    window.setTitleVisible(False)
+    menu_bar = ModernMenuBar(window)
+    menu = menu_bar.addMenu("File")
+    menu.addAction("Open")
+    window.titleBar.addCustomWidget(menu_bar, align="left")
+    if maximized:
+        window.showMaximized()
+    else:
+        window.show()
+    _APP.processEvents()
+    window._native_frame_enabled = True
+    caption_x = (menu_bar.geometry().right() + window.titleBar.pinButton.x()) // 2
+    positions = {
+        "caption": (QPoint(caption_x, window.titleBar.height() // 2), HTCAPTION),
+        "maximize": (
+            window.titleBar.maximizeButton.mapTo(
+                window, window.titleBar.maximizeButton.rect().center()
+            ),
+            HTMAXBUTTON,
+        ),
+        "resize": (QPoint(1, window.height() - 1), None if maximized else HTBOTTOMLEFT),
+    }
+    position, idle_hit = positions[dismiss_at]
+    handle = window.windowHandle()
+    try:
+        assert window._native_hit_test_at(position, is_maximized=maximized) == idle_hit
+        menu.popup(menu_bar.mapToGlobal(menu_bar.rect().bottomLeft()))
+        _APP.processEvents()
+        assert _APP.activePopupWidget() is menu
+        assert window._native_hit_test_at(position, is_maximized=maximized) == HTCLIENT
+
+        # Send through QWidgetWindow so Qt closes the popup and replays the
+        # press, including its internal pressed-widget bookkeeping.
+        QTest.mousePress(handle, Qt.MouseButton.LeftButton, pos=position)
+        _APP.processEvents()
+        assert _APP.activePopupWidget() is None
+        assert _APP.mouseButtons() == Qt.MouseButton.LeftButton
+        # The popup has gone, but its replayed press still needs a CLIENT up.
+        assert window._native_hit_test_at(position, is_maximized=maximized) == HTCLIENT
+        QTest.mouseRelease(handle, Qt.MouseButton.LeftButton, pos=position)
+        assert _APP.mouseButtons() == Qt.MouseButton.NoButton
+        assert window._native_hit_test_at(position, is_maximized=maximized) == idle_hit
+
+        QTest.mouseMove(
+            handle, menu_bar.mapTo(window, menu_bar.actionGeometry(menu.menuAction()).center())
+        )
+        assert menu_bar.activeAction() is menu.menuAction()
+        button = window.titleBar.pinButton
+        QTest.mouseMove(handle, button.mapTo(window, button.rect().center()))
+        assert button.underMouse()
+    finally:
+        QTest.mouseRelease(handle, Qt.MouseButton.LeftButton, pos=position)
+        menu.close()
+        window.close()
 
 
 def test_title_stays_centered_when_menus_change_and_avoids_controls_when_narrow() -> None:
