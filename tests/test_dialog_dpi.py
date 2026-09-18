@@ -67,9 +67,10 @@ def test_native_dpi_size_query_uses_target_bounds_before_dpi_change():
             assert send(hwnd, WM_GETDPISCALEDSIZE, target, ctypes.addressof(size)) == 1
             info = _MinMaxInfo()
             send(hwnd, WM_GETMINMAXINFO, 0, ctypes.addressof(info))
-            expected = tuple(int(v * scale * target / dpi + 0.5) for v in minimum)
+            target_scale = scale * target / dpi
+            expected = tuple(int(v * min(scale, target_scale) + 0.5) for v in minimum)
             assert (info.ptMinTrackSize.x, info.ptMinTrackSize.y) == expected, cls.__name__
-            expected = tuple(int(v * scale * target / dpi + 0.5) for v in maximum)
+            expected = tuple(int(v * max(scale, target_scale) + 0.5) for v in maximum)
             assert (info.ptMaxTrackSize.x, info.ptMaxTrackSize.y) == expected, cls.__name__
             send(hwnd, WM_EXITSIZEMOVE, 0, 0)
             send(hwnd, WM_GETMINMAXINFO, 0, ctypes.addressof(info))
@@ -133,13 +134,16 @@ def test_target_constraints_apply_during_dpi_size_query_and_clear_on_cancel(
                 assert window.nativeEvent(b"windows_generic_MSG", 0) == (False, 0)
                 handled, info = constraints()
                 assert handled == (True, 0)
+                target_scale = 1.75 * dpi / 168
+                minimum_scale = min(1.75, target_scale)
+                maximum_scale = max(1.75, target_scale)
                 assert (info.ptMinTrackSize.x, info.ptMinTrackSize.y) == (
-                    int(480 * dpi / 96 + 0.5),
-                    int(350 * dpi / 96 + 0.5),
+                    int(480 * minimum_scale + 0.5),
+                    int(350 * minimum_scale + 0.5),
                 )
                 assert (info.ptMaxTrackSize.x, info.ptMaxTrackSize.y) == (
-                    int(1000 * dpi / 96 + 0.5),
-                    int(800 * dpi / 96 + 0.5),
+                    int(1000 * maximum_scale + 0.5),
+                    int(800 * maximum_scale + 0.5),
                 )
             assert window._native_dpi.dpi == 168
             assert window._native_dpi.scale == 1.75
@@ -162,6 +166,26 @@ def test_target_constraints_apply_during_dpi_size_query_and_clear_on_cancel(
         window.close()
         window.deleteLater()
         QCoreApplication.sendPostedEvents(window, QEvent.Type.DeferredDelete)
+
+
+def test_pending_low_to_high_dpi_does_not_enlarge_minimum_tracking_width(monkeypatch):
+    """Regression for a 768 logical minimum becoming 1344 before Qt changes DPR."""
+    monkeypatch.setattr(
+        QApplication,
+        "highDpiScaleFactorRoundingPolicy",
+        lambda: Qt.HighDpiScaleFactorRoundingPolicy.PassThrough,
+    )
+    window = QWidget()
+    window.setMinimumWidth(768)
+    state = chrome_module.WindowDpiState(dpi=96, scale=1.0)
+    state.handle_message(window, WindowsMessage(1, WM_GETDPISCALEDSIZE, 168, 0))
+    info = _MinMaxInfo()
+
+    assert state.handle_message(
+        window,
+        WindowsMessage(1, WM_GETMINMAXINFO, 0, ctypes.addressof(info)),
+    )
+    assert info.ptMinTrackSize.x == 768
 
 
 def test_message_box_dpi_constraints_follow_details_expansion(monkeypatch):

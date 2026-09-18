@@ -205,20 +205,22 @@ class WindowDpiState:
                 self.dpi = dpi
                 self._changed = True
         elif message.message == WM_GETMINMAXINFO:
-            scale = (
-                self._pending_scale
-                if self._pending_scale is not None
-                else (self.scale if self._changed else None)
-            )
-            if scale is None:
+            if self._pending_scale is not None and self.scale is not None:
+                # Qt still interprets native resize events using the source DPR
+                # until WM_DPICHANGED. Keep speculative bounds permissive so a
+                # target minimum cannot become a new logical window size.
+                minimum_scale = min(self.scale, self._pending_scale)
+                maximum_scale = max(self.scale, self._pending_scale)
+            elif self._changed and self.scale is not None:
+                minimum_scale = maximum_scale = self.scale
+            else:
                 return False
-            # Prevent the previous screen's physical minimum from enlarging
-            # Windows' correctly scaled rectangle during the native move loop.
             set_size_constraints(
                 message.l_param,
                 (widget.minimumWidth(), widget.minimumHeight()),
                 (widget.maximumWidth(), widget.maximumHeight()),
-                scale,
+                minimum_scale,
+                maximum_scale=maximum_scale,
             )
             return True
         return False

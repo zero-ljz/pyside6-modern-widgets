@@ -4,11 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-09-18
+
 ### Changed
 
 - Give `ModernComboBox` WinUI-style translucent control fills for light/dark themes
   and normal, hover, pressed and disabled states, including its default editable
   field, while retaining crisp text and arrows and the existing popup surface.
+
+### Fixed
+
+- Preserve title-bar control hover after dismissing a popup menu over native
+  caption, maximize or resize regions.
+- Share the native and portable system-window menu across `ModernWindow`,
+  `ModernDialog` and `ModernMessageBox`, including right-clicks across the full
+  title bar. Use the alternate surface palette for modern message boxes.
+- Prevent low-to-high DPI monitor moves from widening windows before
+  `WM_DPICHANGED` by keeping speculative minimum and maximum tracking bounds
+  permissive across both the source and target scales.
 
 ## [0.5.9] - 2026-09-18
 
@@ -395,7 +408,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.9...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.10...HEAD
+[0.5.10]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.6...v0.5.7

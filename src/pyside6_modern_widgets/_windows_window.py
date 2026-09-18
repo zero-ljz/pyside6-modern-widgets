@@ -130,14 +130,17 @@ def set_size_constraints(
     minimum: tuple[int, int],
     maximum: tuple[int, int],
     scale: float,
+    *,
+    maximum_scale: float | None = None,
 ) -> None:
     """Set frameless tracking bounds in physical pixels, preserving work-area fields."""
     info = ctypes.cast(l_param, ctypes.POINTER(_MinMaxInfo)).contents
+    maximum_scale = scale if maximum_scale is None else maximum_scale
     for axis, lower, upper in zip(("x", "y"), minimum, maximum):
         if lower > 0:
             setattr(info.ptMinTrackSize, axis, int(lower * scale + 0.5))
         if upper < 16777215:
-            setattr(info.ptMaxTrackSize, axis, int(upper * scale + 0.5))
+            setattr(info.ptMaxTrackSize, axis, int(upper * maximum_scale + 0.5))
 
 
 def read_message(address: int) -> WindowsMessage:
