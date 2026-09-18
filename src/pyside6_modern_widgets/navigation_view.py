@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QVBoxLayout,
     QWidget,
+    QWidgetItem,
 )
 
 from .navigation_sidebar import (
@@ -80,7 +81,9 @@ class NavigationView(QWidget):
         content_layout.setSpacing(0)
         self.stackedWidget = _CurrentPageStack(self.contentContainer)
         self.stackedWidget.installEventFilter(self)
-        content_layout.addWidget(self.stackedWidget)
+        # QWidgetItem normally bypasses QWidget.heightForWidth and queries its
+        # layout directly, which would bring hidden QStackedLayout pages back.
+        content_layout.addItem(_CurrentPageStackItem(self.stackedWidget))
 
         self._root_layout.addWidget(self._sidebar_host)
         self._root_layout.addWidget(self.contentContainer, 1)
@@ -284,6 +287,16 @@ class NavigationView(QWidget):
 class _CurrentPageStack(QStackedWidget):
     """Keep hidden pages from imposing their size hints on the active page."""
 
+    def hasHeightForWidth(self) -> bool:
+        current = self.currentWidget()
+        return current.hasHeightForWidth() if current is not None else False
+
+    def heightForWidth(self, width: int) -> int:
+        # QStackedLayout otherwise takes the tallest of *all* pages. Windows
+        # consults this during a DPI resize, even when minimumSizeHint is small.
+        current = self.currentWidget()
+        return current.heightForWidth(width) if current is not None else -1
+
     def sizeHint(self) -> QSize:
         current = self.currentWidget()
         return current.sizeHint() if current is not None else super().sizeHint()
@@ -293,3 +306,12 @@ class _CurrentPageStack(QStackedWidget):
         if current is None:
             return super().minimumSizeHint()
         return current.minimumSizeHint().expandedTo(current.minimumSize())
+
+
+class _CurrentPageStackItem(QWidgetItem):
+    def heightForWidth(self, width: int) -> int:
+        stack = self.widget()
+        return max(stack.minimumHeight(), min(stack.maximumHeight(), stack.heightForWidth(width)))
+
+    def minimumHeightForWidth(self, width: int) -> int:
+        return self.heightForWidth(width)
