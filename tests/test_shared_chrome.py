@@ -105,7 +105,10 @@ def test_shared_chrome_tracks_theme_geometry_and_window_state(window_class):
             assert chrome.background.geometry() == window.rect()
             assert chrome.overlay.geometry() == window.rect()
             assert chrome.title_bar.width() == window.width()
-            assert window.palette().color(QPalette.ColorRole.Window) == QColor(theme.surface)
+            expected_surface = (
+                theme.surface_alternate if isinstance(window, ModernMessageBox) else theme.surface
+            )
+            assert window.palette().color(QPalette.ColorRole.Window) == QColor(expected_surface)
             assert chrome.background._theme == chrome.overlay._theme == theme
         window.setCornerRadius(12)
         window.showFullScreen()

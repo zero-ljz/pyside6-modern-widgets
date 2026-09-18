@@ -6,6 +6,7 @@ from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
+from . import _system_menu
 from ._window_chrome import (
     BackgroundFrame,
     WindowChrome,
@@ -72,6 +73,9 @@ class ModernDialog(QDialog):
             metrics=self._metrics,
         )
         self._title_bar.setIcon(self.windowIcon())
+        self._system_menu_controller = _system_menu.SystemMenuController(
+            self, self._title_bar, self._metrics
+        )
 
         self._chrome_overlay = WindowChromeOverlay(
             self,
@@ -113,6 +117,9 @@ class ModernDialog(QDialog):
     def setCornerRadius(self, radius: int) -> None:
         self._corner_radius = max(0, radius)
         self.apply_window_style()
+
+    def showSystemWindowMenu(self, position: QPoint) -> bool:
+        return self._system_menu_controller.show(position)
 
     def apply_window_style(self) -> None:
         self._chrome.apply(self._theme, self._corner_radius)

@@ -763,6 +763,13 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
             self._layout_title()
         return handled
 
+    def contextMenuEvent(self, event) -> None:
+        show_system_menu = getattr(self.parent_window, "showSystemWindowMenu", None)
+        if show_system_menu is not None and show_system_menu(event.globalPos()):
+            event.accept()
+            return
+        super().contextMenuEvent(event)
+
     def _layout_title(self) -> None:
         if self._title_alignment == "left":
             return

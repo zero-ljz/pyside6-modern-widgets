@@ -344,6 +344,30 @@ def test_space_after_title_bar_menus_can_drag_window(monkeypatch, title_visible,
     window.close()
 
 
+def test_right_button_keeps_blank_title_bar_in_native_caption(monkeypatch) -> None:
+    window = ModernWindow()
+    window.resize(900, 400)
+    window.show()
+    _APP.processEvents()
+    window._native_frame_enabled = True
+    position = QPoint(400, window.titleBar.height() // 2)
+
+    class RightButtonState:
+        @staticmethod
+        def activePopupWidget():
+            return None
+
+        @staticmethod
+        def mouseButtons():
+            return Qt.MouseButton.RightButton
+
+    monkeypatch.setattr(modern_window_module, "QApplication", RightButtonState)
+    try:
+        assert window._native_hit_test_at(position) == HTCAPTION
+    finally:
+        window.close()
+
+
 @pytest.mark.parametrize("maximized", [False, True])
 @pytest.mark.parametrize("dismiss_at", ["caption", "maximize", "resize"])
 def test_popup_dismissal_keeps_client_mouse_release(maximized, dismiss_at) -> None:

@@ -3,6 +3,17 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtWidgets import QWidget
+
+from ._windows_window import screen_position_from_client
+
+if TYPE_CHECKING:
+    from ._window_chrome import WindowTitleBar
+    from .theme import ModernMetrics
 
 SC_SIZE = 0xF000
 SC_MOVE = 0xF010
@@ -10,6 +21,117 @@ SC_MINIMIZE = 0xF020
 SC_MAXIMIZE = 0xF030
 SC_CLOSE = 0xF060
 SC_RESTORE = 0xF120
+
+
+class SystemMenuController:
+    """Expose one system-window menu implementation to every chrome host."""
+
+    def __init__(
+        self,
+        window: QWidget,
+        title_bar: WindowTitleBar,
+        metrics: ModernMetrics,
+        *,
+        can_resize: Callable[[], bool] | None = None,
+        can_maximize: Callable[[], bool] | None = None,
+    ) -> None:
+        self.window = window
+        self.title_bar = title_bar
+        self.metrics = metrics
+        self._can_resize_override = can_resize
+        self._can_maximize_override = can_maximize
+
+    def show(self, position: QPoint) -> bool:
+        if not self.window.windowFlags() & Qt.WindowType.WindowSystemMenuHint:
+            return False
+        local_position = self.window.mapFromGlobal(position)
+        native_position = screen_position_from_client(
+            int(self.window.winId()),
+            local_position.x(),
+            local_position.y(),
+            self.window.width(),
+            self.window.height(),
+        )
+        if native_position is not None and self.show_native(native_position):
+            return True
+        self.show_portable(position)
+        return True
+
+    def show_native(self, screen_position: tuple[int, int]) -> bool:
+        flags = self.window.windowFlags()
+        if not flags & Qt.WindowType.WindowSystemMenuHint:
+            return False
+        window_id = int(self.window.winId())
+        move_position = None
+        if self.title_bar.isVisible():
+            title_center = QPoint(
+                self.window.width() // 2,
+                self.title_bar.geometry().center().y(),
+            )
+            move_position = screen_position_from_client(
+                window_id,
+                title_center.x(),
+                title_center.y(),
+                self.window.width(),
+                self.window.height(),
+            )
+        return show_native_system_menu(
+            window_id,
+            screen_position,
+            move_position=move_position,
+            is_minimized=self.window.isMinimized(),
+            is_maximized=self.window.isMaximized(),
+            can_resize=self.can_resize(),
+            can_minimize=bool(flags & Qt.WindowType.WindowMinimizeButtonHint),
+            can_maximize=self.can_maximize(),
+            can_close=bool(flags & Qt.WindowType.WindowCloseButtonHint),
+        )
+
+    def show_portable(self, position: QPoint) -> None:
+        from .modern_menu import ModernMenu
+
+        flags = self.window.windowFlags()
+        can_minimize = bool(flags & Qt.WindowType.WindowMinimizeButtonHint)
+        can_close = bool(flags & Qt.WindowType.WindowCloseButtonHint)
+        menu = ModernMenu(self.window, metrics=self.metrics)
+        menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        restore_action = menu.addAction("还原", self.window.showNormal)
+        minimize_action = menu.addAction("最小化", self.window.showMinimized)
+        maximize_action = menu.addAction("最大化", self.window.showMaximized)
+        menu.addSeparator()
+        close_action = menu.addAction("关闭", self.window.close)
+
+        is_normal = not self.window.isMinimized() and not self.window.isMaximized()
+        restore_action.setEnabled(not is_normal)
+        minimize_action.setEnabled(can_minimize and not self.window.isMinimized())
+        maximize_action.setEnabled(self.can_maximize() and not self.window.isMaximized())
+        close_action.setEnabled(can_close)
+        self.window._portable_system_menu = menu  # type: ignore[attr-defined]
+        menu.popup(position)
+
+    def can_resize(self) -> bool:
+        flags = self.window.windowFlags()
+        if flags & Qt.WindowType.MSWindowsFixedSizeDialogHint:
+            return False
+        if self._can_resize_override is not None:
+            return self._can_resize_override()
+        return (
+            self.window.minimumWidth() < self.window.maximumWidth()
+            or self.window.minimumHeight() < self.window.maximumHeight()
+        )
+
+    def can_maximize(self) -> bool:
+        flags = self.window.windowFlags()
+        if flags & Qt.WindowType.MSWindowsFixedSizeDialogHint:
+            return False
+        if self._can_maximize_override is not None:
+            return self._can_maximize_override()
+        return (
+            bool(flags & Qt.WindowType.WindowMaximizeButtonHint)
+            and not self.window.isFullScreen()
+            and self.window.minimumWidth() < self.window.maximumWidth()
+            and self.window.minimumHeight() < self.window.maximumHeight()
+        )
 
 
 def show_native_system_menu(

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QMessageBox, QWidget
 
+from . import _system_menu
 from ._window_chrome import (
     BackgroundFrame,
     WindowChrome,
@@ -70,6 +72,9 @@ class ModernMessageBox(QMessageBox):
         self._background_frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._title_bar = WindowTitleBar(self, theme=self._theme, metrics=metrics)
         self._title_bar.setIcon(self.windowIcon())
+        self._system_menu_controller = _system_menu.SystemMenuController(
+            self, self._title_bar, self._metrics
+        )
         self._chrome_overlay = WindowChromeOverlay(
             self, theme=self._theme, corner_radius=paint_radius
         )
@@ -100,8 +105,20 @@ class ModernMessageBox(QMessageBox):
         self._corner_radius = max(0, radius)
         self.apply_window_style()
 
+    def showSystemWindowMenu(self, position: QPoint) -> bool:
+        return self._system_menu_controller.show(position)
+
     def apply_window_style(self) -> None:
         self._chrome.apply(self._theme, self._corner_radius)
+        palette = self.palette()
+        background = QColor(self._theme.surface_alternate)
+        for group in (
+            QPalette.ColorGroup.Active,
+            QPalette.ColorGroup.Inactive,
+            QPalette.ColorGroup.Disabled,
+        ):
+            palette.setColor(group, QPalette.ColorRole.Window, background)
+        self.setPalette(palette)
 
     def _refresh_native_surface(self) -> None:
         """Apply Windows 11 acrylic and rounded corners when the native handle exists."""

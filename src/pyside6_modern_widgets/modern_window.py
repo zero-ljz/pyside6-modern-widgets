@@ -72,7 +72,6 @@ from ._windows_window import (
     read_message,
     redraw_native_window,
     restore_native_window,
-    screen_position_from_client,
     screen_position_from_l_param,
     set_mouse_capture,
     set_native_frame,
@@ -81,7 +80,6 @@ from ._windows_window import (
     track_non_client_mouse_leave,
     window_dpi,
 )
-from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
 from .modern_tool_bar import ModernToolBar
 from .theme import (
@@ -189,10 +187,6 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         button.applyTheme(self._theme, self._metrics)
         button.clicked.connect(callback)
         return button
-
-    def contextMenuEvent(self, event) -> None:
-        self.parent_window.showSystemWindowMenu(event.globalPos())
-        event.accept()
 
     def syncWindowFlags(self, flags: Qt.WindowType) -> bool:
         window_type = flags & Qt.WindowType.WindowType_Mask
@@ -398,6 +392,13 @@ class ModernWindow(QWidget):
             metrics=self._metrics,
         )
         self.titleBar = title_bar
+        self._system_menu_controller = _system_menu.SystemMenuController(
+            self,
+            title_bar,
+            self._metrics,
+            can_resize=self._is_resizable,
+            can_maximize=self._can_maximize,
+        )
         self.chromeOverlay = WindowChromeOverlay(
             self,
             theme=self._theme,
@@ -601,70 +602,14 @@ class ModernWindow(QWidget):
     def _set_native_corner_preference(self, rounded: bool) -> None:
         self._surface_policy.apply_native_corner_preference(self, rounded)
 
-    def showSystemWindowMenu(self, position: QPoint) -> None:
-        flags = self.windowFlags()
-        if not flags & Qt.WindowType.WindowSystemMenuHint:
-            return
-        local_position = self.mapFromGlobal(position)
-        native_position = screen_position_from_client(
-            int(self.winId()),
-            local_position.x(),
-            local_position.y(),
-            self.width(),
-            self.height(),
-        )
-        if native_position is not None and self._show_native_system_menu(native_position):
-            return
-        self._show_portable_system_menu(position)
+    def showSystemWindowMenu(self, position: QPoint) -> bool:
+        return self._system_menu_controller.show(position)
 
     def _show_native_system_menu(self, screen_position: tuple[int, int]) -> bool:
-        flags = self.windowFlags()
-        if not flags & Qt.WindowType.WindowSystemMenuHint:
-            return False
-        window_id = int(self.winId())
-        move_position = None
-        if self.titleBar is not None and self.titleBar.isVisible():
-            title_center = QPoint(self.width() // 2, self.titleBar.geometry().center().y())
-            move_position = screen_position_from_client(
-                window_id,
-                title_center.x(),
-                title_center.y(),
-                self.width(),
-                self.height(),
-            )
-        return _system_menu.show_native_system_menu(
-            window_id,
-            screen_position,
-            move_position=move_position,
-            is_minimized=self.isMinimized(),
-            is_maximized=self.isMaximized(),
-            can_resize=self._is_resizable(),
-            can_minimize=bool(flags & Qt.WindowType.WindowMinimizeButtonHint),
-            can_maximize=self._can_maximize(),
-            can_close=bool(flags & Qt.WindowType.WindowCloseButtonHint),
-        )
+        return self._system_menu_controller.show_native(screen_position)
 
     def _show_portable_system_menu(self, position: QPoint) -> None:
-        flags = self.windowFlags()
-        can_minimize = bool(flags & Qt.WindowType.WindowMinimizeButtonHint)
-        can_maximize = self._can_maximize()
-        can_close = bool(flags & Qt.WindowType.WindowCloseButtonHint)
-
-        menu = ModernMenu(self, metrics=self._metrics)
-        menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        restore_action = menu.addAction("还原", self.showNormal)
-        minimize_action = menu.addAction("最小化", self.showMinimized)
-        maximize_action = menu.addAction("最大化", self.showMaximized)
-        menu.addSeparator()
-        close_action = menu.addAction("关闭", self.close)
-
-        is_normal = not self.isMinimized() and not self.isMaximized()
-        restore_action.setEnabled(not is_normal)
-        minimize_action.setEnabled(can_minimize and not self.isMinimized())
-        maximize_action.setEnabled(can_maximize and not self.isMaximized())
-        close_action.setEnabled(can_close)
-        self._portable_system_menu = menu
-        menu.popup(position)
+        self._system_menu_controller.show_portable(position)
 
     def theme(self) -> ModernTheme:
         return self._theme
@@ -1043,7 +988,7 @@ class ModernWindow(QWidget):
         # title-bar controls without hover until another client click.
         if (
             QApplication.activePopupWidget() is not None
-            or QApplication.mouseButtons() != Qt.MouseButton.NoButton
+            or QApplication.mouseButtons() & Qt.MouseButton.LeftButton
         ):
             return HTCLIENT
 
