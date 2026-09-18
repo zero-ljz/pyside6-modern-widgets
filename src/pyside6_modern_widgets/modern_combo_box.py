@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QMargins, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFrame,
+    QLineEdit,
     QStyle,
     QStyledItemDelegate,
     QStyleOption,
@@ -32,6 +33,10 @@ from .theme import (
     palette_for_theme,
     theme_manager,
 )
+
+# WinUI ControlFillColor: default, pointer over, pressed, disabled (ARGB).
+_CONTROL_FILLS_LIGHT = ("#B3FFFFFF", "#80F9F9F9", "#4DF9F9F9", "#4DF9F9F9")
+_CONTROL_FILLS_DARK = ("#0FFFFFFF", "#15FFFFFF", "#08FFFFFF", "#0BFFFFFF")
 
 
 class _ComboBoxStyle(_RoundedMenuStyle):
@@ -100,6 +105,7 @@ class _ComboBoxStyle(_RoundedMenuStyle):
         radius = 0 if option.editable else self._radius
         enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
         pressed = bool(option.state & QStyle.StateFlag.State_On)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
         # Fusion treats an editable combo as a line edit (any focus), while
         # its non-editable button only highlights keyboard focus.
         focused = (
@@ -117,21 +123,34 @@ class _ComboBoxStyle(_RoundedMenuStyle):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         surface_role = QPalette.ColorRole.Base if option.editable else QPalette.ColorRole.Button
-        painter.setBrush(option.palette.brush(surface_role))
-        painter.drawRoundedRect(rect, radius, radius)
-        if enabled and (pressed or option.state & QStyle.StateFlag.State_MouseOver):
+        fills = (
+            _CONTROL_FILLS_DARK if QColor(theme.surface).lightness() < 128 else _CONTROL_FILLS_LIGHT
+        )
+        state_index = 3 if not enabled else 2 if pressed else 1 if hovered else 0
+        surface = QBrush(QColor(fills[state_index]))
+        idle_surface = QBrush(QColor(fills[0 if enabled else 3]))
+        if self._combo._palette_override.isBrushSet(
+            option.palette.currentColorGroup(), surface_role
+        ):
+            surface = idle_surface = option.palette.brush(surface_role)
+
+        surfaces = [(QRectF(option.rect), surface)]
+        if option.editable and enabled and (pressed or hovered):
+            # Keep editor fill stable while the arrow button changes state.
+            # Paint adjacent regions once each, so translucent fills do not stack.
+            field_rect = QRectF(option.rect)
+            button_rect = QRectF(option.rect)
+            if option.direction == Qt.LayoutDirection.RightToLeft:
+                button_rect.setRight(arrow_rect.right() + 1)
+                field_rect.setLeft(button_rect.right())
+            else:
+                button_rect.setLeft(arrow_rect.left())
+                field_rect.setRight(button_rect.left())
+            surfaces = [(field_rect, idle_surface), (button_rect, surface)]
+        for clip_rect, brush in surfaces:
             painter.save()
-            if option.editable:
-                # The native line edit paints an opaque rectangular base. Keep
-                # interaction tint on the button so it cannot outline that box.
-                button_rect = QRectF(option.rect)
-                if option.direction == Qt.LayoutDirection.RightToLeft:
-                    button_rect.setRight(arrow_rect.right() + 1)
-                else:
-                    button_rect.setLeft(arrow_rect.left())
-                painter.setClipRect(button_rect, Qt.ClipOperation.IntersectClip)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(theme.control_pressed if pressed else theme.control_hover))
+            painter.setClipRect(clip_rect, Qt.ClipOperation.IntersectClip)
+            painter.setBrush(brush)
             painter.drawRoundedRect(rect, radius, radius)
             painter.restore()
 
@@ -259,6 +278,7 @@ class ModernComboBox(QComboBox):
         self._styled_theme: ModernTheme | None = None
         self._applying_theme = False
         self._palette_override = QPalette()
+        self._default_line_edit: QLineEdit | None = None
         self._theme_ancestors: list[QWidget] = []
         self._popup: QWidget | None = None
         self._popup_margins: QMargins | None = None
@@ -288,6 +308,29 @@ class ModernComboBox(QComboBox):
         """Override the theme locally, or pass None to resume inheritance."""
         self._theme_override = theme
         self._apply_theme()
+
+    def setEditable(self, editable: bool) -> None:
+        was_editable = self.isEditable()
+        super().setEditable(editable)
+        if editable and not was_editable:
+            self._default_line_edit = self.lineEdit()
+        self._refresh_editor_surface()
+
+    def _refresh_editor_surface(self) -> None:
+        editor = self.lineEdit()
+        if editor is not None and editor is self._default_line_edit and self.hasFrame():
+            # The combo paints the entire translucent surface. Qt's editor must
+            # not cover it with a second base fill. Leave custom editors alone.
+            palette = editor.palette()
+            palette.setColor(QPalette.ColorRole.Base, Qt.GlobalColor.transparent)
+            editor.setPalette(palette)
+
+    def setFrame(self, enabled: bool) -> None:
+        super().setFrame(enabled)
+        editor = self.lineEdit()
+        if editor is not None and editor is self._default_line_edit:
+            editor.setPalette(self.palette())
+        self._refresh_editor_surface()
 
     def _on_theme_changed(self, _theme: ModernTheme) -> None:
         self._apply_theme()
@@ -357,6 +400,7 @@ class ModernComboBox(QComboBox):
             palette = self._palette_override.resolve(themed)
             palette.setResolveMask(self._palette_override.resolveMask() | themed.resolveMask())
             super().setPalette(palette)
+            self._refresh_editor_surface()
             # Qt snapshots the container palette when opening; keep the owned
             # acrylic surface in sync without assigning a palette to the view.
             self.view().window().setPalette(self.palette())

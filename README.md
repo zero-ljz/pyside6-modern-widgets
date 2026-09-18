@@ -90,6 +90,10 @@ combo.currentIndexChanged.connect(lambda index: print(index, combo.currentData()
 combo.setEditable(True)
 ```
 
+The control uses WinUI-style translucent fills for each theme and interaction state:
+the default is white at about 70% opacity in light mode and 6% in dark mode.
+The default editor shares the control surface; text, arrows and borders remain crisp.
+Explicit surface palette brushes and custom line edits keep their own painting.
 The control uses a full focus border with Qt Fusion's focus timing and system
 highlight-derived color: keyboard focus for non-editable combos, and input focus
 for editable combos. Its popup shares `ModernMenu`'s

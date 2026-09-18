@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Give `ModernComboBox` WinUI-style translucent control fills for light/dark themes
+  and normal, hover, pressed and disabled states, including its default editable
+  field, while retaining crisp text and arrows and the existing popup surface.
+
 ## [0.5.9] - 2026-09-18
 
 ### Removed
