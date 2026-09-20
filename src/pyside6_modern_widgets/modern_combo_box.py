@@ -62,7 +62,10 @@ class _ComboBoxStyle(_RoundedMenuStyle):
     def sizeFromContents(self, content_type, option, size, widget=None):
         result = super().sizeFromContents(content_type, option, size, widget)
         if content_type == QStyle.ContentsType.CT_ComboBox:
-            result.setHeight(result.height() + 2)
+            native_style = QApplication.style()
+            if native_style is not self:
+                native_size = native_style.sizeFromContents(content_type, option, size, widget)
+                result.setHeight(native_size.height())
         if content_type == QStyle.ContentsType.CT_ItemViewItem:
             result.setHeight(result.height() + _MENU_ITEM_EXTRA_HEIGHT)
             if self._is_default_item(widget):

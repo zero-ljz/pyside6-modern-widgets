@@ -19,7 +19,7 @@ class ModernSwitch(QCheckBox):
     """A switch accepting ``(parent)`` or ``(text, parent)`` like QCheckBox.
 
     Use the standard checked state and ``toggled(bool)`` signal. The default
-    track is 36 by 18 logical pixels, independent of host fonts and styles.
+    track is 32 by 16 logical pixels, independent of host fonts and styles.
     The widget grows vertically when needed to fit its label.
     The enabled track reads Qt's system Accent role unless the theme overrides it.
     """
@@ -60,8 +60,8 @@ class ModernSwitch(QCheckBox):
         self.update()
 
     def sizeHint(self) -> QSize:
-        height = 22
-        width = 42
+        height = 20
+        width = 38
         if self.text():
             label = self.fontMetrics().size(Qt.TextFlag.TextShowMnemonic, self.text())
             width += 8 + label.width()
@@ -156,7 +156,7 @@ class ModernSwitch(QCheckBox):
             border_color = QColor(theme.border)
             thumb_color = QColor(theme.text_disabled)
 
-        height = max(0, min(18, self.height() - 4))
+        height = max(0, min(16, self.height() - 4))
         track = QRectF(3, (self.height() - height) / 2, height * 2, height)
         rtl = self.layoutDirection() == Qt.LayoutDirection.RightToLeft
         if rtl:

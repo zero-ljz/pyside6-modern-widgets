@@ -169,6 +169,9 @@ Run `python examples/navigation_view_example.py` and open **Combo box** for a
 native/modern comparison with editable, disabled, placeholder, icon, long-list
 and right-to-left examples.
 
+The closed control follows the current native Qt combo-box height. Popup rows
+retain the roomier modern menu spacing.
+
 ## Modern switch
 
 `ModernSwitch` accepts the same text/parent constructor forms as `QCheckBox` and
@@ -183,8 +186,8 @@ switch.setChecked(True)
 switch.toggled.connect(lambda enabled: print("Notifications:", enabled))
 ```
 
-The capsule stays 36 by 18 logical pixels regardless of font or native style;
-Qt still scales it for the display DPI. The minimum widget height is 22 logical
+The capsule stays 32 by 16 logical pixels regardless of font or native style;
+Qt still scales it for the display DPI. The minimum widget height is 20 logical
 pixels, growing to fit larger labels without enlarging the track. Layouts remain
 free to resize the widget. Labels, keyboard focus, hover/pressed states, disabled states,
 and right-to-left layouts are supported. The focus outline appears during keyboard

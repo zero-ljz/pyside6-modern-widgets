@@ -100,8 +100,8 @@ def test_track_stays_compact_and_large_labels_fit(switch, point_size):
     font = switch.font()
     font.setPointSize(point_size)
     switch.setFont(font)
-    assert switch.sizeHint().width() == 42
-    assert switch.sizeHint().height() == 22
+    assert switch.sizeHint().width() == 38
+    assert switch.sizeHint().height() == 20
     switch.setText("Enable notifications")
     assert switch.sizeHint().height() >= switch.fontMetrics().height()
     assert switch.minimumSizeHint() == switch.sizeHint()
@@ -114,13 +114,13 @@ def test_track_stays_compact_and_large_labels_fit(switch, point_size):
     pixels = [
         (x, y)
         for y in range(image.height())
-        for x in range(round(42 * scale))
+        for x in range(round(38 * scale))
         if image.pixelColor(x, y) == QColor("#ff0000")
     ]
     width = (max(x for x, y in pixels) - min(x for x, y in pixels) + 1) / scale
     height = (max(y for x, y in pixels) - min(y for x, y in pixels) + 1) / scale
-    assert 34 <= width <= 38
-    assert 16 <= height <= 20
+    assert 30 <= width <= 34
+    assert 14 <= height <= 18
 
 
 def _track_color(switch):
@@ -171,7 +171,7 @@ def test_checked_colors_survive_window_deactivation(switch):
         assert _track_color(switch) == accent
         pixmap = switch.grab()
         scale = pixmap.devicePixelRatio()
-        assert pixmap.toImage().pixelColor(round(30 * scale), round(11 * scale)) == QColor(
+        assert pixmap.toImage().pixelColor(round(27 * scale), round(10 * scale)) == QColor(
             "#ffffff"
         )
         switch.setEnabled(False)

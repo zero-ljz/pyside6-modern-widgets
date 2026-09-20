@@ -12,6 +12,13 @@ All notable changes to this project are documented in this file.
 - Add complete English and Simplified Chinese catalogs to both runnable examples,
   including Qt standard dialog translations selected from the system locale.
 
+### Changed
+
+- Reduce the default `ModernSwitch` track to 32 by 16 logical pixels and its
+  minimum height to 20 pixels so it aligns better with native form controls.
+- Match the closed `ModernComboBox` height to the current native Qt combo-box
+  height without changing its modern popup row spacing.
+
 ### Fixed
 
 - Keep hidden navigation pages out of height-for-width calculations, preventing

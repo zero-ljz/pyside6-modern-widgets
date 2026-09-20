@@ -517,7 +517,7 @@ def test_open_state_changes_control_surface(combos, editable):
 
 
 @pytest.mark.parametrize("editable", [False, True])
-def test_closed_layout_remains_native_with_only_two_extra_pixels(combos, editable):
+def test_closed_layout_uses_native_height_and_geometry(combos, editable):
     native, modern = combos
     style = QStyleFactory.create("Fusion")
     style.setParent(native)
@@ -525,7 +525,7 @@ def test_closed_layout_remains_native_with_only_two_extra_pixels(combos, editabl
     for combo in combos:
         combo.setEditable(editable)
     assert modern.sizeHint().width() == native.sizeHint().width()
-    assert modern.sizeHint().height() == native.sizeHint().height() + 2
+    assert modern.sizeHint().height() == native.sizeHint().height()
     for direction in (Qt.LayoutDirection.LeftToRight, Qt.LayoutDirection.RightToLeft):
         for sub_control in (
             QStyle.SubControl.SC_ComboBoxEditField,
