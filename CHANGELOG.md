@@ -25,6 +25,8 @@ All notable changes to this project are documented in this file.
 
 - Keep hidden navigation pages out of height-for-width calculations, preventing
   the Home page from making the window taller during mixed-DPI monitor drags.
+- Suppress native radio bullets when pressing or switching exclusive `ModernMenu`
+  items so only clean modern check marks are shown.
 
 ## [0.5.10] - 2026-09-18
 

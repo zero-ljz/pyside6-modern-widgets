@@ -311,12 +311,12 @@ class _RoundedMenuStyle(QProxyStyle):
             and option.state & QStyle.StateFlag.State_Selected
             and self._radius > 0
         )
-        exclusive_checked = bool(
+        is_exclusive = bool(
             menu_option is not None
             and menu_option.checkType == QStyleOptionMenuItem.CheckType.Exclusive
-            and menu_option.checked
         )
-        if selected or exclusive_checked:
+        exclusive_checked = bool(is_exclusive and menu_option.checked)
+        if selected or is_exclusive:
             native_option = QStyleOptionMenuItem(option)
         else:
             native_option = None
@@ -324,8 +324,9 @@ class _RoundedMenuStyle(QProxyStyle):
             self.drawSelection(option, painter, widget)
             assert native_option is not None
             native_option.state &= ~QStyle.StateFlag.State_Selected  # type: ignore[attr-defined]
-        if exclusive_checked:
+        if is_exclusive:
             assert native_option is not None
+            native_option.checkType = QStyleOptionMenuItem.CheckType.NotCheckable  # type: ignore[attr-defined]
             native_option.checked = False  # type: ignore[attr-defined]
         if native_option is not None:
             super().drawControl(element, native_option, painter, widget)

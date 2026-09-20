@@ -98,7 +98,8 @@ def test_submenu_indicator_is_an_outlined_chevron(element, tip_offset):
     assert image.pixelColor(center.x() - tip_offset, center.y()).alpha() == 0
 
 
-def test_exclusive_menu_indicator_is_a_check_mark():
+@pytest.mark.parametrize("sunken", [False, True])
+def test_exclusive_menu_indicator_checked_is_a_check_mark(sunken: bool):
     menu = ModernMenu()
     group = QActionGroup(menu)
     group.setExclusive(True)
@@ -110,6 +111,8 @@ def test_exclusive_menu_indicator_is_a_check_mark():
     menu.initStyleOption(option, action)
     option.rect = QRect(0, 0, 100, 24)
     option.text = ""
+    if sunken:
+        option.state |= QStyle.StateFlag.State_Sunken
     image = QImage(100, 24, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
 
@@ -121,6 +124,37 @@ def test_exclusive_menu_indicator_is_a_check_mark():
     assert image.pixelColor(12, 12).alpha() > 0
     assert image.pixelColor(18, 10).alpha() > 0
     assert image.pixelColor(12, 9).alpha() == 0
+
+
+@pytest.mark.parametrize("sunken", [False, True])
+@pytest.mark.parametrize("selected", [False, True])
+def test_exclusive_menu_indicator_unchecked_has_no_dot(sunken: bool, selected: bool):
+    menu = ModernMenu()
+    group = QActionGroup(menu)
+    group.setExclusive(True)
+    action = menu.addAction("Choice")
+    action.setCheckable(True)
+    action.setChecked(False)
+    group.addAction(action)
+    option = QStyleOptionMenuItem()
+    menu.initStyleOption(option, action)
+    option.rect = QRect(0, 0, 100, 24)
+    option.text = ""
+    if sunken:
+        option.state |= QStyle.StateFlag.State_Sunken
+    if selected:
+        option.state |= QStyle.StateFlag.State_Selected
+    image = QImage(100, 24, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(image)
+    menu.style().drawControl(QStyle.ControlElement.CE_MenuItem, option, painter, menu)
+    painter.end()
+
+    assert option.checkType == QStyleOptionMenuItem.CheckType.Exclusive
+    # An unchecked exclusive item must never render a native bullet, even when pressed or selected
+    assert image.pixelColor(15, 12).alpha() < 50
+    assert image.pixelColor(12, 12).alpha() < 50
 
 
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
