@@ -25,7 +25,9 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyledItemDelegate,
     QStyleFactory,
+    QStyleOption,
     QStyleOptionComboBox,
+    QWidget,
 )
 
 from pyside6_modern_widgets import (
@@ -66,6 +68,45 @@ def test_construction_with_application_stylesheet_has_no_callback_errors(monkeyp
             widget.deleteLater()
         _APP.setStyleSheet(previous)
         _APP.processEvents()
+
+
+@pytest.mark.parametrize(
+    ("element", "tip_y", "empty_y"),
+    [
+        (QStyle.PrimitiveElement.PE_IndicatorArrowUp, 3, 8),
+        (QStyle.PrimitiveElement.PE_IndicatorArrowDown, 6, 2),
+    ],
+)
+def test_long_popup_scrollers_use_outlined_chevrons(element, tip_y, empty_y):
+    combo = ModernComboBox()
+    combo.addItems([f"Item {index}" for index in range(100)])
+    combo.resize(220, combo.sizeHint().height())
+    combo.show()
+    combo.showPopup()
+    _APP.processEvents()
+    try:
+        scrollers = [
+            child
+            for child in combo.view().window().findChildren(QWidget)
+            if child.metaObject().className() == "QComboBoxPrivateScroller"
+        ]
+        assert len(scrollers) == 2
+        assert all(scroller.style() is combo._scroller_style for scroller in scrollers)
+
+        option = QStyleOption()
+        option.initFrom(scrollers[0])
+        option.rect = QRect(0, 0, 20, 10)
+        image = QImage(20, 10, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        scrollers[0].style().drawPrimitive(element, option, painter)
+        painter.end()
+
+        assert image.pixelColor(10, tip_y).alpha() > 0
+        assert image.pixelColor(10, empty_y).alpha() == 0
+    finally:
+        combo.hidePopup()
+        combo.close()
 
 
 @pytest.fixture

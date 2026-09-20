@@ -18,6 +18,8 @@ All notable changes to this project are documented in this file.
   minimum height to 20 pixels so it aligns better with native form controls.
 - Match the closed `ModernComboBox` height to the current native Qt combo-box
   height without changing its modern popup row spacing.
+- Replace the solid overflow triangles in long `ModernComboBox` popups with
+  outlined up and down chevrons.
 
 ### Fixed
 

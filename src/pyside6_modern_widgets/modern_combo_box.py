@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from PySide6.QtCore import QEvent, QMargins, QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
@@ -9,6 +11,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
     QLineEdit,
+    QProxyStyle,
     QStyle,
     QStyledItemDelegate,
     QStyleOption,
@@ -20,6 +23,7 @@ from PySide6.QtWidgets import (
 from .modern_menu import (
     _MENU_ITEM_EXTRA_HEIGHT,
     _MENU_VERTICAL_MARGIN,
+    _base_style_name,
     _enable_windows_acrylic,
     _enable_windows_rounded_corners,
     _RoundedMenuStyle,
@@ -96,6 +100,43 @@ class _ComboBoxStyle(_RoundedMenuStyle):
             item.rect = option.rect.adjusted(8, 0, -8, 0)  # type: ignore[attr-defined]
             return super().subElementRect(element, item, widget)
         return super().subElementRect(element, option, widget)
+
+    def _draw_chevron(
+        self,
+        option,
+        painter,
+        center: QPointF,
+        *,
+        upward: bool = False,
+        scale: float = 1.0,
+        line_width: float = 1.5,
+        color_role: QPalette.ColorRole = QPalette.ColorRole.ButtonText,
+    ) -> None:
+        direction = -1 if upward else 1
+        half_width = 4 * scale
+        half_height = 2 * scale
+        color_group = (
+            option.palette.currentColorGroup()
+            if option.state & QStyle.StateFlag.State_Enabled
+            else QPalette.ColorGroup.Disabled
+        )
+        path = QPainterPath(center + QPointF(-half_width, -direction * half_height))
+        path.lineTo(center + QPointF(0, direction * half_height))
+        path.lineTo(center + QPointF(half_width, -direction * half_height))
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(
+            QPen(
+                option.palette.color(color_group, color_role),
+                line_width,
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+        )
+        painter.drawPath(path)
+        painter.restore()
 
     def drawComplexControl(self, control, option, painter, widget=None) -> None:
         if control != QStyle.ComplexControl.CC_ComboBox:
@@ -179,16 +220,7 @@ class _ComboBoxStyle(_RoundedMenuStyle):
             )
             painter.setPen(QPen(border, 1))
             painter.drawLine(QPointF(separator_x, rect.top()), QPointF(separator_x, rect.bottom()))
-        arrow = arrow_rect.center()
-        pen = QPen(option.palette.color(QPalette.ColorRole.ButtonText), 1.5)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        path = QPainterPath(QPointF(arrow.x() - 4, arrow.y() - 2))
-        path.lineTo(arrow.x(), arrow.y() + 2)
-        path.lineTo(arrow.x() + 4, arrow.y() - 2)
-        painter.drawPath(path)
+        self._draw_chevron(option, painter, QPointF(arrow_rect.center()))
         painter.restore()
 
     def drawControl(self, element, option, painter, widget=None) -> None:
@@ -212,6 +244,32 @@ class _ComboBoxStyle(_RoundedMenuStyle):
             QStyle.StateFlag.State_Selected | QStyle.StateFlag.State_MouseOver
         ):
             self.drawSelection(option, painter, widget)
+            return
+        super().drawPrimitive(element, option, painter, widget)
+
+
+class _ComboBoxScrollerStyle(QProxyStyle):
+    """Keep native scroller geometry while replacing only its solid arrow."""
+
+    def __init__(self, combo: ModernComboBox, combo_style: _ComboBoxStyle) -> None:
+        super().__init__(_base_style_name(combo))
+        self.setParent(combo)
+        self._combo_style = combo_style
+
+    def drawPrimitive(self, element, option, painter, widget=None) -> None:
+        if element in (
+            QStyle.PrimitiveElement.PE_IndicatorArrowUp,
+            QStyle.PrimitiveElement.PE_IndicatorArrowDown,
+        ):
+            self._combo_style._draw_chevron(
+                option,
+                painter,
+                QRectF(option.rect).center(),
+                upward=element == QStyle.PrimitiveElement.PE_IndicatorArrowUp,
+                scale=0.8,
+                line_width=1.0,
+                color_role=QPalette.ColorRole.Text,
+            )
             return
         super().drawPrimitive(element, option, painter, widget)
 
@@ -286,6 +344,7 @@ class ModernComboBox(QComboBox):
         self._popup: QWidget | None = None
         self._popup_margins: QMargins | None = None
         self._modern_style = _ComboBoxStyle(self)
+        self._scroller_style = _ComboBoxScrollerStyle(self, self._modern_style)
         self.setStyle(self._modern_style)
         # Configure only Qt's initial list, once. A caller-supplied view and any
         # later changes to this list retain their own style, frame and palette.
@@ -441,6 +500,10 @@ class ModernComboBox(QComboBox):
             popup.setContentsMargins(
                 margins.left(), margins.top() + spacing, margins.right(), margins.bottom() + spacing
             )
+        popup_children = cast(list[QWidget], popup.findChildren(QWidget))
+        for child in popup_children:
+            if child.metaObject().className() == "QComboBoxPrivateScroller":
+                child.setStyle(self._scroller_style)
         # Qt's editable-combo animation uses a QRollEffect screenshot window,
         # which cannot capture DWM acrylic and shows black on repeated opens.
         # Qt exposes only an application-wide switch for this effect. Scope it
