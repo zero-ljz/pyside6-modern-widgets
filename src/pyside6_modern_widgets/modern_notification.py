@@ -13,9 +13,10 @@ from PySide6.QtCore import (
     QRectF,
     QSize,
     Qt,
+    QTimer,
     Signal,
 )
-from PySide6.QtGui import QIcon, QPainter, QPalette, QPen
+from PySide6.QtGui import QIcon, QPainter, QPalette, QPen, QWindow
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -31,6 +32,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._window_chrome import WindowDpiState, uses_windows_window_state
+from ._windows_window import redraw_native_window
 from .modern_menu import (
     _enable_windows_acrylic,
     _enable_windows_rounded_corners,
@@ -105,6 +108,14 @@ class ModernNotification(QWidget):
         self._pressed = False
         self._buttons: dict[str, QPushButton] = {}
         self._action_closes: dict[str, bool] = {}
+        self._native_dpi = WindowDpiState()
+        self._screen_change_window: QWindow | None = None
+        self._surface_refresh_timer = QTimer(self)
+        self._surface_refresh_timer.setSingleShot(True)
+        self._surface_refresh_timer.timeout.connect(self._refresh_after_display_change)
+        self._surface_settle_timer = QTimer(self)
+        self._surface_settle_timer.setSingleShot(True)
+        self._surface_settle_timer.timeout.connect(self._refresh_after_display_change)
         self._move_animation = QPropertyAnimation(self, QByteArray(b"pos"), self)
         self._move_animation.setDuration(max(0, metrics.animation_duration))
         self._move_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -487,7 +498,36 @@ class ModernNotification(QWidget):
     def showEvent(self, event) -> None:
         self._dismissed = False
         super().showEvent(event)
+        self._connect_screen_change_signal()
+        self._native_dpi.sync_window(self)
         self._refresh_surface()
+        self._schedule_display_refresh()
+
+    def hideEvent(self, event) -> None:
+        self._surface_refresh_timer.stop()
+        self._surface_settle_timer.stop()
+        self._disconnect_screen_change_signal()
+        super().hideEvent(event)
+
+    def event(self, event) -> bool:
+        handled = super().event(event)
+        if (
+            hasattr(self, "_surface_refresh_timer")
+            and event.type() == QEvent.Type.DevicePixelRatioChange
+        ):
+            self._schedule_display_refresh()
+        return handled
+
+    def nativeEvent(self, event_type, message):
+        if not hasattr(self, "_native_dpi"):
+            return super().nativeEvent(event_type, message)
+        previous_dpi = self._native_dpi.dpi
+        handled = self._native_dpi.handle_native_event(self, message)
+        if self._native_dpi.dpi != previous_dpi:
+            self._schedule_display_refresh()
+        if handled:
+            return True, 0
+        return super().nativeEvent(event_type, message)
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
@@ -508,12 +548,51 @@ class ModernNotification(QWidget):
             self._sync_progress_style()
             self._refresh_surface()
 
+    def _connect_screen_change_signal(self) -> None:
+        window_handle = self.windowHandle()
+        if window_handle is None or window_handle is self._screen_change_window:
+            return
+        self._disconnect_screen_change_signal()
+        self._screen_change_window = window_handle
+        window_handle.screenChanged.connect(self._handle_screen_changed)
+
+    def _disconnect_screen_change_signal(self) -> None:
+        window_handle = self._screen_change_window
+        self._screen_change_window = None
+        if window_handle is not None:
+            try:
+                window_handle.screenChanged.disconnect(self._handle_screen_changed)
+            except (RuntimeError, TypeError):
+                pass
+
+    def _handle_screen_changed(self, _screen) -> None:
+        self._schedule_display_refresh()
+
+    def _schedule_display_refresh(self) -> None:
+        self._surface_refresh_timer.start(0)
+        self._surface_settle_timer.start(100)
+
+    def _refresh_after_display_change(self) -> None:
+        if not self.isVisible():
+            return
+        self._native_dpi.sync_window(self)
+        self._sync_icon()
+        self.updateGeometry()
+        self._refresh_surface()
+        # The manager must measure the card again after Qt adopts the target DPR.
+        self.contentChanged.emit()
+
     def _refresh_surface(self) -> None:
         self._native_corners = self._desktop and _enable_windows_rounded_corners(
             self, self._metrics.corner_radius
         )
         self._native_acrylic = self._native_corners and _enable_windows_acrylic(self)
-        self.update()
+        self.repaint()
+        window_handle = self.windowHandle()
+        if window_handle is not None:
+            window_handle.requestUpdate()
+            if self._desktop and uses_windows_window_state():
+                redraw_native_window(int(window_handle.winId()))
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)

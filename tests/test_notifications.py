@@ -517,3 +517,61 @@ def test_surface_has_only_one_corner_outline(
         card.close()
         card.deleteLater()
         delete_pending()
+
+
+def test_desktop_card_refreshes_twice_after_display_metrics_change(managers, monkeypatch):
+    from pyside6_modern_widgets import modern_notification
+
+    create, *_ = managers
+    refreshes = []
+    monkeypatch.setattr(
+        modern_notification,
+        "_enable_windows_rounded_corners",
+        lambda *_args: refreshes.append("surface") or False,
+    )
+    manager = create()
+    key = manager.notify("Mixed DPI", duration=0)
+    card = manager.notification(key)
+    settle()
+    card._surface_refresh_timer.stop()
+    card._surface_settle_timer.stop()
+    refreshes.clear()
+    reflows = []
+    card.contentChanged.connect(lambda: reflows.append(card.geometry()))
+
+    _APP.sendEvent(card, QEvent(QEvent.Type.DevicePixelRatioChange))
+
+    assert card._surface_refresh_timer.isActive()
+    assert card._surface_settle_timer.isActive()
+    QTest.qWait(130)
+    assert len(refreshes) >= 2
+    assert len(reflows) >= 2
+    assert card.screen().availableGeometry().contains(card.geometry())
+
+
+def test_desktop_card_tracks_its_native_window_screen(managers):
+    create, *_ = managers
+    manager = create()
+    card = manager.notification(manager.notify("Screen", duration=0))
+    settle()
+
+    assert card._screen_change_window is card.windowHandle()
+    card.hide()
+    assert card._screen_change_window is None
+    card.show()
+    assert card._screen_change_window is card.windowHandle()
+
+
+def test_desktop_card_delegates_native_dpi_constraints(managers, monkeypatch):
+    create, *_ = managers
+    manager = create()
+    card = manager.notification(manager.notify("DPI", duration=0))
+    calls = []
+    monkeypatch.setattr(
+        card._native_dpi,
+        "handle_native_event",
+        lambda widget, message: calls.append((widget, message)) or True,
+    )
+
+    assert card.nativeEvent(b"windows_generic_MSG", 123) == (True, 0)
+    assert calls == [(card, 123)]
