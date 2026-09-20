@@ -6,9 +6,9 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QColor, QIcon, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtGui import QActionGroup, QColor, QIcon, QImage, QPainter, QPalette, QPixmap
+from PySide6.QtWidgets import QApplication, QStyle, QStyleOption, QStyleOptionMenuItem
 
 from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ModernMenu, palette_for_theme
 from pyside6_modern_widgets.modern_menu import _ACRYLIC_INPUT_ALPHA, _windows_acrylic_tint
@@ -72,6 +72,55 @@ def test_acrylic_menu_keeps_blank_action_space_in_the_input_surface() -> None:
     assert _pixel_at_logical_position(menu, blank_point).alpha() == _ACRYLIC_INPUT_ALPHA
     assert _pixel_at_logical_position(menu, QPoint(0, 0)).alpha() == 0
     menu.hide()
+
+
+@pytest.mark.parametrize(
+    ("element", "tip_offset"),
+    [
+        (QStyle.PrimitiveElement.PE_IndicatorArrowRight, 2),
+        (QStyle.PrimitiveElement.PE_IndicatorArrowLeft, -2),
+    ],
+)
+def test_submenu_indicator_is_an_outlined_chevron(element, tip_offset):
+    menu = ModernMenu()
+    option = QStyleOption()
+    option.initFrom(menu)
+    option.rect = QRect(0, 0, 20, 20)
+    image = QImage(20, 20, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(image)
+    menu.style().drawPrimitive(element, option, painter, menu)
+    painter.end()
+
+    center = option.rect.center()
+    assert image.pixelColor(center.x() + tip_offset, center.y()).alpha() > 0
+    assert image.pixelColor(center.x() - tip_offset, center.y()).alpha() == 0
+
+
+def test_exclusive_menu_indicator_is_a_check_mark():
+    menu = ModernMenu()
+    group = QActionGroup(menu)
+    group.setExclusive(True)
+    action = menu.addAction("Choice")
+    action.setCheckable(True)
+    action.setChecked(True)
+    group.addAction(action)
+    option = QStyleOptionMenuItem()
+    menu.initStyleOption(option, action)
+    option.rect = QRect(0, 0, 100, 24)
+    option.text = ""
+    image = QImage(100, 24, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(image)
+    menu.style().drawControl(QStyle.ControlElement.CE_MenuItem, option, painter, menu)
+    painter.end()
+
+    assert option.checkType == QStyleOptionMenuItem.CheckType.Exclusive
+    assert image.pixelColor(12, 12).alpha() > 0
+    assert image.pixelColor(18, 10).alpha() > 0
+    assert image.pixelColor(12, 9).alpha() == 0
 
 
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])

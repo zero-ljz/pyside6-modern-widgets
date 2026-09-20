@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from typing import Protocol, cast, overload
 
-from PySide6.QtCore import QEvent, QRect, QRectF, Qt
+from PySide6.QtCore import QEvent, QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -30,6 +30,8 @@ _SEPARATOR_ALPHA = 20
 
 
 class _MenuItemOption(Protocol):
+    checked: bool
+    checkType: QStyleOptionMenuItem.CheckType
     menuItemType: QStyleOptionMenuItem.MenuItemType
     palette: QPalette
     rect: QRect
@@ -171,6 +173,35 @@ class _RoundedMenuStyle(QProxyStyle):
         painter.drawRoundedRect(rect, self._radius, self._radius)
         painter.restore()
 
+    def drawExclusiveCheck(self, option, painter, widget=None) -> None:
+        column_width = max(option.maxIconWidth, 20)
+        center_x = option.rect.left() + 5 + column_width / 2
+        if option.direction == Qt.LayoutDirection.RightToLeft:
+            center_x = option.rect.right() - 5 - column_width / 2
+        center = QPointF(center_x, QRectF(option.rect).center().y())
+        color_group = (
+            option.palette.currentColorGroup()
+            if option.state & QStyle.StateFlag.State_Enabled
+            else QPalette.ColorGroup.Disabled
+        )
+        path = QPainterPath(center + QPointF(-3, 0))
+        path.lineTo(center + QPointF(-1, 2))
+        path.lineTo(center + QPointF(3, -2))
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(
+            QPen(
+                option.palette.color(color_group, QPalette.ColorRole.Text),
+                1.5,
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+        )
+        painter.drawPath(path)
+        painter.restore()
+
     def sizeFromContents(self, content_type, option, size, widget=None):
         result = super().sizeFromContents(content_type, option, size, widget)
         if content_type == QStyle.ContentsType.CT_MenuItem and isinstance(
@@ -187,6 +218,39 @@ class _RoundedMenuStyle(QProxyStyle):
         return super().pixelMetric(metric, option, widget)
 
     def drawPrimitive(self, element, option, painter, widget=None) -> None:
+        if element in (
+            QStyle.PrimitiveElement.PE_IndicatorArrowLeft,
+            QStyle.PrimitiveElement.PE_IndicatorArrowRight,
+        ) and isinstance(widget, QMenu):
+            center = QRectF(option.rect).center()
+            direction = -1 if element == QStyle.PrimitiveElement.PE_IndicatorArrowLeft else 1
+            color_group = (
+                option.palette.currentColorGroup()
+                if option.state & QStyle.StateFlag.State_Enabled
+                else QPalette.ColorGroup.Disabled
+            )
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(
+                QPen(
+                    option.palette.color(color_group, QPalette.ColorRole.Text),
+                    1.5,
+                    Qt.PenStyle.SolidLine,
+                    Qt.PenCapStyle.RoundCap,
+                    Qt.PenJoinStyle.RoundJoin,
+                )
+            )
+            painter.drawLine(
+                center + QPointF(-direction * 1.5, -3),
+                center + QPointF(direction * 1.5, 0),
+            )
+            painter.drawLine(
+                center + QPointF(direction * 1.5, 0),
+                center + QPointF(-direction * 1.5, 3),
+            )
+            painter.restore()
+            return
         if element == QStyle.PrimitiveElement.PE_PanelButtonCommand and isinstance(widget, QMenu):
             # Fusion paints checked menu icons as sunken push buttons. That
             # native panel becomes an opaque dark block on an acrylic surface.
@@ -242,16 +306,31 @@ class _RoundedMenuStyle(QProxyStyle):
             )
             painter.restore()
             return
-        if (
+        selected = bool(
             element == QStyle.ControlElement.CE_MenuItem
             and option.state & QStyle.StateFlag.State_Selected
             and self._radius > 0
-        ):
-            self.drawSelection(option, painter, widget)
-
+        )
+        exclusive_checked = bool(
+            menu_option is not None
+            and menu_option.checkType == QStyleOptionMenuItem.CheckType.Exclusive
+            and menu_option.checked
+        )
+        if selected or exclusive_checked:
             native_option = QStyleOptionMenuItem(option)
+        else:
+            native_option = None
+        if selected:
+            self.drawSelection(option, painter, widget)
+            assert native_option is not None
             native_option.state &= ~QStyle.StateFlag.State_Selected  # type: ignore[attr-defined]
+        if exclusive_checked:
+            assert native_option is not None
+            native_option.checked = False  # type: ignore[attr-defined]
+        if native_option is not None:
             super().drawControl(element, native_option, painter, widget)
+            if exclusive_checked:
+                self.drawExclusiveCheck(option, painter, widget)
             return
         super().drawControl(element, option, painter, widget)
 
