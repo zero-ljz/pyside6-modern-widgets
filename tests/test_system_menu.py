@@ -134,7 +134,7 @@ def test_portable_system_menu_is_used_when_native_menu_is_unavailable(monkeypatc
         actions = [
             action for action in dialog._portable_system_menu.actions() if not action.isSeparator()
         ]
-        assert [action.text() for action in actions] == ["还原", "最小化", "最大化", "关闭"]
+        assert [action.text() for action in actions] == ["Restore", "Minimize", "Maximize", "Close"]
         assert [action.isEnabled() for action in actions] == [False, False, False, True]
     finally:
         _dispose(dialog)

@@ -48,6 +48,8 @@ pyside6_modern_widgets = [
     "py.typed",
     "resources.qrc",
     "resources/icons/*.png",
+    "translations/*.qm",
+    "translations/*.ts",
 ]
 
 [tool.pytest.ini_options]

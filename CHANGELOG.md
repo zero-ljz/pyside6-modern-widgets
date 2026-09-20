@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add Qt Linguist-based internationalization for library-owned UI text, including
+  a bundled Simplified Chinese catalog, runtime language-change handling, and the
+  public `load_translator()` catalog loader.
+- Add complete English and Simplified Chinese catalogs to both runnable examples,
+  including Qt standard dialog translations selected from the system locale.
+
 ### Fixed
 
 - Keep hidden navigation pages out of height-for-width calculations, preventing

@@ -747,14 +747,22 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         # dialog's default button.
         self.closeButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.closeButton.setAutoDefault(False)
-        self.closeButton.setToolTip("关闭")
         self.closeButton.setFixedSize(
             self._metrics.title_button_size,
             self._metrics.title_button_size,
         )
         self.closeButton.clicked.connect(self.parent_window.close)
         self.main_layout.addWidget(self.closeButton)
+        WindowTitleBar._retranslate_ui(self)
         WindowTitleBar.setTheme(self, self._theme)
+
+    def _retranslate_ui(self) -> None:
+        self.closeButton.setToolTip(self.tr("Close"))
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.LanguageChange:
+            self._retranslate_ui()
 
     def event(self, event) -> bool:
         handled = super().event(event)

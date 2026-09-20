@@ -12,6 +12,22 @@ Run the window and navigation example:
 python examples/navigation_view_example.py
 ```
 
+Both examples support English and Simplified Chinese. English is the source
+language; when the system locale is `zh_CN`, each example installs Qt's standard
+catalog, the component library catalog, and its own `examples_zh_CN` catalog
+before constructing the window. Library-owned and example-owned text therefore
+remain in separate translation domains.
+
+After changing example text, update and compile its catalog with:
+
+```shell
+pyside6-lupdate -extensions py examples/navigation_view_example.py \
+  examples/tab_view_example.py -source-language en_US -target-language zh_CN \
+  -ts examples/translations/examples_zh_CN.ts
+pyside6-lrelease examples/translations/examples_zh_CN.ts \
+  -qm examples/translations/examples_zh_CN.qm
+```
+
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
 `ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**, and
 **Notifications** and **Toolbar** pages.

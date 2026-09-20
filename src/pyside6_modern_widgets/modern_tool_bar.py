@@ -119,8 +119,7 @@ class ModernToolBar(QToolBar):
         if extension is None:
             raise RuntimeError("Qt toolbar extension button is unavailable")
         self._extension: QToolButton = extension
-        self._extension.setToolTip(self.tr("More actions"))
-        self._extension.setAccessibleName(self.tr("More actions"))
+        self._retranslate_ui()
         # A toolbar stylesheet would intercept ModernMenu's proxy-style drawing.
         # Own the popup through the window, and also clean it up with the toolbar.
         self._overflow: ModernMenu = ModernMenu(self._menu_owner(), metrics=metrics)
@@ -135,6 +134,11 @@ class ModernToolBar(QToolBar):
         self.iconSizeChanged.connect(self._schedule_update)
         theme_manager().themeChanged.connect(self._on_theme_changed)
         self._apply_theme()
+
+    def _retranslate_ui(self) -> None:
+        text = self.tr("More actions")
+        self._extension.setToolTip(text)
+        self._extension.setAccessibleName(text)
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
@@ -247,6 +251,8 @@ class ModernToolBar(QToolBar):
     def event(self, event) -> bool:
         handled = super().event(event)
         if hasattr(self, "_update_timer"):
+            if event.type() == QEvent.Type.LanguageChange:
+                self._retranslate_ui()
             if event.type() in (
                 QEvent.Type.ParentChange,
                 QEvent.Type.PaletteChange,

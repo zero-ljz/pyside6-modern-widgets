@@ -98,7 +98,7 @@ def test_native_topmost_changes_keep_window_visible_and_preserve_other_flags(
         assert window.geometry() == original_geometry
         assert window.windowFlags() == expected_flags
         assert window.titleBar.pinButton.isChecked() == on_top
-        assert window.titleBar.pinButton.toolTip() == ("取消置顶" if on_top else "置顶")
+        assert window.titleBar.pinButton.toolTip() == ("Unpin" if on_top else "Pin")
     assert visibility.count() == 0
     assert native_calls == [(int(handle.winId()), state) for state in (True, False, True, False)]
     window.close()

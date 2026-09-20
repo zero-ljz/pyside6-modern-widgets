@@ -7,6 +7,7 @@ from enum import Enum
 from PySide6.QtCore import (
     QByteArray,
     QEasingCurve,
+    QEvent,
     QPropertyAnimation,
     QRectF,
     QSize,
@@ -263,6 +264,7 @@ class NavigationSidebar(QWidget):
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
         self._init_ui()
+        self._retranslate_ui()
         self._init_animation()
         self.setFixedWidth(self._expanded_width)
         self._activation_transition = SurfaceActivationTransition(self)
@@ -291,7 +293,6 @@ class NavigationSidebar(QWidget):
             )
         )
         self.toggleButton.setFixedHeight(self._metrics.navigation_item_height)
-        self.toggleButton.setToolTip("Toggle navigation")
         self.toggleButton.clicked.connect(self.toggle)
         layout.addWidget(self.toggleButton, alignment=Qt.AlignmentFlag.AlignLeft)
 
@@ -543,6 +544,14 @@ class NavigationSidebar(QWidget):
         collapsed = not self._collapsed
         self.collapseIntentChanged.emit(collapsed)
         self.setCollapsed(collapsed)
+
+    def _retranslate_ui(self) -> None:
+        self.toggleButton.setToolTip(self.tr("Toggle navigation"))
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.LanguageChange:
+            self._retranslate_ui()
 
     def theme(self) -> ModernTheme:
         return self._theme

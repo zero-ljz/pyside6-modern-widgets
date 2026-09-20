@@ -1,5 +1,6 @@
 """Public API for pyside6-modern-widgets."""
 
+from .i18n import load_translator
 from .modern_combo_box import ModernComboBox
 from .modern_dialog import ModernDialog
 from .modern_flyout import FlyoutPlacement, ModernFlyout
@@ -53,6 +54,7 @@ __all__ = [
     "TabView",
     "ThemeManager",
     "ThemeMode",
+    "load_translator",
     "palette_for_theme",
     "theme_from_wallpaper",
     "theme_manager",

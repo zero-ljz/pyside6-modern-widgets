@@ -6,7 +6,7 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QCoreApplication, QPoint, Qt
 from PySide6.QtWidgets import QWidget
 
 from ._windows_window import screen_position_from_client
@@ -95,11 +95,23 @@ class SystemMenuController:
         can_close = bool(flags & Qt.WindowType.WindowCloseButtonHint)
         menu = ModernMenu(self.window, metrics=self.metrics)
         menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        restore_action = menu.addAction("还原", self.window.showNormal)
-        minimize_action = menu.addAction("最小化", self.window.showMinimized)
-        maximize_action = menu.addAction("最大化", self.window.showMaximized)
+        restore_action = menu.addAction(
+            QCoreApplication.translate("SystemMenuController", "Restore"),
+            self.window.showNormal,
+        )
+        minimize_action = menu.addAction(
+            QCoreApplication.translate("SystemMenuController", "Minimize"),
+            self.window.showMinimized,
+        )
+        maximize_action = menu.addAction(
+            QCoreApplication.translate("SystemMenuController", "Maximize"),
+            self.window.showMaximized,
+        )
         menu.addSeparator()
-        close_action = menu.addAction("关闭", self.window.close)
+        close_action = menu.addAction(
+            QCoreApplication.translate("SystemMenuController", "Close"),
+            self.window.close,
+        )
 
         is_normal = not self.window.isMinimized() and not self.window.isMaximized()
         restore_action.setEnabled(not is_normal)

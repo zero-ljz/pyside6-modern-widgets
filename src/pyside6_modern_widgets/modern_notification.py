@@ -129,8 +129,6 @@ class ModernNotification(QWidget):
         self._title.setFont(font)
         self._title.setToolTip(title)
         self.closeButton = QToolButton(self)
-        self.closeButton.setAccessibleName("Dismiss notification")
-        self.closeButton.setToolTip("Dismiss")
         self.closeButton.setAutoRaise(True)
         self.closeButton.setStyleSheet("QToolButton { background: transparent; border: none; }")
         self.closeButton.setIconSize(QSize(16, 16))
@@ -163,7 +161,6 @@ class ModernNotification(QWidget):
         self._message.setSizePolicy(message_policy)
         self._body_layout.addWidget(self._message)
         self._progress_bar = QProgressBar()
-        self._progress_bar.setAccessibleName("Progress")
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setTextVisible(False)
         self._progress_bar.setFixedHeight(6)
@@ -178,6 +175,7 @@ class ModernNotification(QWidget):
         for widget in (self._title, self._icon, self._message, body, self._scroll.viewport()):
             widget.installEventFilter(self)
         theme_manager().themeChanged.connect(self._on_theme_changed)
+        self._retranslate_ui()
         self._sync_accessibility()
         self._apply_theme()
 
@@ -220,7 +218,7 @@ class ModernNotification(QWidget):
         self._progress_bar.setVisible(value is not None)
         if value is not None:
             self._progress_bar.setRange(0, 0 if value == -1 else 100)
-            self._progress_bar.setToolTip("Working…" if value == -1 else f"{value}%")
+            self._sync_progress_tooltip()
             if value >= 0:
                 self._progress_bar.setValue(value)
         self._changed()
@@ -318,8 +316,30 @@ class ModernNotification(QWidget):
         self._icon.setPixmap(icon.pixmap(self._icon.size(), self.devicePixelRatioF()))
 
     def _sync_accessibility(self) -> None:
-        self.setAccessibleName(f"{self._kind.value}: {self.title()}")
+        if self._kind == NotificationKind.INFO:
+            kind = self.tr("Information")
+        elif self._kind == NotificationKind.SUCCESS:
+            kind = self.tr("Success")
+        elif self._kind == NotificationKind.WARNING:
+            kind = self.tr("Warning")
+        else:
+            kind = self.tr("Error")
+        name = self.tr("%1: %2").replace("%1", kind).replace("%2", self.title())
+        self.setAccessibleName(name)
         self.setAccessibleDescription(self.message())
+
+    def _sync_progress_tooltip(self) -> None:
+        if self._progress == -1:
+            self._progress_bar.setToolTip(self.tr("Working…"))
+        elif self._progress is not None:
+            self._progress_bar.setToolTip(self.tr("%1%").replace("%1", str(self._progress)))
+
+    def _retranslate_ui(self) -> None:
+        self.closeButton.setAccessibleName(self.tr("Dismiss notification"))
+        self.closeButton.setToolTip(self.tr("Dismiss"))
+        self._progress_bar.setAccessibleName(self.tr("Progress"))
+        self._sync_progress_tooltip()
+        self._sync_accessibility()
 
     def _changed(self) -> None:
         self._sync_accessibility()
@@ -471,6 +491,8 @@ class ModernNotification(QWidget):
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
+        if hasattr(self, "_progress_bar") and event.type() == QEvent.Type.LanguageChange:
+            self._retranslate_ui()
         if hasattr(self, "_body_layout") and event.type() in (
             QEvent.Type.FontChange,
             QEvent.Type.StyleChange,

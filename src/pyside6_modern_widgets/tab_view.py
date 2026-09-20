@@ -123,7 +123,6 @@ class _ModernTabBar(QTabBar):
         self._modern_style = _ModernTabBarStyle()
         self.setStyle(self._modern_style)
         self.setObjectName("ModernTabBar")
-        self.setAccessibleName("Document tabs")
         self.setDrawBase(False)
         self.setDocumentMode(True)
         self.setElideMode(Qt.TextElideMode.ElideRight)
@@ -134,7 +133,7 @@ class _ModernTabBar(QTabBar):
         self.setTabsClosable(True)
         self.setUsesScrollButtons(True)
         self.setMinimumHeight(self._tab_height() + 2)
-        self._configure_scroll_buttons()
+        self._retranslate_ui()
         self.currentChanged.connect(self._update_close_buttons)
 
     def setTheme(self, theme: ModernTheme) -> None:
@@ -148,8 +147,8 @@ class _ModernTabBar(QTabBar):
 
     def _configure_scroll_buttons(self) -> None:
         labels = {
-            "ScrollLeftButton": "Previous tabs",
-            "ScrollRightButton": "Next tabs",
+            "ScrollLeftButton": self.tr("Previous tabs"),
+            "ScrollRightButton": self.tr("Next tabs"),
         }
         for object_name, label in labels.items():
             button = self.findChild(QToolButton, object_name)
@@ -227,6 +226,13 @@ class _ModernTabBar(QTabBar):
         if event.type() == QEvent.Type.FontChange:
             self.setMinimumHeight(self._tab_height() + 2)
             self.updateGeometry()
+        elif event.type() == QEvent.Type.LanguageChange:
+            self._retranslate_ui()
+
+    def _retranslate_ui(self) -> None:
+        self.setAccessibleName(self.tr("Document tabs"))
+        self._configure_scroll_buttons()
+        self._update_accessible_names()
 
     def _tab_height(self) -> int:
         return max(self._metrics.tab_height, self.fontMetrics().height() + 12)
@@ -423,14 +429,14 @@ class _ModernTabBar(QTabBar):
         )
         painter.drawText(
             content_rect,
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            Qt.AlignmentFlag.AlignLeading | Qt.AlignmentFlag.AlignVCenter,
             text,
         )
 
     def _install_close_button(self, index: int) -> None:
         self._remove_close_button(index)
         button = _TabCloseButton(self._theme, self._metrics, self)
-        button.setAccessibleName(f"Close {self.tabText(index)}")
+        button.setAccessibleName(self.tr("Close %1").replace("%1", self.tabText(index)))
         button.clicked.connect(lambda _checked=False, target=button: self._request_close(target))
         self.setTabButton(index, QTabBar.ButtonPosition.RightSide, button)
 
@@ -458,7 +464,7 @@ class _ModernTabBar(QTabBar):
         for index in range(self.count()):
             button = self._close_button(index)
             if button is not None:
-                button.setAccessibleName(f"Close {self.tabText(index)}")
+                button.setAccessibleName(self.tr("Close %1").replace("%1", self.tabText(index)))
 
     def _update_close_buttons(self, *_args) -> None:
         for index in range(self.count()):
@@ -508,8 +514,6 @@ class TabView(QWidget):
         self._add_button = QToolButton(self._tab_row)
         self._add_button.setObjectName("ModernTabAddButton")
         self._add_button.setText("+")
-        self._add_button.setToolTip("New tab")
-        self._add_button.setAccessibleName("New tab")
         self._add_button.setFixedSize(34, 32)
         self._add_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -528,7 +532,18 @@ class TabView(QWidget):
         self._stack.currentChanged.connect(self._stack_current_changed)
         self._stack.widgetRemoved.connect(self._stack_widget_removed)
         self._setup_shortcuts()
+        self._retranslate_ui()
         self._apply_theme()
+
+    def _retranslate_ui(self) -> None:
+        text = self.tr("New tab")
+        self._add_button.setToolTip(text)
+        self._add_button.setAccessibleName(text)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if hasattr(self, "_add_button") and event.type() == QEvent.Type.LanguageChange:
+            self._retranslate_ui()
 
     def addTab(
         self,

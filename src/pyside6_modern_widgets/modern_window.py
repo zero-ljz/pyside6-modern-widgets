@@ -151,18 +151,18 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         )
         self.pinButton = self._create_button(
             _resource_icon("pin.png", self._theme),
-            "置顶",
+            self.tr("Pin"),
             self.toggleOnTop,
             checkable=True,
         )
         self.minimizeButton = self._create_button(
             _resource_icon("minimize.png", self._theme),
-            "最小化",
+            self.tr("Minimize"),
             self.parent_window.showMinimized,
         )
         self.maximizeButton = self._create_button(
             _resource_icon("maximize.png", self._theme),
-            "最大化",
+            self.tr("Maximize"),
             self.changeMaximize,
         )
         for button in (
@@ -171,7 +171,18 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             self.maximizeButton,
         ):
             self.main_layout.insertWidget(self.main_layout.indexOf(self.closeButton), button)
+        self._retranslate_ui()
         self.setTheme(self._theme)
+
+    def _retranslate_ui(self) -> None:
+        super()._retranslate_ui()
+        if not hasattr(self, "pinButton"):
+            return
+        self.minimizeButton.setToolTip(self.tr("Minimize"))
+        self._sync_pin_state(
+            bool(self.parent_window.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
+        )
+        self.updateMaximizeIcon(self.parent_window.isMaximized())
 
     def _create_button(self, icon, tooltip, callback, *, checkable=False):
         button = TitleBarButton(self)
@@ -217,7 +228,7 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
     def _sync_pin_state(self, on_top: bool) -> None:
         self.pinButton.setChecked(on_top)
         self.pinButton.setIcon(_resource_icon("push-pin.png" if on_top else "pin.png", self._theme))
-        self.pinButton.setToolTip("取消置顶" if on_top else "置顶")
+        self.pinButton.setToolTip(self.tr("Unpin") if on_top else self.tr("Pin"))
 
     def setTheme(self, theme: ModernTheme) -> None:
         super().setTheme(theme)
@@ -247,7 +258,7 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
                 self._theme,
             )
         )
-        self.maximizeButton.setToolTip("向下还原" if isMaximized else "最大化")
+        self.maximizeButton.setToolTip(self.tr("Restore") if isMaximized else self.tr("Maximize"))
 
     def changeMaximize(self) -> None:
         if self.parent_window.isMaximized():

@@ -72,6 +72,43 @@ using these widgets can be frozen normally without package-specific
 pyinstaller your_app.py
 ```
 
+## Internationalization
+
+The widgets use Qt translation catalogs for text owned by the library, including
+window controls, navigation and tab tooltips, notification accessibility text,
+and the portable system menu. English is the source language and Simplified
+Chinese is bundled. Text supplied by the application, such as page names,
+notification content and action labels, remains under application control.
+
+Load and install the library translator after constructing `QApplication`. The
+application keeps control of the active locale and translator lifetime:
+
+```python
+from PySide6.QtCore import QLocale
+from PySide6.QtWidgets import QApplication
+from pyside6_modern_widgets import load_translator
+
+app = QApplication([])
+widgets_translator = load_translator(QLocale.system(), app)
+if widgets_translator is not None:
+    app.installTranslator(widgets_translator)
+```
+
+Installing or removing a translator at runtime updates existing widgets through
+Qt's `LanguageChange` event. Qt's own standard button text is provided by the
+separate `qtbase` catalogs in `QLibraryInfo.TranslationsPath`; applications that
+need those translations should install the matching Qt translator as well.
+
+After changing source strings, update and compile the bundled catalog with:
+
+```shell
+pyside6-lupdate -extensions py src/pyside6_modern_widgets \
+  -source-language en_US -target-language zh_CN \
+  -ts src/pyside6_modern_widgets/translations/pyside6_modern_widgets_zh_CN.ts
+pyside6-lrelease src/pyside6_modern_widgets/translations/pyside6_modern_widgets_zh_CN.ts \
+  -qm src/pyside6_modern_widgets/translations/pyside6_modern_widgets_zh_CN.qm
+```
+
 ## Modern combo box
 
 Replace `QComboBox` with `ModernComboBox` and keep the usual Qt APIs and signals:
