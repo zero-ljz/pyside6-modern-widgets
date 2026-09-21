@@ -14,6 +14,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Use the native transparent macOS title bar and system traffic-light controls
+  for `ModernWindow`, while retaining themed title content and custom widgets.
 - Reduce the default `ModernSwitch` track to 32 by 16 logical pixels and its
   minimum height to 20 pixels so it aligns better with native form controls.
 - Match the closed `ModernComboBox` height to the current native Qt combo-box

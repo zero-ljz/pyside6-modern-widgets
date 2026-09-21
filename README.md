@@ -3,8 +3,8 @@
 Cross-platform desktop widgets for PySide6. The package provides frameless
 window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 
-- `ModernWindow`: a frameless replacement for top-level `QWidget` windows with
-  selected `QMainWindow`-compatible methods.
+- `ModernWindow`: a modern-chrome replacement for top-level `QWidget` windows
+  with selected `QMainWindow`-compatible methods.
 - `ModernDialog`: a frameless `QDialog` that preserves the standard dialog API.
 - `ModernMessageBox`: a `QMessageBox` subclass with themed frameless chrome,
   native buttons, keyboard handling, and convenience methods.
@@ -29,8 +29,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 ## Supported environment
 
 Supports Windows, macOS, and Linux with Python 3.10-3.12, PySide6 6.8.3, and
-the Fusion style. Window backgrounds, including the custom title bar, use the
-same Qt-painted, wallpaper-colored theme behavior on every platform.
+the Fusion style. Window backgrounds and title content use the same Qt-painted,
+wallpaper-colored theme behavior on every platform.
 
 On Windows, the custom chrome retains native activation, moving, resizing,
 minimize/maximize/restore transitions, Aero Snap, shadows, and the system menu.
@@ -38,6 +38,11 @@ Windows 11 additionally provides DWM-rounded corners and Snap Layouts from the
 custom maximize button; Windows 10 uses an opaque square-corner surface. On
 platforms without equivalent frameless-window APIs, Qt supplies system moving,
 resizing, and a menu with the available window commands.
+
+On macOS, `ModernWindow` keeps the native `NSWindow` frame and traffic-light
+controls, with themed content extended into the transparent title bar. The
+custom Windows-style controls and window icon are hidden, and title-bar double
+clicks follow the user's macOS preference.
 
 ## Installation
 

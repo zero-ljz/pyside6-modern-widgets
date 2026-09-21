@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import _resources  # noqa: F401
+from ._macos_window import MACOS_TRAFFIC_LIGHT_INSET, perform_macos_title_bar_double_click
 from ._windows_window import (
     HTTRANSPARENT,
     WM_DPICHANGED,
@@ -259,14 +260,14 @@ class WindowSurfacePolicy:
             set_window_corner_preference(int(widget.winId()), rounded=rounded)
 
 
-def current_window_surface_policy() -> WindowSurfacePolicy:
+def current_window_surface_policy(*, native_macos_title_bar: bool = False) -> WindowSurfacePolicy:
     native_windows = uses_windows_window_state()
     get_windows_version = getattr(sys, "getwindowsversion", None)
     native_corners = (
         native_windows and get_windows_version is not None and get_windows_version().build >= 22000
     )
     return WindowSurfacePolicy(
-        opaque_surface=native_windows,
+        opaque_surface=native_windows or native_macos_title_bar,
         native_corners=native_corners,
     )
 
@@ -688,12 +689,14 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         theme: ModernTheme,
         metrics: ModernMetrics,
         allows_maximize: bool = False,
+        native_macos_title_bar: bool = False,
     ) -> None:
         super().__init__(parent)
         self.parent_window: WindowWidget = parent
         self._theme = theme
         self._metrics = metrics
         self._allows_maximize = allows_maximize
+        self._native_macos_title_bar = native_macos_title_bar
         self._title_alignment: Literal["left", "center"] = "left"
         self._title_visible = True
         self._icon_visible = True
@@ -702,6 +705,8 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.setObjectName("CustomTitleBar")
         self.setAutoFillBackground(False)
         self._init_ui()
+        if self._native_macos_title_bar:
+            self.setTitleAlignment("center")
 
     def _init_ui(self) -> None:
         padding = 5
@@ -712,7 +717,8 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         self.setFixedHeight(title_bar_height)
 
         self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(padding, padding, padding, padding)
+        left_margin = MACOS_TRAFFIC_LIGHT_INSET if self._native_macos_title_bar else padding
+        self.main_layout.setContentsMargins(left_margin, padding, padding, padding)
         self.main_layout.setSpacing(5)
 
         self.iconLabel = _TitleBarIconLabel(self)
@@ -774,6 +780,9 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         return handled
 
     def contextMenuEvent(self, event) -> None:
+        if self._native_macos_title_bar:
+            super().contextMenuEvent(event)
+            return
         show_system_menu = getattr(self.parent_window, "showSystemWindowMenu", None)
         if show_system_menu is not None and show_system_menu(event.globalPos()):
             event.accept()
@@ -810,7 +819,9 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
 
     def setIcon(self, icon: QIcon) -> None:
         self._has_icon = not icon.isNull()
-        self.iconLabel.setVisible(self._icon_visible and self._has_icon)
+        self.iconLabel.setVisible(
+            self._icon_visible and self._has_icon and not self._native_macos_title_bar
+        )
         if self._has_icon:
             self.iconLabel.setPixmap(icon.pixmap(20, 20))
         else:
@@ -843,7 +854,7 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
     def setIconVisible(self, visible: bool) -> None:
         """Show or hide the title bar icon independently of title text."""
         self._icon_visible = visible
-        self.iconLabel.setVisible(visible and self._has_icon)
+        self.iconLabel.setVisible(visible and self._has_icon and not self._native_macos_title_bar)
         self._layout_title()
 
     def isIconVisible(self) -> bool:
@@ -879,7 +890,9 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
             Qt.WindowType.SplashScreen,
         }
         self.closeButton.setVisible(
-            title_bar_visible and bool(flags & Qt.WindowType.WindowCloseButtonHint)
+            title_bar_visible
+            and not self._native_macos_title_bar
+            and bool(flags & Qt.WindowType.WindowCloseButtonHint)
         )
         self.setVisible(title_bar_visible)
         return title_bar_visible
@@ -939,6 +952,12 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:
+        if self._native_macos_title_bar and event.button() == Qt.MouseButton.LeftButton:
+            child = self.childAt(event.position().toPoint())
+            if not isinstance(child, QPushButton):
+                perform_macos_title_bar_double_click(self.parent_window)
+                event.accept()
+                return
         if (
             self._can_maximize()
             and not bool(getattr(self.parent_window, "_native_frame_enabled", False))

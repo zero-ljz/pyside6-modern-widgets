@@ -25,6 +25,11 @@ from PySide6.QtWidgets import (
 )
 
 from . import _resources, _system_menu  # noqa: F401
+from ._macos_window import (
+    configure_macos_native_title_bar,
+    uses_macos_native_title_bar,
+    window_flags_with_chrome,
+)
 from ._window_chrome import (
     BackgroundFrame,
     TitleBarButton,
@@ -148,6 +153,7 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
             theme=theme,
             metrics=metrics,
             allows_maximize=True,
+            native_macos_title_bar=parent._uses_native_macos_title_bar,
         )
         self.pinButton = self._create_button(
             _resource_icon("pin.png", self._theme),
@@ -208,6 +214,18 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
         }
         regular_window = window_type == Qt.WindowType.Window
         customized = bool(flags & Qt.WindowType.CustomizeWindowHint)
+
+        if self._native_macos_title_bar:
+            for button in (
+                self.pinButton,
+                self.minimizeButton,
+                self.maximizeButton,
+                self.closeButton,
+            ):
+                button.hide()
+            self._sync_pin_state(bool(flags & Qt.WindowType.WindowStaysOnTopHint))
+            self.setVisible(title_bar_visible)
+            return title_bar_visible
 
         self.pinButton.setVisible(
             regular_window
@@ -278,7 +296,13 @@ class ModernWindow(QWidget):
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
-        flags = f
+        self._uses_native_macos_title_bar = uses_macos_native_title_bar()
+        self._macos_title_bar_configured: bool | None = None
+        flags = (
+            window_flags_with_chrome(f, native_macos_title_bar=True)
+            if self._uses_native_macos_title_bar
+            else f
+        )
         if parent is not None and not flags & Qt.WindowType.WindowType_Mask:
             flags |= Qt.WindowType.Window
         super().__init__(parent, flags)
@@ -286,8 +310,14 @@ class ModernWindow(QWidget):
         self._theme = theme or theme_manager().theme()
         self._metrics = metrics
         theme_manager().themeChanged.connect(self._on_global_theme_changed)
-        QWidget.setWindowFlag(self, Qt.WindowType.FramelessWindowHint, True)
-        self._surface_policy: WindowSurfacePolicy = current_window_surface_policy()
+        QWidget.setWindowFlag(
+            self,
+            Qt.WindowType.FramelessWindowHint,
+            not self._uses_native_macos_title_bar,
+        )
+        self._surface_policy: WindowSurfacePolicy = current_window_surface_policy(
+            native_macos_title_bar=self._uses_native_macos_title_bar
+        )
         self._surface_policy.apply_to(self)
         self.setMouseTracking(True)
         self._native_frame_enabled = False
@@ -317,7 +347,7 @@ class ModernWindow(QWidget):
         self._system_resize_watch_timer.timeout.connect(self._poll_system_resize_state)
         self._native_frame_sync_timer = QTimer(self)
         self._native_frame_sync_timer.setSingleShot(True)
-        self._native_frame_sync_timer.timeout.connect(self._sync_windows_native_frame)
+        self._native_frame_sync_timer.timeout.connect(self._sync_native_window_frame)
         self._surface_refresh_timer = QTimer(self)
         self._surface_refresh_timer.setSingleShot(True)
         self._surface_refresh_timer.timeout.connect(self._refresh_window_surface)
@@ -342,7 +372,10 @@ class ModernWindow(QWidget):
         return uses_windows_window_state()
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
-        flags |= Qt.WindowType.FramelessWindowHint
+        flags = window_flags_with_chrome(
+            flags,
+            native_macos_title_bar=self._uses_native_macos_title_bar,
+        )
         if self._try_set_native_topmost(flags):
             return
         QWidget.setWindowFlags(self, flags)
@@ -356,7 +389,11 @@ class ModernWindow(QWidget):
         if self._try_set_native_topmost(flags):
             return
         QWidget.setWindowFlag(self, flag, on)
-        QWidget.setWindowFlag(self, Qt.WindowType.FramelessWindowHint, True)
+        QWidget.setWindowFlag(
+            self,
+            Qt.WindowType.FramelessWindowHint,
+            not self._uses_native_macos_title_bar,
+        )
         if hasattr(self, "titleBar"):
             self._sync_chrome_with_window_flags()
 
@@ -448,11 +485,33 @@ class ModernWindow(QWidget):
         if self.titleBar is None:
             return
         title_bar_visible = self.titleBar.syncWindowFlags(self.windowFlags())
+        if self._uses_native_macos_title_bar and self._macos_title_bar_configured is False:
+            self.titleBar.hide()
+            title_bar_visible = False
         self.titleBar.maximizeButton.setEnabled(self._can_maximize())
         top_margin = self.titleBar.height() if title_bar_visible else 0
         QWidget.setContentsMargins(self, 0, top_margin, 0, 0)
         self._layout_chrome()
         self._schedule_native_frame_sync()
+
+    def _sync_macos_native_title_bar(self) -> None:
+        if not self._uses_native_macos_title_bar:
+            return
+        self._macos_title_bar_configured = configure_macos_native_title_bar(self)
+        if self.titleBar is None:
+            return
+        title_bar_visible = self.titleBar.syncWindowFlags(self.windowFlags())
+        if not self._macos_title_bar_configured:
+            self.titleBar.hide()
+            title_bar_visible = False
+        QWidget.setContentsMargins(
+            self,
+            0,
+            self.titleBar.height() if title_bar_visible else 0,
+            0,
+            0,
+        )
+        self._layout_chrome()
 
     def _schedule_native_frame_sync(self, *, force_refresh: bool = False) -> None:
         if hasattr(self, "_native_frame_sync_timer"):
@@ -492,6 +551,10 @@ class ModernWindow(QWidget):
         self._native_frame_enabled = enabled and applied
         if self._native_frame_enabled:
             self._resize_controller.set_cursor(Qt.Edge(0))
+
+    def _sync_native_window_frame(self) -> None:
+        self._sync_windows_native_frame()
+        self._sync_macos_native_title_bar()
 
     def _is_resizable(self) -> bool:
         return (
@@ -738,6 +801,7 @@ class ModernWindow(QWidget):
         super().showEvent(event)
         self._set_application_event_filter_enabled(True)
         self._connect_screen_change_signal()
+        self._sync_macos_native_title_bar()
         self._sync_chrome_with_window_flags()
         self._sync_windows_native_frame()
         if not event.spontaneous():
@@ -1322,7 +1386,10 @@ class ModernWindow(QWidget):
 
     def eventFilter(self, watched, event) -> bool:
         if self._resize_controller.handle_event(
-            watched, event, enabled=not self._native_frame_enabled, consume_manual_release=False
+            watched,
+            event,
+            enabled=not self._native_frame_enabled and not self._uses_native_macos_title_bar,
+            consume_manual_release=False,
         ):
             return True
         if isinstance(watched, QWidget):

@@ -56,7 +56,7 @@ class ExampleWindow(ModernWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(self.tr("Modern Widgets Example"))
-        self.setTitleVisible(False)
+        self.setTitleVisible(True)
         self.setTitleAlignment("center")
         self.setWindowIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
         self.resize(1000, 640)
@@ -949,7 +949,7 @@ class ExampleWindow(ModernWindow):
 
     def _create_menu_bar(self) -> None:
         menu_bar = ModernMenuBar(self)
-        menu_bar.setNativeMenuBar(False)
+        menu_bar.setNativeMenuBar(True)
 
         file_menu = menu_bar.addMenu(self.tr("&File"))
         file_menu.addAction(self.quit_action)
