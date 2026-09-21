@@ -37,7 +37,7 @@ def test_modern_window_uses_native_macos_title_bar_layout(monkeypatch) -> None:
     monkeypatch.setattr(
         modern_window_module,
         "configure_macos_native_title_bar",
-        lambda _widget: True,
+        lambda _widget, **_kwargs: True,
     )
 
     window = ModernWindow()
@@ -76,7 +76,7 @@ def test_failed_macos_bridge_falls_back_to_plain_native_title_bar(monkeypatch) -
     monkeypatch.setattr(
         modern_window_module,
         "configure_macos_native_title_bar",
-        lambda _widget: False,
+        lambda _widget, **_kwargs: False,
     )
 
     window = ModernWindow()
@@ -104,12 +104,20 @@ class _NativeWidget:
 
 
 class _BridgeProbe:
-    def __init__(self) -> None:
+    def __init__(self, *, flipped: bool = False) -> None:
         self.calls: list[tuple] = []
+        self.origins: list[tuple[int, float, float]] = []
+        self.flipped = flipped
 
     def send_id(self, receiver: int, selector: str) -> int:
-        assert (receiver, selector) == (123, "window")
-        return 456
+        if (receiver, selector) == (123, "window"):
+            return 456
+        assert selector == "superview" and receiver in {100, 101, 102}
+        return 200
+
+    def send_id_integer(self, receiver: int, selector: str, value: int) -> int:
+        assert (receiver, selector) == (456, "standardWindowButton:")
+        return 100 + value
 
     def send_integer(self, receiver: int, selector: str) -> int:
         assert (receiver, selector) == (456, "styleMask")
@@ -120,6 +128,32 @@ class _BridgeProbe:
 
     def send_void_bool(self, receiver: int, selector: str, value: bool) -> None:
         self.calls.append((receiver, selector, value))
+
+    def send_rect(self, receiver: int, selector: str) -> macos_window._NSRect:
+        if selector == "bounds":
+            assert receiver == 200
+            return macos_window._NSRect(
+                macos_window._NSPoint(0, 0),
+                macos_window._NSSize(800, 28),
+            )
+        assert selector == "frame" and receiver in {100, 101, 102}
+        return macos_window._NSRect(
+            macos_window._NSPoint(14 + (receiver - 100) * 20, 7),
+            macos_window._NSSize(14, 14),
+        )
+
+    def send_bool(self, receiver: int, selector: str) -> bool:
+        assert (receiver, selector) == (200, "isFlipped")
+        return self.flipped
+
+    def send_void_point(
+        self,
+        receiver: int,
+        selector: str,
+        value: macos_window._NSPoint,
+    ) -> None:
+        assert selector == "setFrameOrigin:"
+        self.origins.append((receiver, value.x, value.y))
 
 
 class _DoubleClickBridgeProbe:
@@ -160,11 +194,31 @@ def test_native_bridge_preserves_style_and_enables_full_size_content(monkeypatch
     monkeypatch.setattr(macos_window, "uses_macos_native_title_bar", lambda: True)
     monkeypatch.setattr(macos_window, "_objc_bridge", lambda: bridge)
 
-    assert macos_window.configure_macos_native_title_bar(_NativeWidget())  # type: ignore[arg-type]
+    assert macos_window.configure_macos_native_title_bar(  # type: ignore[arg-type]
+        _NativeWidget(),
+        title_bar_height=34,
+    )
     assert bridge.calls == [
         (456, "setStyleMask:", 7 | (1 << 15)),
         (456, "setTitlebarAppearsTransparent:", True),
         (456, "setTitleVisibility:", 1),
+    ]
+    assert bridge.origins == [
+        (100, 10.0, 4.0),
+        (101, 30.0, 4.0),
+        (102, 50.0, 4.0),
+    ]
+
+
+def test_traffic_lights_support_flipped_title_bar_coordinates() -> None:
+    bridge = _BridgeProbe(flipped=True)
+
+    macos_window._position_traffic_lights(456, bridge, 34)  # type: ignore[arg-type]
+
+    assert bridge.origins == [
+        (100, 10.0, 10.0),
+        (101, 30.0, 10.0),
+        (102, 50.0, 10.0),
     ]
 
 

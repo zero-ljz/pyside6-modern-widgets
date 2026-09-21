@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file.
 
 - Use the native transparent macOS title bar and system traffic-light controls
   for `ModernWindow`, while retaining themed title content and custom widgets.
+  Center the traffic lights vertically and use the same inset at the left edge.
 - Reduce the default `ModernSwitch` track to 32 by 16 logical pixels and its
   minimum height to 20 pixels so it aligns better with native form controls.
 - Match the closed `ModernComboBox` height to the current native Qt combo-box
@@ -25,6 +26,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Keep centered title text at its intended height after a macOS full-screen
+  transition temporarily compresses the title-bar layout spacer.
 - Keep hidden navigation pages out of height-for-width calculations, preventing
   the Home page from making the window taller during mixed-DPI monitor drags.
 - Suppress native radio bullets when pressing or switching exclusive `ModernMenu`

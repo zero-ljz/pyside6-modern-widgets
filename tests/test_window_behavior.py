@@ -492,6 +492,27 @@ def test_title_stays_centered_when_menus_change_and_avoids_controls_when_narrow(
     window.close()
 
 
+def test_centered_title_height_ignores_transient_spacer_height() -> None:
+    window = ModernWindow()
+    window.resize(800, 400)
+    window.setWindowTitle("Centered title")
+    window.setTitleAlignment("center")
+    title_bar = window.titleBar
+    assert title_bar is not None
+    title_bar.main_layout.activate()
+    available = title_bar._title_spacer.geometry()
+
+    title_bar._title_spacer.setGeometry(
+        QRect(available.x(), title_bar.height() - 1, available.width(), 1)
+    )
+    title_bar._layout_title()
+
+    margins = title_bar.main_layout.contentsMargins()
+    assert title_bar.titleLabel.y() == margins.top()
+    assert title_bar.titleLabel.height() == (title_bar.height() - margins.top() - margins.bottom())
+    window.close()
+
+
 @pytest.mark.parametrize("alignment", ["left", "center"])
 @pytest.mark.parametrize("title_visible", [True, False])
 @pytest.mark.parametrize("icon_visible", [True, False])

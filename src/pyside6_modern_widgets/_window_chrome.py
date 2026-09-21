@@ -799,7 +799,10 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
             available.left(),
             min((self.width() - width) // 2, available.right() + 1 - width),
         )
-        self.titleLabel.setGeometry(left, available.top(), width, available.height())
+        margins = self.main_layout.contentsMargins()
+        top = margins.top()
+        height = max(0, self.height() - top - margins.bottom())
+        self.titleLabel.setGeometry(left, top, width, height)
 
     def setTheme(self, theme: ModernTheme) -> None:
         self._theme = theme

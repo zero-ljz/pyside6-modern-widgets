@@ -497,7 +497,11 @@ class ModernWindow(QWidget):
     def _sync_macos_native_title_bar(self) -> None:
         if not self._uses_native_macos_title_bar:
             return
-        self._macos_title_bar_configured = configure_macos_native_title_bar(self)
+        title_bar_height = self.titleBar.height() if self.titleBar is not None else 0
+        self._macos_title_bar_configured = configure_macos_native_title_bar(
+            self,
+            title_bar_height=title_bar_height,
+        )
         if self.titleBar is None:
             return
         title_bar_visible = self.titleBar.syncWindowFlags(self.windowFlags())
