@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from typing import Literal
 from weakref import ref
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QPoint, QRect, Qt, QTimer
+from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QCursor,
     QIcon,
@@ -289,6 +289,8 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 
 class ModernWindow(QWidget):
     """Cross-platform frameless shell with themeable modern chrome."""
+
+    _system_move_finished = Signal()
 
     def __init__(
         self,
@@ -780,7 +782,14 @@ class ModernWindow(QWidget):
     def startSystemMove(self, global_position: QPoint | None = None) -> bool:
         """Start native window movement, with a portable client-side fallback."""
         self._drag_move_offset = None
+        self._system_move_pending = True
         handle = self.windowHandle()
+        if (
+            handle is not None
+            and self._uses_windows_window_state()
+            and start_system_move(int(handle.winId()))
+        ):
+            return True
         if handle is not None and handle.startSystemMove():
             return True
         if (
@@ -788,10 +797,17 @@ class ModernWindow(QWidget):
             or self.isMaximized()
             or self.isFullScreen()
         ):
+            self._system_move_pending = False
             return False
         position = global_position if global_position is not None else QCursor.pos()
         self._drag_move_offset = position - self.frameGeometry().topLeft()
         return True
+
+    def _finish_system_move(self) -> None:
+        if getattr(self, "_system_move_pending", False):
+            self._system_move_pending = False
+            self._drag_move_offset = None
+            self._system_move_finished.emit()
 
     def isTitleVisible(self) -> bool:
         """Return whether title text is enabled, even in a hidden window."""
@@ -966,6 +982,7 @@ class ModernWindow(QWidget):
         elif native_message.message == WM_EXITSIZEMOVE:
             self._finish_system_resize_tracking()
             self._sync_window_state_style()
+            self._finish_system_move()
         return super().nativeEvent(event_type, message)
 
     def _is_maximized_for_native_event(self, hwnd: int) -> bool:
@@ -1406,6 +1423,7 @@ class ModernWindow(QWidget):
             self._finish_system_resize_tracking()
 
     def hideEvent(self, event) -> None:
+        self._system_move_pending = False
         self._drag_move_offset = None
         self._finish_manual_resize()
         self._finish_system_resize_tracking()
@@ -1448,6 +1466,7 @@ class ModernWindow(QWidget):
                     self.move(event.globalPosition().toPoint() - self._drag_move_offset)
                     return True
                 self._drag_move_offset = None
+                self._finish_system_move()
             elif (
                 self._drag_move_offset is not None
                 and watched.window() is self
@@ -1455,6 +1474,7 @@ class ModernWindow(QWidget):
             ):
                 was_moving = self._drag_move_offset is not None
                 self._drag_move_offset = None
+                self._finish_system_move()
                 return was_moving
         return super().eventFilter(watched, event)
 

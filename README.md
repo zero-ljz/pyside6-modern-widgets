@@ -22,6 +22,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   edge placement, scrollable content, and light dismiss.
 - `ModernNotification` / `NotificationManager`: custom desktop or in-window
   notifications with actions, progress, bounded queues, and non-activating delivery.
+- `EdgeDockController`: optional screen-edge snapping and hover-to-restore
+  auto-hide for floating top-level widgets.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired tab widget.
@@ -115,6 +117,59 @@ pyside6-lupdate -extensions py src/pyside6_modern_widgets \
 pyside6-lrelease src/pyside6_modern_widgets/translations/pyside6_modern_widgets_zh_CN.ts \
   -qm src/pyside6_modern_widgets/translations/pyside6_modern_widgets_zh_CN.qm
 ```
+
+## Screen-edge docking
+
+Attach `EdgeDockController` to a floating top-level `QWidget` or `ModernWindow`.
+Only empty space in the chosen drag widget starts a drag; child controls keep
+their mouse and keyboard behavior. A dedicated drag strip also works:
+
+```python
+from pyside6_modern_widgets import DockConfig, DockSide, EdgeDockController
+
+dock = EdgeDockController(window, drag_widget=drag_strip, auto_hide=True)
+dock.setAutoHide(False)  # Keep snapping, without hiding.
+dock.setEnabled(False)  # Restore a collapsed window and suspend the behavior.
+dock.setEnabled(True)
+dock.dock(DockSide.RIGHT)  # Explicitly dock a visible window.
+dock.expand()  # Also use this when reopening from a launcher or shortcut.
+```
+
+`DockConfig` controls the snap distance, margin, handle dimensions and colors, animation
+duration, hide delay, and enabled `sides`. Defaults enable left, right, and top;
+include `DockSide.BOTTOM` to enable the bottom edge. Coordinates and sizes are
+Qt logical pixels, including on mixed-DPI displays. Distances use the window's
+frame and its screen's available work area; dragging can cross display boundaries.
+Releasing a window near or beyond an enabled edge snaps it back to that edge,
+even if it extends far outside the work area. At corners the greatest overflow
+wins; inside the work area the nearest enabled edge wins. Configuration order
+breaks ties. Releasing beyond a disabled edge brings the window back into the
+work area without enabling auto-hide. No clamping occurs during a drag, so a
+window can still move onto a second display.
+
+Auto-hide waits while the pointer is inside, a mouse button is down, an animation
+is running, or a popup/modal dialog is open. Hovering or clicking the gray edge
+handle restores the window. Its default color is RGB (150, 150, 150), with
+RGB (200, 200, 200) on hover; override `handle_color` / `handle_hover_color` in
+`DockConfig` to customize it. External `show()` removes the handle; external
+hide/close, minimize, maximize, or full-screen transitions clear docking state.
+Screen geometry changes reposition docked windows and handles. Maximized and
+full-screen windows do not dock. The target owns the controller and handle;
+`detach()` permanently removes the behavior and restores a collapsed window.
+Inspect `dockSide()` / `isCollapsed()` or connect `dockSideChanged` /
+`collapsedChanged` to observe state.
+
+Native title-bar dragging remains controlled by the platform; use the dedicated
+drag widget for automatic snapping, or call `snap()` after an external move.
+The drag widget delegates to `ModernWindow.startSystemMove()` (or the Qt window
+handle for ordinary widgets), preserving the existing native mixed-DPI handling.
+Snapping is deferred until system dragging ends, including when the OS consumes
+the mouse release. Manual movement is used only when system movement is unavailable.
+This behavior requires a desktop platform that permits global window placement
+and pointer queries; Wayland compositors may restrict those operations.
+The controller does not change application quit policy or the target's window flags.
+
+Run `python examples/edge_dock_example.py` for a floating-window example.
 
 ## Modern combo box
 

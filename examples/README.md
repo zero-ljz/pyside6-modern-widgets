@@ -12,11 +12,15 @@ Run the window and navigation example:
 python examples/navigation_view_example.py
 ```
 
-Both examples support English and Simplified Chinese. English is the source
+The navigation and tab examples support English and Simplified Chinese. English is the source
 language; when the system locale is `zh_CN`, each example installs Qt's standard
 catalog, the component library catalog, and its own `examples_zh_CN` catalog
 before constructing the window. Library-owned and example-owned text therefore
 remain in separate translation domains.
+
+Run `python examples/edge_dock_example.py` for the standalone screen-edge docking
+example. Drag its labeled strip between displays or near an edge, toggle auto-hide,
+and move away to show the restore handle. The text field retains normal selection.
 
 After changing example text, update and compile its catalog with:
 

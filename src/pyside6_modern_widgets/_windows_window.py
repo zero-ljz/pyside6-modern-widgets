@@ -251,6 +251,18 @@ def set_mouse_capture(hwnd: int, captured: bool) -> None:
         return
 
 
+def mouse_buttons_pressed(*, left_only: bool = False) -> bool | None:
+    """Read the live button state when a native move consumes Qt mouse events."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetAsyncKeyState.argtypes = (ctypes.c_int,)
+        user32.GetAsyncKeyState.restype = ctypes.c_short
+        buttons = (0x01,) if left_only else (0x01, 0x02, 0x04, 0x05, 0x06)
+        return any(user32.GetAsyncKeyState(button) & 0x8000 for button in buttons)
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
 def start_system_move(hwnd: int) -> bool:
     """Start a Win32 caption move after the current native message returns."""
     position = _cursor_screen_position()

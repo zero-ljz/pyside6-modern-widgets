@@ -221,6 +221,39 @@ def test_registered_drag_region_uses_native_move_and_portable_fallback(monkeypat
     window.close()
 
 
+def test_system_move_reuses_windows_helper_and_reports_native_finish(monkeypatch) -> None:
+    from pyside6_modern_widgets._windows_window import WM_EXITSIZEMOVE
+
+    window = ModernWindow()
+    window.show()
+    _APP.processEvents()
+    calls = []
+    finished = []
+    window._system_move_finished.connect(lambda: finished.append(True))
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(
+        modern_window_module, "start_system_move", lambda hwnd: calls.append(hwnd) or True
+    )
+    monkeypatch.setattr(
+        window.windowHandle(), "startSystemMove", lambda: pytest.fail("Qt fallback used")
+    )
+    monkeypatch.setattr(QWidget, "nativeEvent", lambda *_args: (False, 0))
+    monkeypatch.setattr(
+        modern_window_module,
+        "read_message",
+        lambda _: WindowsMessage(int(window.winId()), WM_EXITSIZEMOVE, 0, 0),
+    )
+    try:
+        assert window.startSystemMove(QPoint(100, 100))
+        assert calls == [int(window.winId())]
+        window.nativeEvent(b"windows_generic_MSG", 0)
+        window.nativeEvent(b"windows_generic_MSG", 0)
+        assert finished == [True]
+    finally:
+        monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
+        window.close()
+
+
 def test_drag_region_must_belong_to_window() -> None:
     window = ModernWindow()
     foreign = QWidget()

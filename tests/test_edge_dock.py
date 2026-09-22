@@ -1,0 +1,498 @@
+from __future__ import annotations
+
+import pytest
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, QRect, Qt
+from PySide6.QtGui import QCursor, QEnterEvent, QMouseEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QMenu, QVBoxLayout, QWidget
+from shiboken6 import isValid
+
+from pyside6_modern_widgets import DockConfig, DockSide, EdgeDockController, ModernWindow
+from pyside6_modern_widgets.edge_dock import _edge_rect
+
+_APP = QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def docked(monkeypatch, theme_manager_instance):
+    window = QWidget(None, Qt.WindowType.FramelessWindowHint)
+    window.resize(240, 160)
+    window.move(250, 250)
+    layout = QVBoxLayout(window)
+    strip = QLabel("Drag")
+    field = QLineEdit("select this text")
+    layout.addWidget(strip)
+    layout.addWidget(field)
+    controller = EdgeDockController(
+        window, DockConfig(anim_duration=0, hide_delay=30), drag_widget=strip
+    )
+    window.show()
+    _APP.processEvents()
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
+    yield window, controller, strip, field
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    _APP.processEvents()
+
+
+def _mouse(widget, kind, local, global_pos, button, buttons):
+    event = QMouseEvent(kind, QPointF(local), QPointF(global_pos), button, buttons, Qt.NoModifier)
+    QApplication.sendEvent(widget, event)
+
+
+def _drag(widget, delta):
+    local = widget.rect().center()
+    start = widget.mapToGlobal(local)
+    _mouse(widget, QEvent.Type.MouseButtonPress, local, start, Qt.LeftButton, Qt.LeftButton)
+    _mouse(widget, QEvent.Type.MouseMove, local + delta, start + delta, Qt.NoButton, Qt.LeftButton)
+    _mouse(widget, QEvent.Type.MouseButtonRelease, local, start + delta, Qt.LeftButton, Qt.NoButton)
+
+
+@pytest.mark.parametrize("side", list(DockSide)[1:])
+@pytest.mark.parametrize("area", [QRect(0, 0, 1920, 1040), QRect(-1920, -200, 1920, 1040)])
+def test_edge_geometry_uses_work_area_and_inclusive_right_bottom(side, area):
+    rect = _edge_rect(QRect(-3000, -4000, 240, 160), area, side, 2)
+    inside = area.adjusted(2, 2, -2, -2)
+    assert inside.contains(rect)
+    coordinate = {
+        DockSide.LEFT: "left",
+        DockSide.RIGHT: "right",
+        DockSide.TOP: "top",
+        DockSide.BOTTOM: "bottom",
+    }[side]
+    assert getattr(rect, coordinate)() == getattr(inside, coordinate)()
+
+
+def test_oversize_window_keeps_top_left_reachable():
+    assert _edge_rect(
+        QRect(5, 5, 2000, 2000), QRect(-800, 0, 800, 600), DockSide.RIGHT, 2
+    ).topLeft() == QPoint(-798, 2)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"hide_delay": -1},
+        {"handle_width": 0},
+        {"anim_duration": -1},
+        {"dock_distance": -1},
+        {"sides": ()},
+        {"sides": (DockSide.NONE,)},
+    ],
+)
+def test_invalid_config(kwargs):
+    with pytest.raises(ValueError):
+        DockConfig(**kwargs)
+
+
+def test_target_and_drag_surface_validation(docked):
+    window, _, _, field = docked
+    with pytest.raises(ValueError, match="top-level"):
+        EdgeDockController(field)
+    other = QWidget()
+    try:
+        with pytest.raises(ValueError, match="belong"):
+            EdgeDockController(window, drag_widget=other)
+    finally:
+        other.deleteLater()
+
+
+def test_snap_selects_nearest_edge_and_respects_disabled_bottom(docked):
+    window, controller, _, _ = docked
+    area = window.screen().availableGeometry()
+    window.move(area.left() + 25, area.top() + 5)
+    controller.snap()
+    assert controller.dockSide() == DockSide.TOP
+    assert window.frameGeometry().top() == area.top() + 2
+    window.move(area.center().x() - 120, area.bottom() - window.height() + 1)
+    controller.snap()
+    assert controller.dockSide() == DockSide.NONE
+    with pytest.raises(ValueError, match="not enabled"):
+        controller.dock(DockSide.BOTTOM)
+
+
+def test_screen_selection_uses_window_center_and_handles_negative_origins(docked, monkeypatch):
+    window, controller, _, _ = docked
+    area = QRect(-1600, -200, 1600, 1000)
+
+    class SecondaryScreen:
+        def availableGeometry(self):
+            return area
+
+    screen = SecondaryScreen()
+    points = []
+
+    def screen_at(point):
+        points.append(QPoint(point))
+        return screen
+
+    monkeypatch.setattr(QApplication, "screenAt", staticmethod(screen_at))
+    window.move(-1590, 100)
+    center = window.frameGeometry().center()
+    controller.snap()
+    assert points[0] == center
+    assert window.x() == -1598
+    controller.collapse()
+    assert area.contains(controller._handle.geometry())
+    assert controller._handle.x() == -1598
+    # Model a changed work area or a removed monitor's fallback screen.
+    area = QRect(0, 0, 1000, 700)
+    controller._schedule_refresh()
+    _APP.processEvents()
+    assert area.contains(controller._handle.geometry())
+    controller.expand()
+    assert area.contains(window.frameGeometry())
+
+
+def test_drag_is_unclamped_until_release_then_recovers_offscreen_window(docked):
+    window, controller, strip, _ = docked
+    start = window.pos()
+    local = strip.rect().center()
+    pointer = strip.mapToGlobal(local)
+    _mouse(strip, QEvent.Type.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton)
+    _mouse(
+        strip, QEvent.Type.MouseMove, local, pointer + QPoint(-1800, 0), Qt.NoButton, Qt.LeftButton
+    )
+    assert window.pos() == start + QPoint(-1800, 0)
+    _mouse(
+        strip,
+        QEvent.Type.MouseButtonRelease,
+        local,
+        pointer + QPoint(-1800, 0),
+        Qt.LeftButton,
+        Qt.NoButton,
+    )
+    assert controller._press is None
+    assert controller.dockSide() == DockSide.LEFT
+    assert window.screen().availableGeometry().contains(window.frameGeometry())
+
+
+@pytest.mark.parametrize("side", [DockSide.LEFT, DockSide.RIGHT, DockSide.TOP])
+@pytest.mark.parametrize("overflow", [150, 1200])
+def test_large_overflow_still_snaps_on_release(docked, side, overflow):
+    window, controller, strip, _ = docked
+    # Use an outer desktop edge; on a real multi-monitor desktop, crossing an
+    # internal edge can legitimately land inside the neighboring display.
+    screens = QApplication.screens()
+    if side == DockSide.RIGHT:
+        screen = max(screens, key=lambda screen: screen.availableGeometry().right())
+    elif side == DockSide.LEFT:
+        screen = min(screens, key=lambda screen: screen.availableGeometry().left())
+    else:
+        screen = min(screens, key=lambda screen: screen.availableGeometry().top())
+    area = screen.availableGeometry()
+    window.move(area.center() - window.rect().center())
+    _APP.processEvents()
+    destination = QPoint(window.pos())
+    if side == DockSide.LEFT:
+        destination.setX(area.left() - overflow)
+    elif side == DockSide.RIGHT:
+        destination.setX(area.right() - window.width() + 1 + overflow)
+    else:
+        destination.setY(area.top() - overflow)
+    _drag(strip, destination - window.pos())
+    assert controller.dockSide() == side
+    assert area.contains(window.frameGeometry())
+    expected = {
+        DockSide.LEFT: area.left() + 2,
+        DockSide.RIGHT: area.right() - 2,
+        DockSide.TOP: area.top() + 2,
+    }[side]
+    assert getattr(window.frameGeometry(), side.value)() == expected
+
+
+def test_disabled_bottom_recovers_without_docking(docked):
+    window, controller, strip, _ = docked
+    area = window.screen().availableGeometry()
+    window.move(area.center().x() - window.width() // 2, area.center().y())
+    _drag(strip, QPoint(0, area.height() * 2))
+    assert controller.dockSide() == DockSide.NONE
+    assert area.contains(window.frameGeometry())
+    assert not controller._monitor.isActive()
+
+
+def test_drag_onto_secondary_display_does_not_snap_back_to_primary(docked, monkeypatch):
+    window, controller, strip, _ = docked
+    primary = window.screen()
+    area = QRect(-1920, 0, 1920, 1080)
+
+    class SecondaryScreen:
+        def availableGeometry(self):
+            return area
+
+    secondary = SecondaryScreen()
+    monkeypatch.setattr(
+        QApplication,
+        "screenAt",
+        staticmethod(lambda point: secondary if area.contains(point) else primary),
+    )
+    destination = QPoint(-1200, 250)
+    _drag(strip, destination - window.pos())
+    assert window.pos() == destination
+    assert controller.dockSide() == DockSide.NONE
+
+
+def test_click_does_not_move_and_drag_restores_cursor(docked):
+    window, _, strip, _ = docked
+    strip.setCursor(Qt.CrossCursor)
+    start = window.pos()
+    _drag(strip, QPoint(1, 1))
+    assert window.pos() == start
+    _drag(strip, QPoint(120, 30))
+    assert strip.cursor().shape() == Qt.CrossCursor
+
+
+def test_child_text_selection_does_not_drag_window(docked):
+    window, _, _, field = docked
+    start = window.pos()
+    QTest.mouseClick(field, Qt.LeftButton)
+    QTest.keyClick(field, Qt.Key_A, Qt.ControlModifier)
+    assert field.selectedText() == "select this text"
+    assert window.pos() == start
+
+
+def test_propagated_child_press_is_not_used_as_a_drag(docked):
+    window, previous, strip, _ = docked
+    previous.detach()
+    controller = EdgeDockController(window, DockConfig(anim_duration=0))
+    start = window.pos()
+    # Labels ignore mouse presses, which Qt propagates up to their parent.
+    _drag(strip, QPoint(100, 100))
+    assert window.pos() == start
+    assert controller._press is None
+
+
+def test_auto_hide_timer_rechecks_pointer_before_collapsing(docked, monkeypatch):
+    window, controller, _, _ = docked
+    controller.dock(DockSide.LEFT)
+    controller._check_auto_hide()
+    assert controller._hide_timer.isActive()
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: window.frameGeometry().center()))
+    QTest.qWait(50)
+    assert window.isVisible()
+    assert not controller.isCollapsed()
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
+    controller._check_auto_hide()
+    QTest.qWait(50)
+    assert controller.isCollapsed()
+    assert not window.isVisible()
+    assert controller._handle.isVisible()
+
+
+def test_drag_pending_and_popups_prevent_auto_hide(docked):
+    window, controller, strip, _ = docked
+    controller.dock(DockSide.LEFT)
+    QTest.mousePress(strip, Qt.LeftButton)
+    controller.collapse()
+    assert window.isVisible()
+    QTest.mouseRelease(strip, Qt.LeftButton)
+    menu = QMenu(window)
+    menu.addAction("Action")
+    menu.popup(window.mapToGlobal(QPoint(10, 10)))
+    _APP.processEvents()
+    try:
+        controller.collapse()
+        assert window.isVisible()
+    finally:
+        menu.close()
+
+
+def test_handle_hover_and_external_show_restore_without_stale_handle(docked):
+    window, controller, _, _ = docked
+    controller.dock(DockSide.RIGHT)
+    controller.collapse()
+    assert controller.isCollapsed()
+    point = QPointF(controller._handle.rect().center())
+    QApplication.sendEvent(controller._handle, QEnterEvent(point, point, point))
+    assert window.isVisible()
+    assert not controller._handle.isVisible()
+    controller.collapse()
+    window.show()
+    assert not controller.isCollapsed()
+    assert not controller._handle.isVisible()
+    assert controller.dockSide() == DockSide.RIGHT
+
+
+@pytest.mark.parametrize("action", ["hide", "close", "showMinimized", "showMaximized"])
+def test_external_lifecycle_clears_state_and_timers(docked, action):
+    window, controller, _, _ = docked
+    controller.dock(DockSide.LEFT)
+    getattr(window, action)()
+    _APP.processEvents()
+    assert controller.dockSide() == DockSide.NONE
+    assert not controller._handle.isVisible()
+    assert not controller._monitor.isActive()
+    assert not controller._hide_timer.isActive()
+
+
+def test_close_while_collapsed_cannot_resurrect_handle(docked):
+    window, controller, _, _ = docked
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    window.close()
+    QTest.qWait(50)
+    assert not controller._handle.isVisible()
+    assert controller.dockSide() == DockSide.NONE
+    assert not controller.isCollapsed()
+
+
+def test_disabling_auto_hide_retains_docking_and_disable_restores(docked):
+    window, controller, _, _ = docked
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    controller.setAutoHide(False)
+    assert window.isVisible()
+    assert controller.dockSide() == DockSide.LEFT
+    assert not controller._monitor.isActive()
+    controller.collapse()
+    assert window.isVisible()
+    controller.setAutoHide(True)
+    controller.collapse()
+    controller.setEnabled(False)
+    assert window.isVisible()
+    assert not controller._handle.isVisible()
+    assert controller.dockSide() == DockSide.NONE
+    controller.setEnabled(True)
+    controller.dock(DockSide.RIGHT)
+    assert controller.dockSide() == DockSide.RIGHT
+
+
+def test_detach_restores_target_and_removes_drag_behavior(docked):
+    window, controller, strip, _ = docked
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    controller.detach()
+    assert window.isVisible()
+    start = window.pos()
+    _drag(strip, QPoint(100, 50))
+    assert window.pos() == start
+    controller.setEnabled(True)
+    assert not controller.isEnabled()
+
+
+def test_resize_keeps_right_edge_and_animation_is_reused(docked):
+    window, previous, strip, _ = docked
+    previous.detach()
+    controller = EdgeDockController(window, DockConfig(anim_duration=40), drag_widget=strip)
+    controller.setAutoHide(False)
+    animation = controller._animation
+    controller.dock(DockSide.LEFT)
+    controller.dock(DockSide.RIGHT)
+    QTest.qWait(70)
+    assert controller._animation is animation
+    assert controller.dockSide() == DockSide.RIGHT
+    assert window.frameGeometry().right() == window.screen().availableGeometry().right() - 2
+    window.resize(300, 190)
+    _APP.processEvents()
+    assert window.frameGeometry().right() == window.screen().availableGeometry().right() - 2
+
+
+def test_target_destruction_owns_handle_and_controller(theme_manager_instance, monkeypatch):
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
+    window = ModernWindow()
+    window.resize(320, 240)
+    controller = EdgeDockController(window, DockConfig(anim_duration=0))
+    window.show()
+    _APP.processEvents()
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    handle = controller._handle
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    _APP.processEvents()
+    assert not isValid(handle)
+    assert not isValid(controller)
+
+
+def test_system_drag_survives_ungrab_and_snaps_after_native_finish(
+    monkeypatch, theme_manager_instance
+):
+    window = ModernWindow()
+    surface = QLabel("Drag", window)
+    surface.setGeometry(20, 50, 180, 40)
+    window.resize(400, 240)
+    window.move(220, 200)
+    controller = EdgeDockController(
+        window, DockConfig(anim_duration=0), drag_widget=surface, auto_hide=False
+    )
+    window.show()
+    _APP.processEvents()
+    original_size = window.size()
+    original_pos = window.pos()
+    calls = []
+    handle = window.windowHandle()
+    monkeypatch.setattr(handle, "startSystemMove", lambda: calls.append(True) or True)
+    monkeypatch.setattr(QApplication, "mouseButtons", staticmethod(lambda: Qt.LeftButton))
+    local = surface.rect().center()
+    pointer = surface.mapToGlobal(local)
+    try:
+        _mouse(surface, QEvent.Type.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton)
+        _mouse(
+            surface,
+            QEvent.Type.MouseMove,
+            local,
+            pointer + QPoint(20, 0),
+            Qt.NoButton,
+            Qt.LeftButton,
+        )
+        assert calls == [True]
+        assert controller._system_move
+        assert window.pos() == original_pos  # The controller must not also move it.
+        QApplication.sendEvent(surface, QEvent(QEvent.Type.UngrabMouse))
+        assert controller._system_move
+        area = window.screen().availableGeometry()
+        window.move(area.left() + 12, area.top() + 150)
+        # No Qt MouseButtonRelease arrives after the native move loop.
+        window._finish_system_move()
+        assert not controller._system_move
+        assert controller.dockSide() == DockSide.NONE  # Deferred past the native event.
+        _APP.processEvents()
+        assert controller.dockSide() == DockSide.LEFT
+        assert window.frameGeometry().left() == area.left() + 2
+        assert window.size() == original_size
+    finally:
+        window.close()
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_portable_system_drag_completion_without_release(docked, monkeypatch):
+    window, controller, surface, _ = docked
+    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: True)
+    held = [Qt.LeftButton]
+    monkeypatch.setattr(QApplication, "mouseButtons", staticmethod(lambda: held[0]))
+    local = surface.rect().center()
+    pointer = surface.mapToGlobal(local)
+    _mouse(surface, QEvent.Type.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton)
+    _mouse(
+        surface, QEvent.Type.MouseMove, local, pointer + QPoint(20, 0), Qt.NoButton, Qt.LeftButton
+    )
+    window.move(window.screen().availableGeometry().left() + 5, window.y())
+    controller._check_drag_finished()
+    assert controller._system_move
+    held[0] = Qt.NoButton
+    controller._check_drag_finished()
+    _APP.processEvents()
+    assert controller.dockSide() == DockSide.LEFT
+    assert not controller._drag_watch.isActive()
+
+
+def test_windows_drag_completion_uses_live_state_when_qt_release_is_missing(docked, monkeypatch):
+    from pyside6_modern_widgets import edge_dock
+
+    window, controller, surface, _ = docked
+    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: True)
+    monkeypatch.setattr(QApplication, "mouseButtons", staticmethod(lambda: Qt.LeftButton))
+    monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(edge_dock, "mouse_buttons_pressed", lambda **kwargs: False)
+    local = surface.rect().center()
+    pointer = surface.mapToGlobal(local)
+    _mouse(surface, QEvent.Type.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton)
+    window.move(window.screen().availableGeometry().left() + 10, window.y())
+    controller._check_drag_finished()
+    _APP.processEvents()
+    assert controller.dockSide() == DockSide.LEFT
+    assert not controller._system_move
+    controller.collapse()
+    assert controller.isCollapsed()  # Stale Qt LeftButton must not block auto-hide.

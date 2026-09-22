@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add `EdgeDockController`, `DockConfig`, and `DockSide` for optional screen-edge
+  snapping and auto-hide, with explicit drag surfaces, customizable gray restore
+  handles, multi-screen work areas, off-screen release recovery, and lifecycle cleanup.
 - Add Qt Linguist-based internationalization for library-owned UI text, including
   a bundled Simplified Chinese catalog, runtime language-change handling, and the
   public `load_translator()` catalog loader.
@@ -26,6 +29,9 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Delegate edge-dock dragging to the shared native system-move path, preserving
+  mixed-DPI window sizing. Defer snapping until native movement finishes and
+  check live Windows button state when Qt does not receive the mouse release.
 - Keep centered title text at its intended height after a macOS full-screen
   transition temporarily compresses the title-bar layout spacer.
 - Keep macOS traffic lights centered during live resizing using synchronous
