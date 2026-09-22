@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-09-22
+
 ### Added
 
 - Add visible Home and search controls to the navigation example custom title
@@ -463,7 +465,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.11...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.12...HEAD
+[0.5.12]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.8...v0.5.9
