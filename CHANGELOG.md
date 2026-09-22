@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.11] - 2026-09-22
+
 ### Added
 
 - Add `EdgeDockController`, `DockConfig`, and `DockSide` for optional screen-edge
@@ -451,7 +453,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.10...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.11...HEAD
+[0.5.11]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.7...v0.5.8
