@@ -42,7 +42,9 @@ resizing, and a menu with the available window commands.
 On macOS, `ModernWindow` keeps the native `NSWindow` frame and traffic-light
 controls, with themed content extended into the transparent title bar. The
 custom Windows-style controls and window icon are hidden, and title-bar double
-clicks follow the user's macOS preference.
+clicks follow the user's macOS preference. `ModernMessageBox` uses a standard
+native title bar for dragging and preserves Qt's macOS content margins, while
+keeping themed Qt message content and buttons.
 
 ## Installation
 

@@ -4,12 +4,13 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QSize, Qt
 from PySide6.QtGui import QIcon, QResizeEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox, QToolBar
 
-from pyside6_modern_widgets import ModernWindow
+from pyside6_modern_widgets import ModernMessageBox, ModernWindow
 from pyside6_modern_widgets import _macos_window as macos_window
+from pyside6_modern_widgets import modern_message_box as message_box_module
 from pyside6_modern_widgets import modern_window as modern_window_module
 
 _APP = QApplication.instance() or QApplication([])
@@ -134,6 +135,27 @@ def test_macos_title_bar_sync_waits_out_live_resize(monkeypatch) -> None:
         _dispose(window)
 
 
+def test_macos_toolbar_visibility_reapplies_transparent_title_bar(monkeypatch) -> None:
+    window = ModernWindow()
+    toolbar = QToolBar(window)
+    other_toolbar = QToolBar()
+    syncs = []
+    monkeypatch.setattr(window, "_uses_native_macos_title_bar", True)
+    monkeypatch.setattr(window, "_sync_macos_native_title_bar", lambda: syncs.append(True))
+    try:
+        window._native_frame_sync_timer.stop()
+        for event_type in (QEvent.Type.Show, QEvent.Type.Hide):
+            assert not window.eventFilter(other_toolbar, QEvent(event_type))
+            assert not window._native_frame_sync_timer.isActive()
+            assert not window.eventFilter(toolbar, QEvent(event_type))
+            assert window._native_frame_sync_timer.isActive()
+            _APP.processEvents()
+        assert syncs == [True, True]
+    finally:
+        _dispose(other_toolbar)
+        _dispose(window)
+
+
 class _NativeWidget:
     def isWindow(self) -> bool:
         return True
@@ -245,6 +267,12 @@ def test_native_bridge_preserves_style_and_enables_full_size_content(monkeypatch
     bridge = _BridgeProbe()
     monkeypatch.setattr(macos_window, "uses_macos_native_title_bar", lambda: True)
     monkeypatch.setattr(macos_window, "_objc_bridge", lambda: bridge)
+    layouts = []
+    monkeypatch.setattr(
+        macos_window,
+        "_observe_traffic_lights",
+        lambda widget, bridge, window, height: layouts.append((window, height)),
+    )
 
     assert macos_window.configure_macos_native_title_bar(  # type: ignore[arg-type]
         _NativeWidget(),
@@ -255,23 +283,190 @@ def test_native_bridge_preserves_style_and_enables_full_size_content(monkeypatch
         (456, "setTitlebarAppearsTransparent:", True),
         (456, "setTitleVisibility:", 1),
     ]
-    assert bridge.origins == [
-        (100, 10.0, 4.0),
-        (101, 30.0, 4.0),
-        (102, 50.0, 4.0),
-    ]
+    assert layouts == [(456, 34)]
 
 
 def test_traffic_lights_support_flipped_title_bar_coordinates() -> None:
-    bridge = _BridgeProbe(flipped=True)
-
-    macos_window._position_traffic_lights(456, bridge, 34)  # type: ignore[arg-type]
+    bridge = _FrameNotificationProbe(flipped=True)
+    observer = macos_window._TrafficLightObserver(bridge, 456, 34)
+    observer.layout()
 
     assert bridge.origins == [
         (100, 10.0, 10.0),
         (101, 30.0, 10.0),
         (102, 50.0, 10.0),
     ]
+    observer.dispose()
+
+
+class _FrameNotificationProbe(_BridgeProbe):
+    def __init__(self, *, flipped=False):
+        super().__init__(flipped=flipped)
+        self.frames = {
+            button: super(_FrameNotificationProbe, self).send_rect(button, "frame")
+            for button in (100, 101, 102)
+        }
+        self.refs = {}
+        self.posts = dict.fromkeys((100, 101, 102, 200), False)
+        self.notifications = []
+        self.callback = None
+        self.full_screen = False
+        self.parent = 200
+
+    def send_id(self, receiver, selector):
+        if selector == "retain":
+            self.refs[receiver] = self.refs.get(receiver, 0) + 1
+            return receiver
+        if selector == "superview":
+            return self.parent
+        return super().send_id(receiver, selector)
+
+    def send_void(self, receiver, selector):
+        assert selector == "release"
+        self.refs[receiver] -= 1
+
+    def create_observer(self, callback):
+        self.callback = callback
+        return 999
+
+    def observe(self, observer, name, obj):
+        assert observer == 999
+        self.notifications.append((name, obj))
+
+    def remove_observer(self, observer):
+        assert observer == 999
+        self.callback = None
+        self.notifications.clear()
+
+    def send_integer(self, receiver, selector):
+        return (1 << 14) if self.full_screen else super().send_integer(receiver, selector)
+
+    def send_bool(self, receiver, selector):
+        if selector == "postsFrameChangedNotifications":
+            return self.posts.get(receiver, False)
+        if selector == "isFlipped":
+            return self.flipped
+        return super().send_bool(receiver, selector)
+
+    def send_void_bool(self, receiver, selector, value):
+        if selector == "setPostsFrameChangedNotifications:":
+            self.posts[receiver] = value
+        else:
+            super().send_void_bool(receiver, selector, value)
+
+    def send_rect(self, receiver, selector):
+        if selector == "frame":
+            frame = self.frames[receiver]
+            return macos_window._NSRect.from_buffer_copy(frame)
+        return super().send_rect(200 if selector == "bounds" else receiver, selector)
+
+    def send_void_point(self, receiver, selector, value):
+        super().send_void_point(receiver, selector, value)
+        self.frames[receiver].origin = value
+        if self.callback and self.posts[receiver]:
+            self.callback()
+
+
+def test_native_frame_resets_are_corrected_synchronously_without_spacing_drift():
+    bridge = _FrameNotificationProbe()
+    observer = macos_window._TrafficLightObserver(bridge, 456, 34)
+    try:
+        observer.layout()
+        # AppKit lays out one button at a time during live resize. Correction
+        # must finish within each notification, without waiting for a Qt timer.
+        for _ in range(3):
+            for button in (100, 101, 102):
+                bridge.frames[button].origin = macos_window._NSPoint(14 + (button - 100) * 20, 7)
+                bridge.callback()
+                for other in (100, 101, 102):
+                    assert bridge.frames[other].origin.x == 10 + (other - 100) * 20
+                    assert bridge.frames[other].origin.y == 4
+        assert len(bridge.origins) == 12  # No recursive notification loop.
+        bridge.full_screen = True
+        bridge.frames[100].origin.y = 7
+        bridge.callback()
+        assert bridge.frames[100].origin.y == 7
+        bridge.full_screen = False
+        bridge.callback()
+        assert bridge.frames[100].origin.y == 4
+    finally:
+        observer.dispose()
+    observer.dispose()  # Surface teardown followed by QObject destruction.
+    assert bridge.callback is None
+    assert not bridge.notifications
+    assert not any(bridge.refs.values())
+    assert not any(bridge.posts.values())
+
+
+def test_traffic_light_observer_rebinds_after_native_reparenting():
+    widget = QObject()
+    bridge = _FrameNotificationProbe()
+    try:
+        macos_window._observe_traffic_lights(widget, bridge, 456, 34)
+        previous = widget._macos_traffic_light_observer
+        bridge.parent = 201
+        macos_window._observe_traffic_lights(widget, bridge, 456, 34)
+        replacement = widget._macos_traffic_light_observer
+        assert replacement is not previous
+        assert previous.observer == 0
+        assert replacement.matches_window(456)
+        assert bridge.refs[200] == 0
+        assert not bridge.posts[200]
+        assert bridge.refs[201] == 1
+        assert ("NSViewFrameDidChangeNotification", 201) in bridge.notifications
+        macos_window._observe_traffic_lights(widget, bridge, 456, 34)
+        assert widget._macos_traffic_light_observer is replacement
+        macos_window.release_macos_title_bar(widget)
+        assert not any(bridge.refs.values())
+        assert not any(bridge.posts.values())
+        # A released native surface can be recreated on the same Qt object.
+        macos_window._observe_traffic_lights(widget, bridge, 456, 34)
+    finally:
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert bridge.callback is None
+    assert not any(bridge.refs.values())
+
+
+def test_macos_message_box_keeps_native_margins_and_titled_frame(monkeypatch):
+    monkeypatch.setattr(message_box_module, "uses_macos_native_title_bar", lambda: True)
+    box = ModernMessageBox(
+        QMessageBox.Icon.Information, "Information", "Latest version", QMessageBox.StandardButton.Ok
+    )
+    try:
+        # Qt/macOS supplies these widget margins; the offscreen backend does not.
+        box.setContentsMargins(24, 15, 24, 20)
+        box.setInformativeText("Additional context")
+        box.setDetailedText("Details")
+        check_box = QCheckBox("Remember", box)
+        box.setCheckBox(check_box)
+        box.show()
+        _APP.processEvents()
+        assert box.contentsMargins().left() == 24
+        assert box.contentsMargins().top() == 15
+        assert box.contentsMargins().right() == 24
+        assert box.contentsMargins().bottom() == 20
+        assert not box.windowFlags() & Qt.WindowType.FramelessWindowHint
+        assert box.windowFlags() & Qt.WindowType.WindowTitleHint
+        assert box.windowTitle() == "Information"
+        assert not box.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        assert box._title_bar.isHidden()
+        assert box._chrome_overlay.isHidden()
+        assert box.autoFillBackground()
+        for child in [
+            box.button(QMessageBox.StandardButton.Ok),
+            box.checkBox(),
+            box.findChild(QLabel, "qt_msgbox_label"),
+        ]:
+            assert box.rect().contains(child.mapTo(box, child.rect().bottomRight()))
+        box.setWindowFlags(box.windowFlags() | Qt.WindowType.FramelessWindowHint)
+        assert not box.windowFlags() & Qt.WindowType.FramelessWindowHint
+        box.setWindowTitle("Changed")
+        assert box.windowTitle() == "Changed"
+        box.button(QMessageBox.StandardButton.Ok).click()
+        assert box.result() == QMessageBox.StandardButton.Ok
+    finally:
+        _dispose(box)
 
 
 def test_native_bridge_reports_live_resize(monkeypatch) -> None:

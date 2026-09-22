@@ -28,6 +28,7 @@ from . import _resources, _system_menu  # noqa: F401
 from ._macos_window import (
     configure_macos_native_title_bar,
     macos_window_is_in_live_resize,
+    release_macos_title_bar,
     uses_macos_native_title_bar,
     window_flags_with_chrome,
 )
@@ -826,6 +827,13 @@ class ModernWindow(QWidget):
         self._schedule_surface_refresh()
 
     def event(self, event) -> bool:
+        if (
+            event.type() == QEvent.Type.PlatformSurface
+            and isinstance(event, QPlatformSurfaceEvent)
+            and event.surfaceEventType()
+            == QPlatformSurfaceEvent.SurfaceEventType.SurfaceAboutToBeDestroyed
+        ):
+            release_macos_title_bar(self)
         handled = super().event(event)
         if event.type() == QEvent.Type.ChildRemoved:
             # Ownership can change while hidden, when our application-wide
@@ -1365,7 +1373,8 @@ class ModernWindow(QWidget):
         if hasattr(self, "_chrome"):
             self._layout_chrome()
         if self._uses_native_macos_title_bar and hasattr(self, "_macos_title_bar_resize_timer"):
-            # AppKit owns the standard button frames until live resizing ends.
+            # Frame notifications keep the buttons aligned during live resize;
+            # defer the broader NSWindow configuration until resizing finishes.
             self._macos_title_bar_resize_timer.start()
 
     def moveEvent(self, event) -> None:
@@ -1406,6 +1415,16 @@ class ModernWindow(QWidget):
         super().hideEvent(event)
 
     def eventFilter(self, watched, event) -> bool:
+        if (
+            self._uses_native_macos_title_bar
+            and isinstance(watched, QToolBar)
+            and watched.window() is self
+            and event.type() in (QEvent.Type.Show, QEvent.Type.Hide)
+        ):
+            # A native toolbar visibility change can make Qt restore AppKit's
+            # opaque title-bar material. Reassert the transparent configuration
+            # after Qt and AppKit finish processing the visibility event.
+            self._schedule_native_frame_sync()
         if self._resize_controller.handle_event(
             watched,
             event,

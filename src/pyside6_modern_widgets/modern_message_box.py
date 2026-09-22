@@ -1,4 +1,4 @@
-"""A native QMessageBox with the package's themed frameless chrome."""
+"""A themed QMessageBox with native macOS or portable frameless chrome."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QMessageBox, QWidget
 
 from . import _system_menu
+from ._macos_window import uses_macos_native_title_bar, window_flags_with_chrome
 from ._window_chrome import (
     BackgroundFrame,
     WindowChrome,
@@ -39,6 +40,7 @@ class ModernMessageBox(QMessageBox):
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
+        self._uses_native_macos_title_bar = uses_macos_native_title_bar()
         self._native_dpi = WindowDpiState()
         if isinstance(icon, QWidget):
             if title or text or buttons != self.StandardButton.NoButton or parent is not None:
@@ -49,16 +51,27 @@ class ModernMessageBox(QMessageBox):
             icon = self.Icon.NoIcon
 
         super().__init__(
-            icon, title, text, buttons, parent, flags | Qt.WindowType.FramelessWindowHint
+            icon,
+            title,
+            text,
+            buttons,
+            parent,
+            window_flags_with_chrome(
+                flags, native_macos_title_bar=self._uses_native_macos_title_bar
+            ),
         )
         # Keep Qt's widget implementation so our palette and chrome also work on
         # platforms that otherwise substitute an operating-system message box.
         self.setOption(QMessageBox.Option.DontUseNativeDialog)
+        if self._uses_native_macos_title_bar:
+            QWidget.setWindowTitle(self, title)
         self._uses_global_theme = theme is None
         self._theme = theme or theme_manager().theme()
         self._metrics = metrics
         self._corner_radius = metrics.corner_radius
-        self._surface_policy = current_window_surface_policy()
+        self._surface_policy = current_window_surface_policy(
+            native_macos_title_bar=self._uses_native_macos_title_bar
+        )
         self._surface_policy.apply_to(self)
 
         paint_radius = self._surface_policy.paint_corner_radius(self._corner_radius)
@@ -106,10 +119,20 @@ class ModernMessageBox(QMessageBox):
         self.apply_window_style()
 
     def showSystemWindowMenu(self, position: QPoint) -> bool:
+        if self._uses_native_macos_title_bar:
+            return False
         return self._system_menu_controller.show(position)
+
+    def setWindowTitle(self, title: str) -> None:
+        # QMessageBox intentionally ignores titles on macOS. This class keeps
+        # a titled native dialog so its caption remains a usable drag region.
+        QWidget.setWindowTitle(self, title)
 
     def apply_window_style(self) -> None:
         self._chrome.apply(self._theme, self._corner_radius)
+        if self._uses_native_macos_title_bar:
+            self._title_bar.hide()
+            self._chrome_overlay.hide()
         palette = self.palette()
         background = QColor(self._theme.surface_alternate)
         for group in (
@@ -137,17 +160,30 @@ class ModernMessageBox(QMessageBox):
             self.apply_window_style()
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
-        super().setWindowFlags(flags | Qt.WindowType.FramelessWindowHint)
+        super().setWindowFlags(
+            window_flags_with_chrome(
+                flags, native_macos_title_bar=self._uses_native_macos_title_bar
+            )
+        )
         if hasattr(self, "_chrome"):
             self._sync_chrome_with_window_flags()
 
     def setWindowFlag(self, flag: Qt.WindowType, on: bool = True) -> None:
         super().setWindowFlag(flag, on)
-        super().setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        super().setWindowFlag(
+            Qt.WindowType.FramelessWindowHint, not self._uses_native_macos_title_bar
+        )
         if hasattr(self, "_chrome"):
             self._sync_chrome_with_window_flags()
 
     def _sync_chrome_with_window_flags(self) -> None:
+        if self._uses_native_macos_title_bar:
+            self._title_bar.hide()
+            self._chrome_overlay.hide()
+            # QMessageBox's macOS layout uses QWidget contents margins rather
+            # than layout margins. Keep all four, including after details change.
+            self._layout_chrome()
+            return
         visible = self._title_bar.syncWindowFlags(self.windowFlags())
         self.setContentsMargins(0, self._title_bar.height() if visible else 0, 0, 0)
         self._layout_chrome()

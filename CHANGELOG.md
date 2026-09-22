@@ -28,8 +28,12 @@ All notable changes to this project are documented in this file.
 
 - Keep centered title text at its intended height after a macOS full-screen
   transition temporarily compresses the title-bar layout spacer.
-- Reapply the custom macOS traffic-light placement once after AppKit finishes
-  live resizing, avoiding competing layouts that made the controls jump.
+- Keep macOS traffic lights centered during live resizing using synchronous
+  native frame notifications, with cleanup when the native window is destroyed.
+- Restore the transparent macOS title bar after showing or hiding a toolbar,
+  preventing the native title-bar material from turning white on toolbar pages.
+- Preserve Qt's macOS message-box content margins and use a draggable native
+  title bar, preventing clipped content and buttons.
 - Keep hidden navigation pages out of height-for-width calculations, preventing
   the Home page from making the window taller during mixed-DPI monitor drags.
 - Suppress native radio bullets when pressing or switching exclusive `ModernMenu`
