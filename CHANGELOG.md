@@ -29,6 +29,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Reapply macOS traffic-light positions on native window resize notifications,
+  covering green-button layout changes that do not emit a view-frame notification.
 - Delegate edge-dock dragging to the shared native system-move path, preserving
   mixed-DPI window sizing. Defer snapping until native movement finishes and
   check live Windows button state when Qt does not receive the mouse release.

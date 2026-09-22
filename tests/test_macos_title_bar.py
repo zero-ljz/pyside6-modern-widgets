@@ -4,6 +4,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QSize, Qt
 from PySide6.QtGui import QIcon, QResizeEvent
 from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox, QToolBar
@@ -338,6 +339,10 @@ class _FrameNotificationProbe(_BridgeProbe):
         self.callback = None
         self.notifications.clear()
 
+    def notify(self, name, obj):
+        if self.callback and (name, obj) in self.notifications:
+            self.callback()
+
     def send_integer(self, receiver, selector):
         return (1 << 14) if self.full_screen else super().send_integer(receiver, selector)
 
@@ -396,6 +401,40 @@ def test_native_frame_resets_are_corrected_synchronously_without_spacing_drift()
     assert not bridge.notifications
     assert not any(bridge.refs.values())
     assert not any(bridge.posts.values())
+
+
+@pytest.mark.parametrize(
+    "notification",
+    ["NSWindowDidResizeNotification", "NSWindowDidEndLiveResizeNotification"],
+)
+def test_window_resize_corrects_green_button_after_silent_appkit_layout(notification):
+    bridge = _FrameNotificationProbe()
+    observer = macos_window._TrafficLightObserver(bridge, 456, 34)
+    try:
+        observer.layout()
+        for _ in range(3):
+            # The last AppKit layout pass moves only the green button without
+            # a view-frame notification. Window notifications must correct it
+            # before returning to the native resize loop, without a Qt timer.
+            bridge.frames[102].origin = macos_window._NSPoint(46, 7)
+            bridge.notify(notification, 789)  # A different window is unrelated.
+            assert bridge.frames[102].origin.x == 46
+            bridge.notify(notification, 456)
+            for button in (100, 101, 102):
+                assert bridge.frames[button].origin.x == 10 + (button - 100) * 20
+                assert bridge.frames[button].origin.y == 4
+        assert len(bridge.origins) == 6  # Only the green button needs correction.
+
+        bridge.full_screen = True
+        bridge.frames[102].origin = macos_window._NSPoint(46, 7)
+        bridge.notify(notification, 456)
+        assert bridge.frames[102].origin.x == 46
+        assert bridge.frames[102].origin.y == 7
+    finally:
+        observer.dispose()
+    bridge.notify(notification, 456)
+    assert not bridge.notifications
+    assert not any(bridge.refs.values())
 
 
 def test_traffic_light_observer_rebinds_after_native_reparenting():

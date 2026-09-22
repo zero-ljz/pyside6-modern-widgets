@@ -27,11 +27,24 @@ def test_appkit_frame_notifications_correct_buttons_before_returning():
         assert window._macos_title_bar_configured
         observer = window._macos_traffic_light_observer
         bridge = observer.bridge
-        for width in (800, 900, 750):
-            window.resize(width, 500)
+        for width, height in ((800, 500), (900, 600), (750, 450)):
+            window.resize(width, height)
             QApplication.processEvents()
-            for button, _parent, _offset in observer.buttons:
+            for button, parent, offset in observer.buttons:
                 expected = bridge.send_rect(button, "frame")
+                bounds = bridge.send_rect(parent, "bounds")
+                first = bridge.send_rect(observer.buttons[0][0], "frame")
+                padding = max(0.0, (observer.height - first.size.height) / 2)
+                top = max(0.0, (observer.height - expected.size.height) / 2)
+                assert expected.origin.x == pytest.approx(bounds.origin.x + padding + offset)
+                assert expected.origin.y == pytest.approx(
+                    bounds.origin.y
+                    + (
+                        top
+                        if bridge.send_bool(parent, "isFlipped")
+                        else bounds.size.height - top - expected.size.height
+                    )
+                )
                 bridge.send_void_point(
                     button,
                     "setFrameOrigin:",

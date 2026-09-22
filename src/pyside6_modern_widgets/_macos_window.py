@@ -300,7 +300,16 @@ class _TrafficLightObserver:
                         self.views[view] = bridge.send_bool(view, "postsFrameChangedNotifications")
                         bridge.send_void_bool(view, "setPostsFrameChangedNotifications:", True)
                         bridge.observe(self.observer, "NSViewFrameDidChangeNotification", view)
-            bridge.observe(self.observer, "NSWindowDidExitFullScreenNotification", window)
+            # A window resize can finish with an AppKit layout pass that does
+            # not post a frame notification for every control (notably zoom).
+            # Correct that final placement inside the native tracking loop;
+            # the Qt resize timer cannot do so until the mouse is released.
+            for name in (
+                "NSWindowDidResizeNotification",
+                "NSWindowDidEndLiveResizeNotification",
+                "NSWindowDidExitFullScreenNotification",
+            ):
+                bridge.observe(self.observer, name, window)
         except Exception:
             self.dispose()
             raise
