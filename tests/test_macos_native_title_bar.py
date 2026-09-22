@@ -5,7 +5,13 @@ from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QToolBar
 
-from pyside6_modern_widgets import ModernMessageBox, ModernWindow
+from pyside6_modern_widgets import (
+    DARK_THEME,
+    LIGHT_THEME,
+    ModernDialog,
+    ModernMessageBox,
+    ModernWindow,
+)
 from pyside6_modern_widgets import _macos_window as native
 
 pytestmark = pytest.mark.skipif(
@@ -17,6 +23,35 @@ def _dispose(widget):
     widget.close()
     widget.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("widget_class", [ModernDialog, ModernMessageBox])
+def test_appkit_dialog_appearance_follows_widget_theme(widget_class):
+    widget = widget_class(theme=DARK_THEME)
+    try:
+        widget.setWindowTitle("Appearance")
+        widget.show()
+        QTest.qWait(100)
+        bridge = native._objc_bridge()
+        nswindow = native._native_window(widget, bridge)
+        for theme, expected in (
+            (DARK_THEME, "NSAppearanceNameDarkAqua"),
+            (LIGHT_THEME, "NSAppearanceNameAqua"),
+            (DARK_THEME, "NSAppearanceNameDarkAqua"),
+        ):
+            widget.setTheme(theme)
+            QApplication.processEvents()
+            appearance = bridge.send_id(nswindow, "effectiveAppearance")
+            name = bridge.send_id(appearance, "name")
+            assert bridge.send_utf8(name, "UTF8String") == expected
+        if isinstance(widget, ModernDialog):
+            assert widget._macos_title_bar_configured
+            assert bridge.send_bool(nswindow, "titlebarAppearsTransparent")
+            assert widget._title_bar.isVisible()
+            assert widget._title_bar.closeButton.isHidden()
+            assert widget.contentsMargins().top() == widget._title_bar.height()
+    finally:
+        _dispose(widget)
 
 
 def test_appkit_frame_notifications_correct_buttons_before_returning():

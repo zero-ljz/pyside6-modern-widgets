@@ -9,10 +9,18 @@ from PySide6.QtCore import QCoreApplication, QEvent, QObject, QSize, Qt
 from PySide6.QtGui import QIcon, QResizeEvent
 from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox, QToolBar
 
-from pyside6_modern_widgets import ModernMessageBox, ModernWindow
+from pyside6_modern_widgets import (
+    DARK_THEME,
+    LIGHT_THEME,
+    ModernDialog,
+    ModernMessageBox,
+    ModernWindow,
+)
 from pyside6_modern_widgets import _macos_window as macos_window
+from pyside6_modern_widgets import modern_dialog as dialog_module
 from pyside6_modern_widgets import modern_message_box as message_box_module
 from pyside6_modern_widgets import modern_window as modern_window_module
+from pyside6_modern_widgets.theme import ThemeMode
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -32,6 +40,113 @@ def test_chrome_flags_select_native_macos_frame() -> None:
 
     assert not native & Qt.WindowType.FramelessWindowHint
     assert portable & Qt.WindowType.FramelessWindowHint
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_dialog_uses_macos_chrome_and_native_resize(monkeypatch, configured):
+    monkeypatch.setattr(dialog_module, "uses_macos_native_title_bar", lambda: True)
+    monkeypatch.setattr(
+        dialog_module, "configure_macos_native_title_bar", lambda *_args, **_kwargs: configured
+    )
+    dialog = ModernDialog()
+    try:
+        dialog.setWindowTitle("Preferences")
+        dialog.show()
+        _APP.processEvents()
+        assert not dialog.windowFlags() & Qt.WindowType.FramelessWindowHint
+        assert dialog._surface_policy.opaque_surface
+        assert not dialog.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        assert dialog._title_bar.titleAlignment() == "center"
+        assert dialog._title_bar.titleLabel.text() == "Preferences"
+        assert dialog._title_bar.closeButton.isHidden()
+        assert dialog._title_bar.isVisible() == configured
+        assert dialog.contentsMargins().top() == (dialog._title_bar.height() if configured else 0)
+        assert dialog._chrome_overlay.isHidden()
+        assert not dialog.showSystemWindowMenu(dialog.pos())
+        resize_modes = []
+        monkeypatch.setattr(
+            dialog._resize_controller,
+            "handle_event",
+            lambda *_args, **kwargs: resize_modes.append(kwargs["enabled"]) or False,
+        )
+        dialog.eventFilter(dialog, QEvent(QEvent.Type.MouseMove))
+        assert resize_modes == [False]
+        dialog.setWindowFlag(Qt.WindowType.FramelessWindowHint)
+        assert not dialog.windowFlags() & Qt.WindowType.FramelessWindowHint
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.FramelessWindowHint)
+        assert not dialog.windowFlags() & Qt.WindowType.FramelessWindowHint
+    finally:
+        _dispose(dialog)
+
+
+@pytest.mark.parametrize(
+    "module,widget_class", [(dialog_module, ModernDialog), (message_box_module, ModernMessageBox)]
+)
+def test_macos_dialog_appearance_tracks_explicit_and_global_themes(
+    monkeypatch, theme_manager_instance, module, widget_class
+):
+    monkeypatch.setattr(module, "uses_macos_native_title_bar", lambda: True)
+    appearances = []
+    monkeypatch.setattr(
+        module,
+        "set_macos_window_appearance",
+        lambda widget, *, dark: appearances.append(dark),
+    )
+    widget = widget_class(theme=DARK_THEME)
+    try:
+        widget.show()
+        _APP.processEvents()
+        assert appearances[-1] is True
+        widget.setTheme(LIGHT_THEME)
+        assert appearances[-1] is False
+        widget.setTheme(DARK_THEME)
+        assert appearances[-1] is True
+        widget.setTheme(None)
+        theme_manager_instance.setMode(ThemeMode.LIGHT)
+        assert appearances[-1] is False
+        theme_manager_instance.setMode(ThemeMode.DARK)
+        assert appearances[-1] is True
+        appearances.clear()
+        widget.event(QEvent(QEvent.Type.WinIdChange))
+        if isinstance(widget, ModernDialog):
+            widget._sync_macos_native_title_bar()
+        assert appearances[-1] is True
+    finally:
+        _dispose(widget)
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_native_appearance_is_applied_to_the_window(monkeypatch, dark):
+    calls = []
+
+    class Bridge:
+        def class_named(self, name):
+            return {"NSString": 10, "NSAppearance": 20}[name]
+
+        def send_id(self, receiver, selector):
+            assert (receiver, selector) == (123, "window")
+            return 456
+
+        def send_id_utf8(self, receiver, selector, value):
+            assert (receiver, selector) == (10, "stringWithUTF8String:")
+            assert value == ("NSAppearanceNameDarkAqua" if dark else "NSAppearanceNameAqua")
+            return 30
+
+        def send_id_pointer(self, receiver, selector, value):
+            assert (receiver, selector, value) == (20, "appearanceNamed:", 30)
+            return 40
+
+        def send_void_pointer(self, *args):
+            calls.append(args)
+
+    class Widget(_NativeWidget):
+        def windowHandle(self):
+            return object()
+
+    monkeypatch.setattr(macos_window, "uses_macos_native_title_bar", lambda: True)
+    monkeypatch.setattr(macos_window, "_objc_bridge", Bridge)
+    assert macos_window.set_macos_window_appearance(Widget(), dark=dark)
+    assert calls == [(456, "setAppearance:", 40)]
 
 
 def test_modern_window_uses_native_macos_title_bar_layout(monkeypatch) -> None:
@@ -161,7 +276,7 @@ class _NativeWidget:
     def isWindow(self) -> bool:
         return True
 
-    def winId(self) -> int:
+    def internalWinId(self) -> int:
         return 123
 
     def windowFlags(self) -> Qt.WindowType:

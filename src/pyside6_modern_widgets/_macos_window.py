@@ -1,4 +1,4 @@
-"""Native macOS title-bar integration for ModernWindow."""
+"""Native macOS title-bar integration for modern windows and dialogs."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QApplication
 
 if TYPE_CHECKING:
@@ -99,6 +99,9 @@ class _ObjCBridge:
         self._send_void_point = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, _NSPoint)(
             address
         )
+        self._send_void_size = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, _NSSize)(
+            address
+        )
         self._add_observer = ctypes.CFUNCTYPE(
             None,
             ctypes.c_void_p,
@@ -184,6 +187,9 @@ class _ObjCBridge:
     def send_void_point(self, receiver: int, selector: str, value: _NSPoint) -> None:
         self._send_void_point(receiver, self.selector(selector), value)
 
+    def send_void_size(self, receiver: int, selector: str, value: _NSSize) -> None:
+        self._send_void_size(receiver, self.selector(selector), value)
+
     def create_observer(self, callback: Callable[[], None]) -> int:
         """Own a small NSObject receiver; do not replace AppKit or Qt delegates."""
         if not self._observer_class:
@@ -259,8 +265,35 @@ def _objc_bridge() -> _ObjCBridge:
 
 
 def _native_window(widget: QWidget, bridge: _ObjCBridge) -> int:
-    view = int(widget.winId())
+    # winId() creates a native window. During WinIdChange on teardown that can
+    # resurrect a modal dialog and leave its parent blocked by an invisible window.
+    view = int(widget.internalWinId())
     return bridge.send_id(view, "window") if view else 0
+
+
+def set_macos_window_appearance(widget: QWidget, *, dark: bool) -> bool:
+    """Match native chrome to the widget theme without changing the application."""
+    if not uses_macos_native_title_bar() or not widget.isWindow() or widget.windowHandle() is None:
+        return False
+    try:
+        bridge = _objc_bridge()
+        window = _native_window(widget, bridge)
+        if not window:
+            return False
+        name = bridge.send_id_utf8(
+            bridge.class_named("NSString"),
+            "stringWithUTF8String:",
+            "NSAppearanceNameDarkAqua" if dark else "NSAppearanceNameAqua",
+        )
+        appearance = bridge.send_id_pointer(
+            bridge.class_named("NSAppearance"), "appearanceNamed:", name
+        )
+        if not appearance:
+            return False
+        bridge.send_void_pointer(window, "setAppearance:", appearance)
+        return True
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
 
 
 class _TrafficLightObserver:
@@ -390,7 +423,9 @@ def _observe_traffic_lights(widget: QWidget, bridge: _ObjCBridge, window: int, h
     observer.layout()
 
 
-def configure_macos_native_title_bar(widget: QWidget, *, title_bar_height: int = 0) -> bool:
+def configure_macos_native_title_bar(
+    widget: QWidget, *, title_bar_height: int = 0, content_size: QSize | None = None
+) -> bool:
     """Make a native title bar transparent while retaining its traffic lights."""
     if not uses_macos_native_title_bar() or not widget.isWindow():
         return False
@@ -408,6 +443,12 @@ def configure_macos_native_title_bar(widget: QWidget, *, title_bar_height: int =
             )
         bridge.send_void_bool(window, "setTitlebarAppearsTransparent:", True)
         bridge.send_void_integer(window, "setTitleVisibility:", _NS_WINDOW_TITLE_HIDDEN)
+        if content_size is not None and content_size.isValid():
+            # Switching to full-size content can leave AppKit's initial content
+            # frame stale. Reapply Qt's resolved size without a synthetic drag.
+            bridge.send_void_size(
+                window, "setContentSize:", _NSSize(content_size.width(), content_size.height())
+            )
         if title_bar_height > 0:
             _observe_traffic_lights(widget, bridge, window, title_bar_height)
         return True

@@ -7,7 +7,11 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QMessageBox, QWidget
 
 from . import _system_menu
-from ._macos_window import uses_macos_native_title_bar, window_flags_with_chrome
+from ._macos_window import (
+    set_macos_window_appearance,
+    uses_macos_native_title_bar,
+    window_flags_with_chrome,
+)
 from ._window_chrome import (
     BackgroundFrame,
     WindowChrome,
@@ -142,6 +146,13 @@ class ModernMessageBox(QMessageBox):
         ):
             palette.setColor(group, QPalette.ColorRole.Window, background)
         self.setPalette(palette)
+        self._sync_macos_appearance()
+
+    def _sync_macos_appearance(self) -> None:
+        if self._uses_native_macos_title_bar and self.isVisible() and self.internalWinId():
+            set_macos_window_appearance(
+                self, dark=QColor(self._theme.surface_alternate).lightness() < 128
+            )
 
     def _refresh_native_surface(self) -> None:
         """Apply Windows 11 acrylic and rounded corners when the native handle exists."""
@@ -198,6 +209,8 @@ class ModernMessageBox(QMessageBox):
             return handled
         if event.type() in (QEvent.Type.Show, QEvent.Type.WinIdChange):
             self._native_dpi.sync_window(self)
+            if event.type() == QEvent.Type.WinIdChange and self.isVisible():
+                self._sync_macos_appearance()
         if event.type() == QEvent.Type.Show:
             self._sync_chrome_with_window_flags()
             self.apply_window_style()
