@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QSize, Qt
 from PySide6.QtGui import QIcon, QResizeEvent
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox, QToolBar
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox, QToolBar, QWidget
 
 from pyside6_modern_widgets import (
     DARK_THEME,
@@ -165,6 +165,7 @@ def test_modern_window_uses_native_macos_title_bar_layout(monkeypatch) -> None:
         assert window._surface_policy.opaque_surface
         assert title_bar.titleAlignment() == "center"
         assert title_bar.main_layout.indexOf(title_bar.titleLabel) == -1
+        assert title_bar.testAttribute(Qt.WidgetAttribute.WA_LayoutOnEntireRect)
         assert (
             title_bar.main_layout.contentsMargins().left() == macos_window.MACOS_TRAFFIC_LIGHT_INSET
         )
@@ -180,6 +181,12 @@ def test_modern_window_uses_native_macos_title_bar_layout(monkeypatch) -> None:
 
         window.setWindowIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
         assert title_bar.iconLabel.isHidden()
+
+        custom_widget = QToolBar()
+        title_bar.addCustomWidget(custom_widget, align="left")
+        assert not custom_widget.testAttribute(
+            Qt.WidgetAttribute.WA_ContentsMarginsRespectsSafeArea
+        )
 
         window._sync_macos_native_title_bar()
         assert window._macos_title_bar_configured
@@ -272,7 +279,7 @@ def test_macos_toolbar_visibility_reapplies_transparent_title_bar(monkeypatch) -
         _dispose(window)
 
 
-class _NativeWidget:
+class _NativeWidget(QWidget):
     def isWindow(self) -> bool:
         return True
 
@@ -390,10 +397,12 @@ def test_native_bridge_preserves_style_and_enables_full_size_content(monkeypatch
         lambda widget, bridge, window, height: layouts.append((window, height)),
     )
 
+    widget = _NativeWidget()
     assert macos_window.configure_macos_native_title_bar(  # type: ignore[arg-type]
-        _NativeWidget(),
+        widget,
         title_bar_height=34,
     )
+    assert not widget.testAttribute(Qt.WidgetAttribute.WA_ContentsMarginsRespectsSafeArea)
     assert bridge.calls == [
         (456, "setStyleMask:", 7 | (1 << 15)),
         (456, "setTitlebarAppearsTransparent:", True),

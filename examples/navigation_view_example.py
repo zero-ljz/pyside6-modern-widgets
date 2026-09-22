@@ -975,6 +975,17 @@ class ExampleWindow(ModernWindow):
         assert self.titleBar is not None
         self.titleBar.addCustomWidget(menu_bar, align="left")
 
+        home_button = QPushButton(self.tr("Home"), self)
+        home_button.setFixedHeight(24)
+        home_button.clicked.connect(self.home_action.trigger)
+        self.titleBar.addCustomWidget(home_button, align="left")
+
+        search_box = QLineEdit(self)
+        search_box.setPlaceholderText(self.tr("Search"))
+        search_box.setClearButtonEnabled(True)
+        search_box.setFixedSize(180, 24)
+        self.titleBar.addCustomWidget(search_box, align="right")
+
     def _toggle_full_screen(self, enabled: bool) -> None:
         if enabled:
             self.showFullScreen()

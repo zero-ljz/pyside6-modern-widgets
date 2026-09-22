@@ -458,6 +458,7 @@ def configure_macos_native_title_bar(
             )
         if title_bar_height > 0:
             _observe_traffic_lights(widget, bridge, window, title_bar_height)
+        widget.setAttribute(Qt.WidgetAttribute.WA_ContentsMarginsRespectsSafeArea, False)
         return True
     except (AttributeError, OSError, TypeError, ValueError):
         return False

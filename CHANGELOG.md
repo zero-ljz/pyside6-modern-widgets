@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add visible Home and search controls to the navigation example custom title
+  bar to exercise macOS safe-area layout.
+
+### Fixed
+
+- Prevent Qt macOS safe-area insets from shifting custom title-bar widgets below
+  the transparent full-size content view.
+
 ## [0.5.11] - 2026-09-22
 
 ### Added

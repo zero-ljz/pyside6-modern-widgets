@@ -5,12 +5,13 @@
     <name>ExampleWindow</name>
     <message>
         <location filename="../navigation_view_example.py" line="58"/>
-        <location filename="../navigation_view_example.py" line="1014"/>
+        <location filename="../navigation_view_example.py" line="1031"/>
         <source>Modern Widgets Example</source>
         <translation>现代组件示例</translation>
     </message>
     <message>
         <location filename="../navigation_view_example.py" line="69"/>
+        <location filename="../navigation_view_example.py" line="978"/>
         <source>Home</source>
         <translation>主页</translation>
     </message>
@@ -863,14 +864,19 @@ Row 31: unsupported date format</source>
         <translation>不再显示导入警告</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="936"/>
+        <location filename="../navigation_view_example.py" line="940"/>
         <source>Compact Navigation</source>
         <translation>收起导航栏</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="941"/>
+        <location filename="../navigation_view_example.py" line="945"/>
         <source>Quit</source>
         <translation>退出</translation>
+    </message>
+    <message>
+        <location filename="../navigation_view_example.py" line="984"/>
+        <source>Search</source>
+        <translation>搜索</translation>
     </message>
     <message>
         <location filename="../navigation_view_example.py" line="936"/>
@@ -878,37 +884,37 @@ Row 31: unsupported date format</source>
         <translation>返回首页</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="945"/>
+        <location filename="../navigation_view_example.py" line="949"/>
         <source>Toggle Full Screen</source>
         <translation>切换全屏</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="954"/>
+        <location filename="../navigation_view_example.py" line="958"/>
         <source>&amp;File</source>
         <translation>文件(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="957"/>
+        <location filename="../navigation_view_example.py" line="963"/>
         <source>&amp;View</source>
         <translation>视图(&amp;V)</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="962"/>
+        <location filename="../navigation_view_example.py" line="968"/>
         <source>&amp;Window</source>
         <translation>窗口(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="963"/>
+        <location filename="../navigation_view_example.py" line="969"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="964"/>
+        <location filename="../navigation_view_example.py" line="970"/>
         <source>Maximize / Restore</source>
         <translation>最大化 / 还原</translation>
     </message>
     <message>
-        <location filename="../navigation_view_example.py" line="966"/>
+        <location filename="../navigation_view_example.py" line="972"/>
         <source>Close</source>
         <translation>关闭</translation>
     </message>
@@ -916,40 +922,32 @@ Row 31: unsupported date format</source>
 <context>
     <name>TabViewWindow</name>
     <message>
-        <location filename="../tab_view_example.py" line="20"/>
-        <location filename="../tab_view_example.py" line="98"/>
         <source>TabView Example</source>
-        <translation>TabView 示例</translation>
+        <translation type="vanished">TabView 示例</translation>
     </message>
     <message>
-        <location filename="../tab_view_example.py" line="32"/>
         <source>Home Page</source>
-        <translation>主页内容</translation>
+        <translation type="vanished">主页内容</translation>
     </message>
     <message>
-        <location filename="../tab_view_example.py" line="32"/>
         <source>Home</source>
-        <translation>主页</translation>
+        <translation type="vanished">主页</translation>
     </message>
     <message>
-        <location filename="../tab_view_example.py" line="33"/>
         <source>Settings</source>
-        <translation>设置</translation>
+        <translation type="vanished">设置</translation>
     </message>
     <message>
-        <location filename="../tab_view_example.py" line="47"/>
         <source>New Content %1</source>
-        <translation>新内容 %1</translation>
+        <translation type="vanished">新内容 %1</translation>
     </message>
     <message>
-        <location filename="../tab_view_example.py" line="48"/>
         <source>Document %1</source>
-        <translation>文档 %1</translation>
+        <translation type="vanished">文档 %1</translation>
     </message>
     <message>
-        <location filename="../tab_view_example.py" line="64"/>
         <source>Switched to tab %1: %2</source>
-        <translation>已切换到标签页 %1：%2</translation>
+        <translation type="vanished">已切换到标签页 %1：%2</translation>
     </message>
 </context>
 </TS>
