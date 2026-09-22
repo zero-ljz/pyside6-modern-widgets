@@ -933,6 +933,10 @@ class ExampleWindow(ModernWindow):
         message_box.exec()
 
     def _create_actions(self) -> None:
+        self.home_action = QAction(self.tr("Back to Home"), self)
+        self.home_action.setMenuRole(QAction.MenuRole.NoRole)
+        self.home_action.triggered.connect(lambda: self.navigation.setCurrentIndex(0))
+
         self.compact_action = QAction(self.tr("Compact Navigation"), self)
         self.compact_action.setCheckable(True)
         self.compact_action.toggled.connect(self.navigation.sidebar.setCollapsed)
@@ -952,6 +956,8 @@ class ExampleWindow(ModernWindow):
         menu_bar.setNativeMenuBar(True)
 
         file_menu = menu_bar.addMenu(self.tr("&File"))
+        file_menu.addAction(self.home_action)
+        file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
         view_menu = menu_bar.addMenu(self.tr("&View"))

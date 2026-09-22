@@ -873,6 +873,11 @@ Row 31: unsupported date format</source>
         <translation>退出</translation>
     </message>
     <message>
+        <location filename="../navigation_view_example.py" line="936"/>
+        <source>Back to Home</source>
+        <translation>返回首页</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="945"/>
         <source>Toggle Full Screen</source>
         <translation>切换全屏</translation>
