@@ -180,6 +180,9 @@ class ModernDialog(QDialog):
                 if not self.testAttribute(Qt.WidgetAttribute.WA_Resized):
                     content_size = content_size.expandedTo(self.sizeHint())
                 content_size = content_size.boundedTo(self.maximumSize())
+            # Appearance changes can trigger AppKit's own traffic-light layout.
+            # Apply them before the final title-bar configuration and alignment.
+            set_macos_window_appearance(self, dark=QColor(self._theme.surface).lightness() < 128)
             self._macos_title_bar_configured = configure_macos_native_title_bar(
                 self, title_bar_height=self._title_bar.height(), content_size=content_size
             )
@@ -190,7 +193,6 @@ class ModernDialog(QDialog):
                 layout.invalidate()
                 layout.activate()
             self._layout_chrome()
-            set_macos_window_appearance(self, dark=QColor(self._theme.surface).lightness() < 128)
         finally:
             self._macos_title_bar_syncing = False
 

@@ -291,6 +291,12 @@ def set_macos_window_appearance(widget: QWidget, *, dark: bool) -> bool:
         if not appearance:
             return False
         bridge.send_void_pointer(window, "setAppearance:", appearance)
+        # An appearance change can relayout (or reparent) native buttons without
+        # emitting frame notifications for the zoom button. Correct it after
+        # AppKit finishes applying the appearance, including theme changes.
+        observer = getattr(widget, "_macos_traffic_light_observer", None)
+        if observer is not None:
+            _observe_traffic_lights(widget, bridge, window, observer.height)
         return True
     except (AttributeError, OSError, TypeError, ValueError):
         return False
@@ -333,14 +339,15 @@ class _TrafficLightObserver:
                         self.views[view] = bridge.send_bool(view, "postsFrameChangedNotifications")
                         bridge.send_void_bool(view, "setPostsFrameChangedNotifications:", True)
                         bridge.observe(self.observer, "NSViewFrameDidChangeNotification", view)
-            # A window resize can finish with an AppKit layout pass that does
-            # not post a frame notification for every control (notably zoom).
-            # Correct that final placement inside the native tracking loop;
-            # the Qt resize timer cannot do so until the mouse is released.
+            # AppKit's final layout can silently reset the zoom button after a
+            # resize, appearance change, or modal activation. Also observe the
+            # completed window update: opening a dialog need not resize it again.
             for name in (
                 "NSWindowDidResizeNotification",
                 "NSWindowDidEndLiveResizeNotification",
                 "NSWindowDidExitFullScreenNotification",
+                "NSWindowDidBecomeKeyNotification",
+                "NSWindowDidUpdateNotification",
             ):
                 bridge.observe(self.observer, name, window)
         except Exception:
