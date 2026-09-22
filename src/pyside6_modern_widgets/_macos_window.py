@@ -232,6 +232,18 @@ def configure_macos_native_title_bar(widget: QWidget, *, title_bar_height: int =
         return False
 
 
+def macos_window_is_in_live_resize(widget: QWidget) -> bool:
+    """Return whether AppKit is currently running an interactive window resize."""
+    if not uses_macos_native_title_bar() or not widget.isWindow():
+        return False
+    try:
+        bridge = _objc_bridge()
+        window = _native_window(widget, bridge)
+        return bool(window and bridge.send_bool(window, "inLiveResize"))
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+
+
 def perform_macos_title_bar_double_click(widget: QWidget) -> bool:
     """Apply the user's macOS title-bar double-click preference."""
     if not uses_macos_native_title_bar() or not widget.isWindow():

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from . import _resources, _system_menu  # noqa: F401
 from ._macos_window import (
     configure_macos_native_title_bar,
+    macos_window_is_in_live_resize,
     uses_macos_native_title_bar,
     window_flags_with_chrome,
 )
@@ -348,6 +349,10 @@ class ModernWindow(QWidget):
         self._native_frame_sync_timer = QTimer(self)
         self._native_frame_sync_timer.setSingleShot(True)
         self._native_frame_sync_timer.timeout.connect(self._sync_native_window_frame)
+        self._macos_title_bar_resize_timer = QTimer(self)
+        self._macos_title_bar_resize_timer.setInterval(50)
+        self._macos_title_bar_resize_timer.setSingleShot(True)
+        self._macos_title_bar_resize_timer.timeout.connect(self._sync_macos_title_bar_after_resize)
         self._surface_refresh_timer = QTimer(self)
         self._surface_refresh_timer.setSingleShot(True)
         self._surface_refresh_timer.timeout.connect(self._refresh_window_surface)
@@ -558,6 +563,14 @@ class ModernWindow(QWidget):
 
     def _sync_native_window_frame(self) -> None:
         self._sync_windows_native_frame()
+        self._sync_macos_title_bar_after_resize()
+
+    def _sync_macos_title_bar_after_resize(self) -> None:
+        if not self._uses_native_macos_title_bar:
+            return
+        if macos_window_is_in_live_resize(self):
+            self._macos_title_bar_resize_timer.start()
+            return
         self._sync_macos_native_title_bar()
 
     def _is_resizable(self) -> bool:
@@ -1351,6 +1364,9 @@ class ModernWindow(QWidget):
         super().resizeEvent(event)
         if hasattr(self, "_chrome"):
             self._layout_chrome()
+        if self._uses_native_macos_title_bar and hasattr(self, "_macos_title_bar_resize_timer"):
+            # AppKit owns the standard button frames until live resizing ends.
+            self._macos_title_bar_resize_timer.start()
 
     def moveEvent(self, event) -> None:
         super().moveEvent(event)
@@ -1384,6 +1400,7 @@ class ModernWindow(QWidget):
         self._drag_move_offset = None
         self._finish_manual_resize()
         self._finish_system_resize_tracking()
+        self._macos_title_bar_resize_timer.stop()
         self._disconnect_screen_change_signals()
         self._set_application_event_filter_enabled(False)
         super().hideEvent(event)

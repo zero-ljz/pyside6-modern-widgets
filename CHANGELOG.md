@@ -28,6 +28,8 @@ All notable changes to this project are documented in this file.
 
 - Keep centered title text at its intended height after a macOS full-screen
   transition temporarily compresses the title-bar layout spacer.
+- Reapply the custom macOS traffic-light placement once after AppKit finishes
+  live resizing, avoiding competing layouts that made the controls jump.
 - Keep hidden navigation pages out of height-for-width calculations, preventing
   the Home page from making the window taller during mixed-DPI monitor drags.
 - Suppress native radio bullets when pressing or switching exclusive `ModernMenu`

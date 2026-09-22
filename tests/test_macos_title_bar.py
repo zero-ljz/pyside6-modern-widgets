@@ -4,8 +4,8 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt
+from PySide6.QtGui import QIcon, QResizeEvent
 from PySide6.QtWidgets import QApplication
 
 from pyside6_modern_widgets import ModernWindow
@@ -89,6 +89,48 @@ def test_failed_macos_bridge_falls_back_to_plain_native_title_bar(monkeypatch) -
         assert window.contentsMargins().top() == 0
         assert not window.windowFlags() & Qt.WindowType.FramelessWindowHint
     finally:
+        _dispose(window)
+
+
+def test_macos_resize_defers_native_title_bar_until_appkit_finishes(monkeypatch) -> None:
+    window = ModernWindow()
+    monkeypatch.setattr(window, "_uses_native_macos_title_bar", True)
+    try:
+        window.resizeEvent(QResizeEvent(QSize(800, 500), QSize(700, 400)))
+
+        assert window._macos_title_bar_resize_timer.isActive()
+    finally:
+        window._macos_title_bar_resize_timer.stop()
+        _dispose(window)
+
+
+def test_macos_title_bar_sync_waits_out_live_resize(monkeypatch) -> None:
+    window = ModernWindow()
+    native_syncs: list[bool] = []
+    live_resize = [True]
+    monkeypatch.setattr(window, "_uses_native_macos_title_bar", True)
+    monkeypatch.setattr(
+        modern_window_module,
+        "macos_window_is_in_live_resize",
+        lambda _widget: live_resize[0],
+    )
+    monkeypatch.setattr(
+        window,
+        "_sync_macos_native_title_bar",
+        lambda: native_syncs.append(True),
+    )
+    try:
+        window._sync_macos_title_bar_after_resize()
+        assert window._macos_title_bar_resize_timer.isActive()
+        assert native_syncs == []
+
+        window._macos_title_bar_resize_timer.stop()
+        live_resize[0] = False
+        window._sync_macos_title_bar_after_resize()
+        assert not window._macos_title_bar_resize_timer.isActive()
+        assert native_syncs == [True]
+    finally:
+        window._macos_title_bar_resize_timer.stop()
         _dispose(window)
 
 
@@ -189,6 +231,16 @@ class _DoubleClickBridgeProbe:
         self.calls.append((receiver, selector, value))
 
 
+class _LiveResizeBridgeProbe:
+    def send_id(self, receiver: int, selector: str) -> int:
+        assert (receiver, selector) == (123, "window")
+        return 456
+
+    def send_bool(self, receiver: int, selector: str) -> bool:
+        assert (receiver, selector) == (456, "inLiveResize")
+        return True
+
+
 def test_native_bridge_preserves_style_and_enables_full_size_content(monkeypatch) -> None:
     bridge = _BridgeProbe()
     monkeypatch.setattr(macos_window, "uses_macos_native_title_bar", lambda: True)
@@ -220,6 +272,15 @@ def test_traffic_lights_support_flipped_title_bar_coordinates() -> None:
         (101, 30.0, 10.0),
         (102, 50.0, 10.0),
     ]
+
+
+def test_native_bridge_reports_live_resize(monkeypatch) -> None:
+    monkeypatch.setattr(macos_window, "uses_macos_native_title_bar", lambda: True)
+    monkeypatch.setattr(macos_window, "_objc_bridge", _LiveResizeBridgeProbe)
+
+    assert macos_window.macos_window_is_in_live_resize(  # type: ignore[arg-type]
+        _NativeWidget()
+    )
 
 
 def test_title_bar_double_click_follows_macos_preference(monkeypatch) -> None:
