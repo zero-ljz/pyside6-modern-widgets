@@ -34,6 +34,7 @@ from pyside6_modern_widgets import (
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
+    ModernSegmentedControl,
     ModernSwitch,
     ModernTabWidget,
     ModernToolBar,
@@ -542,6 +543,23 @@ class ExampleWindow(ModernWindow):
             section_layout.addStretch()
             self.tab_widget.addTab(section, title)
         layout.addWidget(self.tab_widget)
+        layout.addWidget(QLabel("ModernSegmentedControl"))
+        self.segmented_control = ModernSegmentedControl(
+            [self.tr("General"), self.tr("Details")], page
+        )
+        layout.addWidget(self.segmented_control, 0, Qt.AlignmentFlag.AlignLeft)
+        segment_status = QLabel(self.tr("General settings for this section."))
+        descriptions = (
+            self.tr("General settings for this section."),
+            self.tr("More details in a separate section."),
+        )
+        self.segmented_control.group.idClicked.connect(
+            lambda index: segment_status.setText(descriptions[index])
+        )
+        layout.addWidget(segment_status)
+        disabled_segments = ModernSegmentedControl([self.tr("General"), self.tr("Disabled")], page)
+        disabled_segments.buttons[1].setEnabled(False)
+        layout.addWidget(disabled_segments, 0, Qt.AlignmentFlag.AlignLeft)
         return page
 
     def _create_combo_box_page(self) -> QWidget:

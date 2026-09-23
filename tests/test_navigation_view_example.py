@@ -4,10 +4,10 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
 
 from examples.navigation_view_example import ExampleWindow
-from pyside6_modern_widgets import ModernTabWidget, ThemeMode, theme_manager
+from pyside6_modern_widgets import ModernSegmentedControl, ModernTabWidget, ThemeMode, theme_manager
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -83,6 +83,24 @@ def test_tab_widget_page_switches_fixed_sections_and_follows_theme() -> None:
         window.theme_button.click()
         assert manager.mode() == ThemeMode.DARK
         assert tabs.theme() == manager.theme()
+
+        segments = window.segmented_control
+        assert isinstance(segments, ModernSegmentedControl)
+        assert segments.group.checkedId() == 0
+        segments.buttons[1].click()
+        assert segments.group.checkedId() == 1
+        assert any(
+            label.text() == "More details in a separate section."
+            for label in page.findChildren(QLabel)
+        )
+        assert segments.theme() == manager.theme()
+        assert manager.theme().tab_selected in segments.styleSheet()
+        disabled = [
+            control
+            for control in page.findChildren(ModernSegmentedControl)
+            if control is not segments
+        ]
+        assert len(disabled) == 1 and not disabled[0].buttons[1].isEnabled()
     finally:
         if window is not None:
             window.close()

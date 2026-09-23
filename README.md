@@ -18,6 +18,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `ModernSwitch`: an animated switch with system accent colors and native
   checkbox interaction, sized to sit alongside combo boxes and line edits.
+- `ModernSegmentedControl`: compact exclusive choices with themed selected,
+  hover, and disabled states and native Qt button signals.
 - `ModernTabWidget`: compact themed tabs for fixed pages, preserving the native
   `QTabWidget` API without document-tab add, close, or move behaviors.
 - `ModernFlyout`: an anchored popup for arbitrary widgets, with automatic screen
@@ -267,6 +269,31 @@ colors. Optional `metrics=ModernMetrics(...)` controls animation duration.
 Run `python examples/navigation_view_example.py` and open **Switch** to compare
 the default heights with native form controls and try System/Light/Dark appearance
 and enabled/disabled switches.
+
+## Modern segmented control
+
+`ModernSegmentedControl(labels, parent=None, *, theme=None)` creates a compact
+row of exclusive `QPushButton` choices. Its public `buttons` list keeps the
+label order; `group` is an exclusive `QButtonGroup` whose button IDs are the
+zero-based label indices. The first button starts checked (an empty list has
+no selection). Use normal Qt button signals and methods:
+
+```python
+from pyside6_modern_widgets import ModernSegmentedControl
+
+segments = ModernSegmentedControl(["All", "Open", "Closed"])
+segments.group.idClicked.connect(lambda index: print("Selected:", index))
+segments.buttons[2].setChecked(True)
+```
+
+The control uses 1-pixel layout margins, no spacing, a 26-pixel minimum
+button content height, and a maximum-width/fixed-height size policy. Buttons
+remain keyboard accessible and can be disabled individually. Colors use the
+current theme's surface, border, text, and tab-state tokens for light/dark,
+hover, checked, and disabled appearances. The control follows its nearest
+themed ancestor or the global theme; `setTheme(DARK_THEME)` overrides locally
+and `setTheme(None)` restores inheritance. Open **Tab widget** in the navigation
+example to try enabled and disabled segments alongside fixed-section tabs.
 
 ## Modern flyout
 

@@ -315,7 +315,7 @@ class _RoundedMenuStyle(QProxyStyle):
             menu_option is not None
             and menu_option.checkType == QStyleOptionMenuItem.CheckType.Exclusive
         )
-        exclusive_checked = bool(is_exclusive and menu_option.checked)
+        exclusive_checked = bool(is_exclusive and menu_option is not None and menu_option.checked)
         if selected or is_exclusive:
             native_option = QStyleOptionMenuItem(option)
         else:

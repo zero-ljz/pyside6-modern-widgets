@@ -44,7 +44,9 @@ identifies which toolbar triggered an action.
 
 The **Tab widget** page demonstrates `ModernTabWidget` with two fixed sections.
 Select a tab to switch content; unlike the standalone `TabView` example, these
-tabs cannot be added, closed, or dragged.
+tabs cannot be added, closed, or dragged. It also shows `ModernSegmentedControl`:
+choose a segment to update the status text, compare its disabled state, and use
+the title-bar theme button to see its light/dark colors change.
 
 The **Notifications** page demonstrates desktop and in-window delivery, four
 severity levels, all four corners, screen selection, and a queue of eight updates.

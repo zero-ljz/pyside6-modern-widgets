@@ -8,6 +8,9 @@ All notable changes to this project are documented in this file.
 
 - Add `ModernTabWidget` for compact, fixed application sections while preserving
   the native `QTabWidget` API and keyboard behavior.
+- Add `ModernSegmentedControl` with exclusive indexed Qt buttons, compact sizing,
+  inherited or locally overridden themes, and selected/hover/disabled states;
+  demonstrate it in the navigation gallery.
 
 ## [0.5.12] - 2026-09-22
 
