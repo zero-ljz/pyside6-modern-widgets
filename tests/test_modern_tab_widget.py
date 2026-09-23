@@ -24,6 +24,12 @@ def test_modern_tab_widget_preserves_native_fixed_tab_semantics():
         tabs.setCurrentIndex(1)
         assert tabs.currentWidget() is second
         assert changes[-1] == 1
+
+        tab_rect = tabs.tabBar().tabRect(1)
+        indicator = tabs.tabBar()._indicator_rect(1)
+        assert indicator.left() == tab_rect.left() + 6
+        assert indicator.right() == tab_rect.right() - 6
+        assert indicator.height() == 2
     finally:
         tabs.deleteLater()
 
