@@ -363,6 +363,7 @@ class _TrafficLightObserver:
         self.busy = True
         try:
             bridge = self.bridge
+            _restore_native_title_bar_style(bridge, self.window)
             first = bridge.send_rect(self.buttons[0][0], "frame")
             padding = max(0.0, (self.height - first.size.height) / 2)
             for button, parent, offset in self.buttons:
@@ -430,6 +431,20 @@ def _observe_traffic_lights(widget: QWidget, bridge: _ObjCBridge, window: int, h
     observer.layout()
 
 
+def _restore_native_title_bar_style(
+    bridge: _ObjCBridge, window: int, *, reassert_transparency: bool = False
+) -> None:
+    style_mask = bridge.send_integer(window, "styleMask")
+    if not style_mask & _NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW:
+        bridge.send_void_integer(
+            window, "setStyleMask:", style_mask | _NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
+        )
+    if reassert_transparency or not bridge.send_bool(window, "titlebarAppearsTransparent"):
+        bridge.send_void_bool(window, "setTitlebarAppearsTransparent:", True)
+    if bridge.send_integer(window, "titleVisibility") != _NS_WINDOW_TITLE_HIDDEN:
+        bridge.send_void_integer(window, "setTitleVisibility:", _NS_WINDOW_TITLE_HIDDEN)
+
+
 def configure_macos_native_title_bar(
     widget: QWidget, *, title_bar_height: int = 0, content_size: QSize | None = None
 ) -> bool:
@@ -441,15 +456,8 @@ def configure_macos_native_title_bar(
         window = _native_window(widget, bridge)
         if not window:
             return False
-        style_mask = bridge.send_integer(window, "styleMask")
-        if not style_mask & _NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW:
-            bridge.send_void_integer(
-                window,
-                "setStyleMask:",
-                style_mask | _NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW,
-            )
-        bridge.send_void_bool(window, "setTitlebarAppearsTransparent:", True)
-        bridge.send_void_integer(window, "setTitleVisibility:", _NS_WINDOW_TITLE_HIDDEN)
+        # Qt can reset the material without changing AppKit's property value.
+        _restore_native_title_bar_style(bridge, window, reassert_transparency=True)
         if content_size is not None and content_size.isValid():
             # Switching to full-size content can leave AppKit's initial content
             # frame stale. Reapply Qt's resolved size without a synthetic drag.

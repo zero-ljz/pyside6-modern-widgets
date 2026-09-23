@@ -12,6 +12,13 @@ All notable changes to this project are documented in this file.
   inherited or locally overridden themes, and selected/hover/disabled states;
   demonstrate it in the navigation gallery.
 
+### Fixed
+
+- Restore native macOS full-size and transparent title-bar settings when AppKit
+  resets them during window updates, preventing a separate white title strip.
+- Realign macOS traffic lights immediately and after native title changes so
+  switching images does not flash the zoom button at AppKit's default position.
+
 ## [0.5.12] - 2026-09-22
 
 ### Added

@@ -90,6 +90,25 @@ def test_appkit_frame_notifications_correct_buttons_before_returning():
                 actual = bridge.send_rect(button, "frame")
                 assert actual.origin.x == pytest.approx(expected.origin.x)
                 assert actual.origin.y == pytest.approx(expected.origin.y)
+
+        for title in ("First image", "Second image", "Third image"):
+            window.setWindowTitle(title)
+            observer = window._macos_traffic_light_observer
+            for button, parent, offset in observer.buttons:
+                frame = bridge.send_rect(button, "frame")
+                bounds = bridge.send_rect(parent, "bounds")
+                first = bridge.send_rect(observer.buttons[0][0], "frame")
+                padding = max(0.0, (observer.height - first.size.height) / 2)
+                top = max(0.0, (observer.height - frame.size.height) / 2)
+                assert frame.origin.x == pytest.approx(bounds.origin.x + padding + offset)
+                assert frame.origin.y == pytest.approx(
+                    bounds.origin.y
+                    + (
+                        top
+                        if bridge.send_bool(parent, "isFlipped")
+                        else bounds.size.height - top - frame.size.height
+                    )
+                )
     finally:
         _dispose(window)
     assert observer.observer == 0
@@ -108,7 +127,11 @@ def test_appkit_toolbar_visibility_preserves_transparent_title_bar():
         for visible in (False, True, False, True):
             toolbar.setVisible(visible)
             QTest.qWait(100)
+            assert bridge.send_integer(nswindow, "styleMask") & (
+                native._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
+            )
             assert bridge.send_bool(nswindow, "titlebarAppearsTransparent")
+            assert bridge.send_integer(nswindow, "titleVisibility") == native._NS_WINDOW_TITLE_HIDDEN
     finally:
         _dispose(window)
 

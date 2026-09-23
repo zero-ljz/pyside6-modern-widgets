@@ -279,6 +279,27 @@ def test_macos_toolbar_visibility_reapplies_transparent_title_bar(monkeypatch) -
         _dispose(window)
 
 
+def test_macos_title_change_realigns_native_buttons_immediately_and_after_update(monkeypatch):
+    window = ModernWindow()
+    syncs = []
+    monkeypatch.setattr(window, "_uses_native_macos_title_bar", True)
+    monkeypatch.setattr(window, "_sync_macos_native_title_bar", lambda: syncs.append(True))
+    try:
+        window.show()
+        _APP.processEvents()
+        syncs.clear()
+        window._native_frame_sync_timer.stop()
+
+        window.setWindowTitle("Next image")
+
+        assert syncs == [True]
+        assert window._native_frame_sync_timer.isActive()
+        _APP.processEvents()
+        assert syncs == [True, True]
+    finally:
+        _dispose(window)
+
+
 class _NativeWidget(QWidget):
     def isWindow(self) -> bool:
         return True
@@ -295,6 +316,9 @@ class _BridgeProbe:
         self.calls: list[tuple] = []
         self.origins: list[tuple[int, float, float]] = []
         self.flipped = flipped
+        self.style_mask = 7
+        self.transparent = False
+        self.title_visibility = 0
 
     def send_id(self, receiver: int, selector: str) -> int:
         if (receiver, selector) == (123, "window"):
@@ -307,14 +331,23 @@ class _BridgeProbe:
         return 100 + value
 
     def send_integer(self, receiver: int, selector: str) -> int:
-        assert (receiver, selector) == (456, "styleMask")
-        return 7
+        assert receiver == 456
+        return {
+            "styleMask": self.style_mask,
+            "titleVisibility": self.title_visibility,
+        }[selector]
 
     def send_void_integer(self, receiver: int, selector: str, value: int) -> None:
         self.calls.append((receiver, selector, value))
+        if selector == "setStyleMask:":
+            self.style_mask = value
+        elif selector == "setTitleVisibility:":
+            self.title_visibility = value
 
     def send_void_bool(self, receiver: int, selector: str, value: bool) -> None:
         self.calls.append((receiver, selector, value))
+        if selector == "setTitlebarAppearsTransparent:":
+            self.transparent = value
 
     def send_rect(self, receiver: int, selector: str) -> macos_window._NSRect:
         if selector == "bounds":
@@ -330,8 +363,10 @@ class _BridgeProbe:
         )
 
     def send_bool(self, receiver: int, selector: str) -> bool:
-        assert (receiver, selector) == (200, "isFlipped")
-        return self.flipped
+        if (receiver, selector) == (200, "isFlipped"):
+            return self.flipped
+        assert (receiver, selector) == (456, "titlebarAppearsTransparent")
+        return self.transparent
 
     def send_void_point(
         self,
@@ -525,6 +560,32 @@ def test_native_frame_resets_are_corrected_synchronously_without_spacing_drift()
     assert not bridge.notifications
     assert not any(bridge.refs.values())
     assert not any(bridge.posts.values())
+
+
+def test_window_update_restores_native_title_bar_after_appkit_resets_it():
+    bridge = _FrameNotificationProbe()
+    observer = macos_window._TrafficLightObserver(bridge, 456, 34)
+    try:
+        observer.layout()
+        bridge.calls.clear()
+        bridge.style_mask &= ~macos_window._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
+        bridge.transparent = False
+        bridge.title_visibility = 0
+
+        bridge.notify("NSWindowDidUpdateNotification", 456)
+
+        assert bridge.style_mask & macos_window._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
+        assert bridge.transparent
+        assert bridge.title_visibility == macos_window._NS_WINDOW_TITLE_HIDDEN
+        assert bridge.calls == [
+            (456, "setStyleMask:", 7 | (1 << 15)),
+            (456, "setTitlebarAppearsTransparent:", True),
+            (456, "setTitleVisibility:", 1),
+        ]
+        bridge.notify("NSWindowDidUpdateNotification", 456)
+        assert len(bridge.calls) == 3
+    finally:
+        observer.dispose()
 
 
 @pytest.mark.parametrize(

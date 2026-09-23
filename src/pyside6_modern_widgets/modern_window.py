@@ -754,6 +754,10 @@ class ModernWindow(QWidget):
         super().setWindowTitle(title)
         if hasattr(self, "titleBar") and self.titleBar is not None:
             self.titleBar.setTitle(title)
+        if self._uses_native_macos_title_bar and self.isVisible() and self.internalWinId():
+            # AppKit may move the zoom button while updating the native title.
+            self._sync_macos_native_title_bar()
+            self._schedule_native_frame_sync()
 
     def setTitleVisible(self, visible: bool) -> None:
         """Show or hide title text without changing the window title or icon visibility."""
