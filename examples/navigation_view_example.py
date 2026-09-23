@@ -35,6 +35,7 @@ from pyside6_modern_widgets import (
     ModernMenuBar,
     ModernMessageBox,
     ModernSwitch,
+    ModernTabWidget,
     ModernToolBar,
     ModernWindow,
     NavigationPosition,
@@ -89,6 +90,11 @@ class ExampleWindow(ModernWindow):
             self._create_toolbar_page(),
             self.tr("Toolbar"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogContentsView),
+        )
+        self.navigation.addPage(
+            self._create_tab_widget_page(),
+            self.tr("Tab widget"),
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
         )
         self.navigation.addPage(
             self._create_combo_box_page(),
@@ -169,7 +175,6 @@ class ExampleWindow(ModernWindow):
         )
         description.setWordWrap(True)
         layout.addWidget(description)
-        layout.addLayout(self._create_appearance_controls())
         status = QLabel(self.tr("Settings are kept when the panel closes."))
         status.setWordWrap(True)
 
@@ -257,7 +262,6 @@ class ExampleWindow(ModernWindow):
         )
         description.setWordWrap(True)
         layout.addWidget(description)
-        layout.addLayout(self._create_appearance_controls())
         desktop_manager = NotificationManager(self)
         page_manager = NotificationManager(page, desktop=False)
         self.notification_managers = (desktop_manager, page_manager)
@@ -524,24 +528,25 @@ class ExampleWindow(ModernWindow):
         layout.addStretch()
         return page
 
-    def _create_appearance_controls(self) -> QHBoxLayout:
-        layout = QHBoxLayout()
-        layout.addWidget(QLabel(self.tr("Appearance")))
-        for label, mode in (
-            (self.tr("System"), ThemeMode.SYSTEM),
-            (self.tr("Light"), ThemeMode.LIGHT),
-            (self.tr("Dark"), ThemeMode.DARK),
+    def _create_tab_widget_page(self) -> QWidget:
+        page, layout = self._create_page("ModernTabWidget")
+        layout.addWidget(QLabel(self.tr("Switch between fixed sections using the tabs.")))
+        self.tab_widget = ModernTabWidget(page)
+        for title, description in (
+            (self.tr("General"), self.tr("General settings for this section.")),
+            (self.tr("Details"), self.tr("More details in a separate section.")),
         ):
-            button = QPushButton(label)
-            button.clicked.connect(lambda _checked=False, mode=mode: theme_manager().setMode(mode))
-            layout.addWidget(button)
-        layout.addStretch()
-        return layout
+            section = QWidget()
+            section_layout = QVBoxLayout(section)
+            section_layout.addWidget(QLabel(description))
+            section_layout.addStretch()
+            self.tab_widget.addTab(section, title)
+        layout.addWidget(self.tab_widget)
+        return page
 
     def _create_combo_box_page(self) -> QWidget:
         page, layout = self._create_page("ModernComboBox")
         layout.addWidget(QLabel(self.tr("Rounded controls, familiar Qt interactions.")))
-        layout.addLayout(self._create_appearance_controls())
         grid = QGridLayout()
         grid.setHorizontalSpacing(24)
         grid.setVerticalSpacing(16)
@@ -613,7 +618,6 @@ class ExampleWindow(ModernWindow):
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        layout.addLayout(self._create_appearance_controls())
         form = QFormLayout()
         form.setVerticalSpacing(14)
         form.addRow("QLineEdit", QLineEdit(self.tr("Native text field")))
@@ -688,7 +692,6 @@ class ExampleWindow(ModernWindow):
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        layout.addLayout(self._create_appearance_controls())
         comparison = QGridLayout()
         comparison.setHorizontalSpacing(24)
         comparison.setVerticalSpacing(8)
@@ -975,16 +978,19 @@ class ExampleWindow(ModernWindow):
         assert self.titleBar is not None
         self.titleBar.addCustomWidget(menu_bar, align="left")
 
-        home_button = QPushButton(self.tr("Home"), self)
-        home_button.setFixedHeight(24)
-        home_button.clicked.connect(self.home_action.trigger)
-        self.titleBar.addCustomWidget(home_button, align="left")
+        self.theme_button = QPushButton(self)
+        self.theme_button.setFixedHeight(24)
+        self.theme_button.clicked.connect(self._toggle_theme)
+        theme_manager().themeChanged.connect(self._sync_theme_button)
+        self._sync_theme_button()
+        self.titleBar.addCustomWidget(self.theme_button, align="right")
 
-        search_box = QLineEdit(self)
-        search_box.setPlaceholderText(self.tr("Search"))
-        search_box.setClearButtonEnabled(True)
-        search_box.setFixedSize(180, 24)
-        self.titleBar.addCustomWidget(search_box, align="right")
+    def _toggle_theme(self) -> None:
+        manager = theme_manager()
+        manager.setMode(ThemeMode.LIGHT if manager.isDark() else ThemeMode.DARK)
+
+    def _sync_theme_button(self, *_args) -> None:
+        self.theme_button.setText(self.tr("Light") if theme_manager().isDark() else self.tr("Dark"))
 
     def _toggle_full_screen(self, enabled: bool) -> None:
         if enabled:
