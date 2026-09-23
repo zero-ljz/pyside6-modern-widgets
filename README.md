@@ -18,6 +18,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `ModernSwitch`: an animated switch with system accent colors and native
   checkbox interaction, sized to sit alongside combo boxes and line edits.
+- `ModernTabWidget`: compact themed tabs for fixed pages, preserving the native
+  `QTabWidget` API without document-tab add, close, or move behaviors.
 - `ModernFlyout`: an anchored popup for arbitrary widgets, with automatic screen
   edge placement, scrollable content, and light dismiss.
 - `ModernNotification` / `NotificationManager`: custom desktop or in-window
@@ -26,7 +28,7 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   auto-hide for floating top-level widgets.
 - `NavigationSidebar`: a collapsible navigation sidebar.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
-- `TabView`: a WinUI-inspired tab widget.
+- `TabView`: a WinUI-inspired document tab view with add, close, and move behaviors.
 
 ## Supported environment
 

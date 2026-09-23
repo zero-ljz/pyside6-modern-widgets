@@ -16,6 +16,7 @@ from pyside6_modern_widgets import (
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
+    ModernTabWidget,
     ModernWindow,
     NavigationSidebar,
     NavigationView,
@@ -136,7 +137,15 @@ def test_palette_covers_native_controls_in_all_color_groups(theme):
 
 @pytest.mark.parametrize(
     "widget_type",
-    [ModernWindow, ModernDialog, ModernMessageBox, NavigationView, NavigationSidebar, TabView],
+    [
+        ModernWindow,
+        ModernDialog,
+        ModernMessageBox,
+        ModernTabWidget,
+        NavigationView,
+        NavigationSidebar,
+        TabView,
+    ],
 )
 def test_existing_widgets_follow_global_and_can_restore_local_override(
     theme_manager_instance, widget_type

@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add `ModernTabWidget` for compact, fixed application sections while preserving
+  the native `QTabWidget` API and keyboard behavior.
+
 ## [0.5.12] - 2026-09-22
 
 ### Added

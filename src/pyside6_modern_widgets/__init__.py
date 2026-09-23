@@ -10,6 +10,7 @@ from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
 from .modern_notification import ModernNotification, NotificationKind
 from .modern_switch import ModernSwitch
+from .modern_tab_widget import ModernTabWidget
 from .modern_tool_bar import ModernToolBar
 from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar
@@ -46,6 +47,7 @@ __all__ = [
     "ModernMetrics",
     "ModernNotification",
     "ModernSwitch",
+    "ModernTabWidget",
     "ModernTheme",
     "ModernToolBar",
     "ModernWindow",
