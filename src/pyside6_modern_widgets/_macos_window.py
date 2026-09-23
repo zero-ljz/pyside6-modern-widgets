@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import ctypes
 import logging
 import platform
@@ -63,6 +64,12 @@ class _ObjCBridge:
         library.sel_registerName.restype = ctypes.c_void_p
         library.objc_getClass.argtypes = (ctypes.c_char_p,)
         library.objc_getClass.restype = ctypes.c_void_p
+        library.object_getClass.argtypes = (ctypes.c_void_p,)
+        library.object_getClass.restype = ctypes.c_void_p
+        library.class_getInstanceMethod.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
+        library.class_getInstanceMethod.restype = ctypes.c_void_p
+        library.method_setImplementation.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
+        library.method_setImplementation.restype = ctypes.c_void_p
 
         address = ctypes.cast(library.objc_msgSend, ctypes.c_void_p).value
         if address is None:
@@ -140,6 +147,26 @@ class _ObjCBridge:
 
     def class_named(self, name: str) -> int:
         return int(self._library.objc_getClass(name.encode("ascii")))
+
+    def window_class(self, window: int) -> int:
+        return int(self._library.object_getClass(window) or 0)
+
+    def replace_window_method(self, window_class: int, selector: str, callback) -> tuple[int, int]:
+        method = int(
+            self._library.class_getInstanceMethod(window_class, self.selector(selector)) or 0
+        )
+        if not method:
+            raise OSError(f"NSWindow.{selector} is unavailable")
+        original = int(
+            self._library.method_setImplementation(method, ctypes.cast(callback, ctypes.c_void_p))
+            or 0
+        )
+        if not original:
+            raise OSError(f"Unable to replace NSWindow.{selector}")
+        return method, original
+
+    def restore_window_method(self, method: int, original: int) -> None:
+        self._library.method_setImplementation(method, original)
 
     def send_id(self, receiver: int, selector: str) -> int:
         return int(self._send_id(receiver, self.selector(selector)) or 0)
@@ -269,6 +296,116 @@ def _native_window(widget: QWidget, bridge: _ObjCBridge) -> int:
     # resurrect a modal dialog and leave its parent blocked by an invisible window.
     view = int(widget.internalWinId())
     return bridge.send_id(view, "window") if view else 0
+
+
+class _NativeTitleBarStyleGuard:
+    """Keep Qt's later NSWindow style updates from exposing opaque title material."""
+
+    def __init__(self, bridge: _ObjCBridge, window_class: int) -> None:
+        self.bridge = bridge
+        self.window_class = window_class
+        self.windows: set[int] = set()
+        self._style_method = 0
+        self._style_implementation = 0
+        self._transparency_method = 0
+        self._transparency_implementation = 0
+        self._style_original = None
+        self._transparency_original = None
+        self._style_callback = ctypes.CFUNCTYPE(
+            None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong
+        )(self._set_style_mask)
+        self._transparency_callback = ctypes.CFUNCTYPE(
+            None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_bool
+        )(self._set_transparency)
+        try:
+            self._style_method, original = bridge.replace_window_method(
+                window_class, "setStyleMask:", self._style_callback
+            )
+            self._style_implementation = original
+            self._style_original = ctypes.CFUNCTYPE(
+                None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong
+            )(original)
+            self._transparency_method, original = bridge.replace_window_method(
+                window_class, "setTitlebarAppearsTransparent:", self._transparency_callback
+            )
+            self._transparency_implementation = original
+            self._transparency_original = ctypes.CFUNCTYPE(
+                None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_bool
+            )(original)
+        except Exception:
+            self.dispose()
+            raise
+
+    def _set_style_mask(self, window: int, selector: int, mask: int) -> None:
+        if window in self.windows:
+            mask |= _NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
+        try:
+            original = self._style_original
+            if original is not None:
+                original(window, selector, mask)
+        except Exception:
+            logging.getLogger(__name__).exception("Unable to update the native window style")
+
+    def _set_transparency(self, window: int, selector: int, transparent: bool) -> None:
+        if window in self.windows:
+            transparent = True
+        try:
+            original = self._transparency_original
+            if original is not None:
+                original(window, selector, transparent)
+        except Exception:
+            logging.getLogger(__name__).exception("Unable to update title-bar transparency")
+
+    def dispose(self) -> None:
+        if self._transparency_method:
+            self.bridge.restore_window_method(
+                self._transparency_method, self._transparency_implementation
+            )
+            self._transparency_method = 0
+        if self._style_method:
+            self.bridge.restore_window_method(self._style_method, self._style_implementation)
+            self._style_method = 0
+        self.windows.clear()
+
+
+_title_bar_style_guard: _NativeTitleBarStyleGuard | None = None
+
+
+@atexit.register
+def _restore_native_title_bar_methods() -> None:
+    global _title_bar_style_guard
+    if _title_bar_style_guard is not None:
+        _title_bar_style_guard.dispose()
+        _title_bar_style_guard = None
+
+
+def _guard_native_title_bar(widget: QWidget, bridge: _ObjCBridge, window: int) -> None:
+    global _title_bar_style_guard
+    previous = getattr(widget, "_macos_guarded_window", 0)
+    if previous == window:
+        return
+    if previous:
+        _unguard_native_title_bar(widget)
+    window_class = bridge.window_class(window)
+    if _title_bar_style_guard is None:
+        _title_bar_style_guard = _NativeTitleBarStyleGuard(bridge, window_class)
+    elif _title_bar_style_guard.window_class != window_class:
+        raise OSError("Native window class changed while title-bar style is guarded")
+    _title_bar_style_guard.windows.add(window)
+    widget._macos_guarded_window = window  # type: ignore[attr-defined]
+
+
+def _unguard_native_title_bar(widget: QWidget) -> None:
+    global _title_bar_style_guard
+    window = getattr(widget, "_macos_guarded_window", 0)
+    if not window:
+        return
+    widget._macos_guarded_window = 0  # type: ignore[attr-defined]
+    if _title_bar_style_guard is not None:
+        _title_bar_style_guard.windows.discard(window)
+        if not _title_bar_style_guard.windows:
+            _title_bar_style_guard.dispose()
+            _title_bar_style_guard = None
 
 
 def set_macos_window_appearance(widget: QWidget, *, dark: bool) -> bool:
@@ -411,6 +548,11 @@ class _TrafficLightObserver:
 
 
 def release_macos_title_bar(widget: QWidget) -> None:
+    _unguard_native_title_bar(widget)
+    _release_traffic_light_observer(widget)
+
+
+def _release_traffic_light_observer(widget: QWidget) -> None:
     observer = getattr(widget, "_macos_traffic_light_observer", None)
     if observer is not None:
         observer.dispose()
@@ -421,7 +563,7 @@ def release_macos_title_bar(widget: QWidget) -> None:
 def _observe_traffic_lights(widget: QWidget, bridge: _ObjCBridge, window: int, height: int) -> None:
     observer = getattr(widget, "_macos_traffic_light_observer", None)
     if observer is not None and not observer.matches_window(window):
-        release_macos_title_bar(widget)
+        _release_traffic_light_observer(widget)
         observer = None
     if observer is None:
         observer = _TrafficLightObserver(bridge, window, height)
@@ -446,7 +588,11 @@ def _restore_native_title_bar_style(
 
 
 def configure_macos_native_title_bar(
-    widget: QWidget, *, title_bar_height: int = 0, content_size: QSize | None = None
+    widget: QWidget,
+    *,
+    title_bar_height: int = 0,
+    content_size: QSize | None = None,
+    guard_style: bool = False,
 ) -> bool:
     """Make a native title bar transparent while retaining its traffic lights."""
     if not uses_macos_native_title_bar() or not widget.isWindow():
@@ -456,11 +602,15 @@ def configure_macos_native_title_bar(
         window = _native_window(widget, bridge)
         if not window:
             return False
-        # Qt can reset the material without changing AppKit's property value.
-        _restore_native_title_bar_style(bridge, window, reassert_transparency=True)
+        if guard_style and isinstance(bridge, _ObjCBridge):
+            try:
+                _guard_native_title_bar(widget, bridge, window)
+            except (AttributeError, OSError, TypeError, ValueError):
+                logging.getLogger(__name__).exception("Unable to guard native title-bar style")
+        guarded = _title_bar_style_guard is not None and window in _title_bar_style_guard.windows
+        _restore_native_title_bar_style(bridge, window, reassert_transparency=not guarded)
         if content_size is not None and content_size.isValid():
-            # Switching to full-size content can leave AppKit's initial content
-            # frame stale. Reapply Qt's resolved size without a synthetic drag.
+            # Dialogs use their layout's resolved content size on first show.
             bridge.send_void_size(
                 window, "setContentSize:", _NSSize(content_size.width(), content_size.height())
             )

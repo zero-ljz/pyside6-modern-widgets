@@ -1,10 +1,11 @@
 """Real AppKit regressions; run on macOS with QT_QPA_PLATFORM=cocoa."""
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QToolBar
 
+from examples.navigation_view_example import ExampleWindow
 from pyside6_modern_widgets import (
     DARK_THEME,
     LIGHT_THEME,
@@ -131,9 +132,80 @@ def test_appkit_toolbar_visibility_preserves_transparent_title_bar():
                 native._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
             )
             assert bridge.send_bool(nswindow, "titlebarAppearsTransparent")
-            assert bridge.send_integer(nswindow, "titleVisibility") == native._NS_WINDOW_TITLE_HIDDEN
+            assert (
+                bridge.send_integer(nswindow, "titleVisibility") == native._NS_WINDOW_TITLE_HIDDEN
+            )
     finally:
         _dispose(window)
+
+
+def test_gallery_pages_preserve_native_title_bar():
+    window = ExampleWindow()
+    sidebar_heights = []
+    painted_scroll_heights = []
+
+    class ResizeTrace(QObject):
+        def eventFilter(self, watched, event):
+            if watched is window.navigation.sidebar and event.type() == QEvent.Type.Resize:
+                sidebar_heights.append(event.size().height())
+            elif (
+                watched is window.navigation.sidebar.scrollArea.viewport()
+                and event.type() == QEvent.Type.Paint
+            ):
+                painted_scroll_heights.append(window.navigation.sidebar.scrollArea.height())
+            return False
+
+    trace = ResizeTrace(window)
+    window.navigation.sidebar.installEventFilter(trace)
+    window.navigation.sidebar.scrollArea.viewport().installEventFilter(trace)
+    try:
+        window.show()
+        initial_height = window.navigation.sidebar.height()
+        assert initial_height == window.navigation.height()
+        assert initial_height >= 500
+        QTest.qWait(100)
+        assert window.navigation.sidebar.height() == initial_height
+        assert sidebar_heights and min(sidebar_heights) >= 500
+        assert painted_scroll_heights
+        assert min(painted_scroll_heights) >= window.navigation.sidebar.scrollArea.height() - 2
+        bridge = native._objc_bridge()
+        nswindow = native._native_window(window, bridge)
+        for index in (5, 8, 0, 5, 8):
+            window.navigation.setCurrentIndex(index)
+            QApplication.processEvents()
+            assert window.navigation.sidebar.height() == initial_height
+            assert bridge.send_integer(nswindow, "styleMask") & (
+                native._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
+            )
+            assert bridge.send_bool(nswindow, "titlebarAppearsTransparent")
+    finally:
+        _dispose(window)
+
+
+def test_appkit_rejects_title_bar_style_resets():
+    window = ModernWindow()
+    try:
+        window.show()
+        QTest.qWait(100)
+        bridge = native._objc_bridge()
+        nswindow = native._native_window(window, bridge)
+        style = bridge.send_integer(nswindow, "styleMask")
+
+        bridge.send_void_integer(
+            nswindow,
+            "setStyleMask:",
+            style & ~native._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW,
+        )
+        bridge.send_void_bool(nswindow, "setTitlebarAppearsTransparent:", False)
+
+        assert bridge.send_integer(nswindow, "styleMask") & (
+            native._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW
+        )
+        assert bridge.send_bool(nswindow, "titlebarAppearsTransparent")
+    finally:
+        _dispose(window)
+    guard = native._title_bar_style_guard
+    assert guard is None or nswindow not in guard.windows
 
 
 def test_appkit_message_box_preserves_layout_and_movable_native_frame():

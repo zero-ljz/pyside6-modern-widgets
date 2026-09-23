@@ -509,6 +509,7 @@ class ModernWindow(QWidget):
         self._macos_title_bar_configured = configure_macos_native_title_bar(
             self,
             title_bar_height=title_bar_height,
+            guard_style=True,
         )
         if self.titleBar is None:
             return
@@ -839,8 +840,12 @@ class ModernWindow(QWidget):
         super().showEvent(event)
         self._set_application_event_filter_enabled(True)
         self._connect_screen_change_signal()
-        self._sync_macos_native_title_bar()
-        self._sync_chrome_with_window_flags()
+        if self._uses_native_macos_title_bar:
+            self._sync_macos_native_title_bar()
+            self._native_frame_sync_timer.stop()
+            self._macos_title_bar_resize_timer.stop()
+        else:
+            self._sync_chrome_with_window_flags()
         self._sync_windows_native_frame()
         if not event.spontaneous():
             self.apply_window_style()

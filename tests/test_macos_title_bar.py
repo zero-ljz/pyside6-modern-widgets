@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -149,6 +150,52 @@ def test_native_appearance_is_applied_to_the_window(monkeypatch, dark):
     assert calls == [(456, "setAppearance:", 40)]
 
 
+def test_native_title_bar_guard_intercepts_resets_and_restores_methods():
+    style_calls = []
+    transparency_calls = []
+    style_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong)
+    transparency_type = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_bool)
+
+    class Bridge:
+        def __init__(self):
+            self.style_original = style_type(
+                lambda window, selector, mask: style_calls.append((window, mask))
+            )
+            self.transparency_original = transparency_type(
+                lambda window, selector, transparent: transparency_calls.append(
+                    (window, transparent)
+                )
+            )
+            self.restored = []
+
+        def replace_window_method(self, window_class, selector, callback):
+            assert window_class == 123
+            method, original = {
+                "setStyleMask:": (1, self.style_original),
+                "setTitlebarAppearsTransparent:": (2, self.transparency_original),
+            }[selector]
+            return method, ctypes.cast(original, ctypes.c_void_p).value
+
+        def restore_window_method(self, method, original):
+            self.restored.append(method)
+
+    guard = macos_window._NativeTitleBarStyleGuard(Bridge(), 123)  # type: ignore[arg-type]
+    guard.windows.add(456)
+    guard._style_callback(456, 0, 7)
+    guard._style_callback(789, 0, 7)
+    guard._transparency_callback(456, 0, False)
+    guard._transparency_callback(789, 0, False)
+
+    assert style_calls == [
+        (456, 7 | macos_window._NS_WINDOW_STYLE_MASK_FULL_SIZE_CONTENT_VIEW),
+        (789, 7),
+    ]
+    assert transparency_calls == [(456, True), (789, False)]
+    guard.dispose()
+    assert guard.bridge.restored == [2, 1]
+    assert guard.windows == set()
+
+
 def test_modern_window_uses_native_macos_title_bar_layout(monkeypatch) -> None:
     monkeypatch.setattr(modern_window_module, "uses_macos_native_title_bar", lambda: True)
     monkeypatch.setattr(
@@ -191,6 +238,28 @@ def test_modern_window_uses_native_macos_title_bar_layout(monkeypatch) -> None:
         window._sync_macos_native_title_bar()
         assert window._macos_title_bar_configured
         assert window.contentsMargins().top() == title_bar.height()
+    finally:
+        _dispose(window)
+
+
+def test_modern_window_does_not_resize_native_content_during_show(monkeypatch) -> None:
+    monkeypatch.setattr(modern_window_module, "uses_macos_native_title_bar", lambda: True)
+    configurations = []
+    monkeypatch.setattr(
+        modern_window_module,
+        "configure_macos_native_title_bar",
+        lambda _widget, **kwargs: configurations.append(kwargs) or True,
+    )
+    window = ModernWindow()
+    try:
+        window.resize(1000, 640)
+        window.show()
+        _APP.processEvents()
+        assert len(configurations) == 1
+        assert "content_size" not in configurations[0]
+        assert window.size() == QSize(1000, 640)
+        assert not window._native_frame_sync_timer.isActive()
+        assert not window._macos_title_bar_resize_timer.isActive()
     finally:
         _dispose(window)
 

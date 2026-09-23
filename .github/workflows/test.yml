@@ -22,6 +22,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
+      - name: Run native macOS title-bar tests
+        if: runner.os == 'macOS'
+        env:
+          QT_QPA_PLATFORM: cocoa
+        run: uv run pytest tests/test_macos_native_title_bar.py
+
       - name: Run component tests
         env:
           QT_QPA_PLATFORM: offscreen
