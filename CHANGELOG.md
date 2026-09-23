@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.13] - 2026-09-23
+
 ### Added
 
 - Add `ModernTabWidget` for compact, fixed application sections while preserving
@@ -480,7 +482,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.12...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.13...HEAD
+[0.5.13]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.12...v0.5.13
 [0.5.12]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.9...v0.5.10
