@@ -133,6 +133,17 @@ def test_add_toolbar_honors_supported_areas_and_rejects_invalid_signatures(
     window.close()
 
 
+def test_add_toolbar_preserves_existing_stylesheet(application: QApplication) -> None:
+    window = ModernWindow()
+    toolbar = QToolBar()
+    stylesheet = "QToolBar { background: red; } QToolButton { color: white; }"
+    toolbar.setStyleSheet(stylesheet)
+
+    assert window.addToolBar(toolbar) is toolbar
+    assert toolbar.styleSheet() == stylesheet
+    window.close()
+
+
 def test_application_event_filter_is_active_only_while_visible(
     application: QApplication,
 ) -> None:

@@ -107,6 +107,21 @@ def test_last_page_destruction_and_replacement_publish_complete_state(view_class
     _flush_deletes()
 
 
+@pytest.mark.parametrize("auto_fill", [False, True])
+def test_navigation_page_preserves_background_setting(auto_fill):
+    view = NavigationView()
+    page = QLabel("Page")
+    page.setAutoFillBackground(auto_fill)
+
+    view.addPage(page, "Page")
+    assert page.autoFillBackground() is auto_fill
+    assert view.removePage(0) is page
+    assert page.autoFillBackground() is auto_fill
+    page.deleteLater()
+    view.deleteLater()
+    _flush_deletes()
+
+
 @pytest.mark.parametrize("insert_index", [0, 10])
 def test_first_tab_insertion_emits_once_after_page_and_label_are_ready(insert_index):
     view = TabView()

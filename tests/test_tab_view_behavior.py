@@ -55,6 +55,20 @@ def test_repeated_add_of_only_page_does_not_duplicate_tab():
     view.deleteLater()
 
 
+def test_renaming_tab_updates_generated_tooltip_but_preserves_custom_tooltip():
+    view = TabView()
+    view.addTab(QLabel("First"), "First")
+    view.addTab(QLabel("Second"), "Second")
+    view.setTabToolTip(1, "Details about the second tab")
+
+    view.setTabText(0, "Renamed")
+    view.setTabText(1, "Changed")
+
+    assert view.tabToolTip(0) == "Renamed"
+    assert view.tabToolTip(1) == "Details about the second tab"
+    view.deleteLater()
+
+
 def test_disabled_tabs_disable_pages_and_reenable_them_like_qt():
     outcomes = []
     for view_class in (QTabWidget, TabView):

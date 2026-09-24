@@ -234,7 +234,12 @@ def test_parent_and_text_constructors(switch):
     child = ModernSwitch(switch)
     assert child.parentWidget() is switch
     assert not child.text()
+    empty = ModernSwitch(None, switch)
+    assert empty.parentWidget() is switch
+    assert not empty.text()
     labeled = ModernSwitch("&Notifications", switch)
     assert labeled.parentWidget() is switch
     assert labeled.sizeHint().width() > child.sizeHint().width()
     assert not labeled.shortcut().isEmpty()
+    with pytest.raises(TypeError, match="parent specified twice"):
+        ModernSwitch(switch, switch)

@@ -629,7 +629,11 @@ class TabView(QWidget):
         return self._tab_bar.tabText(index)
 
     def setTabText(self, index: int, text: str) -> None:
+        old_text = self._tab_bar.tabText(index)
+        auto_tooltip = self._tab_bar.tabToolTip(index) == old_text
         self._tab_bar.setTabText(index, text)
+        if auto_tooltip:
+            self._tab_bar.setTabToolTip(index, text)
         self._tab_bar._update_accessible_names()
 
     def tabIcon(self, index: int) -> QIcon:

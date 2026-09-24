@@ -199,7 +199,6 @@ class NavigationView(QWidget):
         position: NavigationPosition = NavigationPosition.TOP,
         selected: bool = False,
     ) -> int:
-        page.setAutoFillBackground(False)
         page_index = self.stackedWidget.addWidget(page)
         item_index = self.sidebar.addItem(text, icon, position)
         self._sync_sidebar_minimum_height()

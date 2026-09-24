@@ -32,8 +32,12 @@ class ModernSwitch(QCheckBox):
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
-        if isinstance(text, QWidget) or text is None:
+        if isinstance(text, QWidget):
+            if parent is not None:
+                raise TypeError("parent specified twice")
             parent, text = text, ""
+        elif text is None:
+            text = ""
         super().__init__(text, parent)
         self._keyboard_focus = False
         self._theme_override = theme

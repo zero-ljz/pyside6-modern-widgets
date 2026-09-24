@@ -1322,8 +1322,6 @@ class ModernWindow(QWidget):
 
         self._ensure_compatibility_layout()
         assert self.toolbarLayout is not None
-        if not isinstance(toolbar, ModernToolBar):
-            toolbar.setStyleSheet("QToolBar { background: transparent; border: none; }")
         if area == Qt.ToolBarArea.TopToolBarArea:
             self.toolbarLayout.addWidget(toolbar)
         else:
