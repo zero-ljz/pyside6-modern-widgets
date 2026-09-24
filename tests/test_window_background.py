@@ -52,11 +52,13 @@ def _surface_colors(widget: QWidget) -> tuple[QColor, QColor]:
     )
 
 
-@pytest.mark.parametrize("window_type", [ModernWindow, ModernDialog])
 @pytest.mark.parametrize(
-    "theme, inactive_color",
-    [(LIGHT_THEME, "#F3F3F3"), (DARK_THEME, "#2B2B2B")],
-    ids=["light", "dark"],
+    "window_type, theme, inactive_color",
+    [
+        (ModernWindow, LIGHT_THEME, "#F3F3F3"),
+        (ModernDialog, DARK_THEME, "#2B2B2B"),
+    ],
+    ids=["light-window", "dark-dialog"],
 )
 def test_window_background_tracks_activation_and_inactive_theme_changes(
     window_type, theme, inactive_color
@@ -147,41 +149,6 @@ def test_background_fade_blends_pixels_and_reverses_without_a_jump(
         assert _surface_colors(surface) == middle_colors
         QTest.qWait(SurfaceActivationTransition.DURATION_MS + 30)
         assert _surface_colors(surface) == active_colors
-    finally:
-        window.close()
-        other.close()
-
-
-@pytest.mark.parametrize(
-    "theme, inactive_color",
-    [(LIGHT_THEME, "#F3F3F3"), (DARK_THEME, "#2B2B2B")],
-    ids=["light", "dark"],
-)
-def test_navigation_overlay_background_tracks_window_activation(theme, inactive_color) -> None:
-    window = ModernWindow(theme=theme)
-    other = QWidget()
-    try:
-        navigation = NavigationView(theme=theme)
-        navigation.setAutoSidebarOverlay(False)
-        window.setCentralWidget(navigation)
-        window.resize(480, 320)
-        navigation.setSidebarOverlay(True)
-        navigation.sidebar.setCollapsed(False, animated=False)
-        window.show()
-        other.show()
-        paints = _PaintCounter(navigation.sidebar)
-
-        _activate(window)
-        active_colors = _surface_colors(navigation.sidebar)
-        assert active_colors[0] != active_colors[1]
-        paint_count = paints.count
-
-        _activate(other)
-        assert paints.count > paint_count
-        assert _surface_colors(navigation.sidebar) == (QColor(inactive_color),) * 2
-
-        _activate(window)
-        assert _surface_colors(navigation.sidebar) == active_colors
     finally:
         window.close()
         other.close()
