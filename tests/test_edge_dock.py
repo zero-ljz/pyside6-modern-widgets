@@ -47,7 +47,7 @@ def test_icon_handle_stays_upright_and_inside_each_edge(docked, side):
     controller = EdgeDockController(
         window,
         DockConfig(
-            anim_duration=0,
+            animation_duration_ms=0,
             sides=tuple(list(DockSide)[1:]),
             handle_icon=_two_color_icon(),
             handle_mode=DockHandleMode.CLICK,
@@ -201,7 +201,7 @@ def docked(monkeypatch, theme_manager_instance):
     layout.addWidget(strip)
     layout.addWidget(field)
     controller = EdgeDockController(
-        window, DockConfig(anim_duration=0, hide_delay=30), drag_widget=strip
+        window, DockConfig(animation_duration_ms=0, hide_delay_ms=30), drag_widget=strip
     )
     window.show()
     _APP.processEvents()
@@ -250,9 +250,9 @@ def test_oversize_window_keeps_top_left_reachable():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"hide_delay": -1},
+        {"hide_delay_ms": -1},
         {"handle_width": 0},
-        {"anim_duration": -1},
+        {"animation_duration_ms": -1},
         {"dock_distance": -1},
         {"sides": ()},
         {"sides": (DockSide.NONE,)},
@@ -432,7 +432,7 @@ def test_child_text_selection_does_not_drag_window(docked):
 def test_propagated_child_press_is_not_used_as_a_drag(docked):
     window, previous, strip, _ = docked
     previous.detach()
-    controller = EdgeDockController(window, DockConfig(anim_duration=0))
+    controller = EdgeDockController(window, DockConfig(animation_duration_ms=0))
     start = window.pos()
     # Labels ignore mouse presses, which Qt propagates up to their parent.
     _drag(strip, QPoint(100, 100))
@@ -700,7 +700,7 @@ def test_detach_restores_target_and_removes_drag_behavior(docked):
 def test_resize_keeps_right_edge_and_animation_is_reused(docked):
     window, previous, strip, _ = docked
     previous.detach()
-    controller = EdgeDockController(window, DockConfig(anim_duration=40), drag_widget=strip)
+    controller = EdgeDockController(window, DockConfig(animation_duration_ms=40), drag_widget=strip)
     controller.setAutoHide(False)
     animation = controller._animation
     finished = QSignalSpy(animation.finished)
@@ -719,7 +719,7 @@ def test_target_destruction_owns_handle_and_controller(theme_manager_instance, m
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
     window = ModernWindow()
     window.resize(320, 240)
-    controller = EdgeDockController(window, DockConfig(anim_duration=0))
+    controller = EdgeDockController(window, DockConfig(animation_duration_ms=0))
     window.show()
     _APP.processEvents()
     controller.dock(DockSide.LEFT)
@@ -741,7 +741,7 @@ def test_system_drag_survives_ungrab_and_snaps_after_native_finish(
     window.resize(400, 240)
     window.move(220, 200)
     controller = EdgeDockController(
-        window, DockConfig(anim_duration=0), drag_widget=surface, auto_hide=False
+        window, DockConfig(animation_duration_ms=0), drag_widget=surface, auto_hide=False
     )
     window.show()
     _APP.processEvents()
@@ -838,7 +838,9 @@ def test_rejected_close_preserves_accessible_docked_window(
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
     window = VetoWindow(None, Qt.FramelessWindowHint)
     window.resize(240, 160)
-    controller = EdgeDockController(window, DockConfig(anim_duration=0, hide_delay=10000))
+    controller = EdgeDockController(
+        window, DockConfig(animation_duration_ms=0, hide_delay_ms=10000)
+    )
     try:
         window.show()
         _APP.processEvents()
@@ -950,7 +952,7 @@ def test_only_one_attached_controller_can_own_a_target(docked):
     with pytest.raises(ValueError, match="already has"):
         EdgeDockController(window)
     controller.detach()
-    replacement = EdgeDockController(window, DockConfig(anim_duration=0))
+    replacement = EdgeDockController(window, DockConfig(animation_duration_ms=0))
     replacement.dock(DockSide.RIGHT)
     assert replacement.dockSide() == DockSide.RIGHT
 
@@ -978,7 +980,9 @@ def test_observers_see_committed_visibility_and_can_detach_during_collapse(docke
 def test_dock_observer_can_disable_without_leaving_an_animation(docked):
     window, previous, strip, _ = docked
     previous.detach()
-    controller = EdgeDockController(window, DockConfig(anim_duration=100), drag_widget=strip)
+    controller = EdgeDockController(
+        window, DockConfig(animation_duration_ms=100), drag_widget=strip
+    )
 
     def side_changed(side):
         if side != DockSide.NONE:
@@ -1051,7 +1055,7 @@ def test_widget_hide_handler_can_detach_without_leaving_a_restore_handle(
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
     window = Window(None, Qt.FramelessWindowHint)
     window.resize(240, 160)
-    controller = EdgeDockController(window, DockConfig(anim_duration=0))
+    controller = EdgeDockController(window, DockConfig(animation_duration_ms=0))
     try:
         window.show()
         _APP.processEvents()

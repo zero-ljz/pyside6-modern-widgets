@@ -852,8 +852,10 @@ class WindowTitleBar(QWidget, Generic[WindowWidget]):
             self.iconLabel.clear()
         self._layout_title()
 
-    def addCustomWidget(self, widget: QWidget, align: str = "right") -> None:
+    def addCustomWidget(self, widget: QWidget, align: Literal["left", "right"] = "right") -> None:
         """Insert a vertically centered widget in the left or right control area."""
+        if align not in ("left", "right"):
+            raise ValueError("align must be left or right")
         if self._native_macos_title_bar:
             widget.setAttribute(Qt.WidgetAttribute.WA_ContentsMarginsRespectsSafeArea, False)
         if align == "left":

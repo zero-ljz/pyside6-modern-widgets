@@ -20,14 +20,14 @@ _APP = QApplication.instance() or QApplication([])
 def test_exclusive_buttons_ids_signals_and_compact_layout(theme_manager_instance):
     control = ModernSegmentedControl(["All", "Open", "Closed"])
     selected = []
-    control.group.idClicked.connect(selected.append)
+    control.itemActivated.connect(selected.append)
     try:
-        assert control.group.exclusive()
-        assert [control.group.id(button) for button in control.buttons] == [0, 1, 2]
+        assert control.count() == 3
         assert all(
-            isinstance(button, QPushButton) and button.isCheckable() for button in control.buttons
+            isinstance(button, QPushButton) and button.isCheckable()
+            for button in [control.button(i) for i in range(control.count())]
         )
-        assert control.group.checkedId() == 0
+        assert control.currentIndex() == 0
         assert control.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Maximum
         assert control.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Fixed
         assert control.layout().contentsMargins().left() == 1
@@ -35,16 +35,18 @@ def test_exclusive_buttons_ids_signals_and_compact_layout(theme_manager_instance
         assert control.layout().spacing() == 0
         control.show()
         _APP.processEvents()
-        assert control.buttons[0].minimumHeight() >= 26
-        assert control.buttons[0].minimumWidth() >= 46
-        QTest.mouseClick(control.buttons[2], Qt.MouseButton.LeftButton)
-        assert control.group.checkedId() == 2
-        assert [button.isChecked() for button in control.buttons] == [False, False, True]
+        assert control.button(0).minimumHeight() >= 26
+        assert control.button(0).minimumWidth() >= 46
+        QTest.mouseClick(control.button(2), Qt.MouseButton.LeftButton)
+        assert control.currentIndex() == 2
+        assert [
+            button.isChecked() for button in [control.button(i) for i in range(control.count())]
+        ] == [False, False, True]
         assert selected == [2]
-        control.buttons[1].setChecked(True)
-        assert control.group.checkedId() == 1
+        control.button(1).setChecked(True)
+        assert control.currentIndex() == 1
         assert selected == [2]
-        control.buttons[1].setEnabled(False)
+        control.button(1).setEnabled(False)
         assert "color: #8A8A8A" in control.styleSheet()
     finally:
         control.close()
@@ -55,9 +57,9 @@ def test_empty_and_single_controls(theme_manager_instance):
     empty = ModernSegmentedControl([])
     single = ModernSegmentedControl(["Only"])
     try:
-        assert empty.buttons == []
-        assert empty.group.checkedId() == -1
-        assert single.group.checkedId() == 0
+        assert empty.count() == 0
+        assert empty.currentIndex() == -1
+        assert single.currentIndex() == 0
     finally:
         empty.deleteLater()
         single.deleteLater()

@@ -15,6 +15,7 @@ from PySide6.QtGui import QIcon, QScreen
 from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import isValid
 
+from ._theme_binding import ThemeBinding
 from .modern_notification import ModernNotification
 from .notification import (
     _UNSET,
@@ -261,6 +262,8 @@ class NotificationManager(QObject):
     including ones awaiting GUI cleanup; a full manager raises OverflowError.
     """
 
+    themeChanged = Signal(object)
+
     notificationShown = Signal(object)
     notificationClosed = Signal(object, str)
     notificationActivated = Signal(object)
@@ -329,11 +332,14 @@ class NotificationManager(QObject):
         app.screenRemoved.connect(self._screen_removed)
         app.focusChanged.connect(self._focus_changed)
         app.aboutToQuit.connect(self.clear)
-        theme_manager().themeChanged.connect(self._theme_changed)
         for screen in app.screens():
             self._screen_added(screen)
         if parent is not None:
             parent.installEventFilter(self)
+        self._theme_binding: ThemeBinding = ThemeBinding(
+            self, self.theme, self._theme_changed, source=self._host
+        )
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def _check_thread(self) -> None:
         if threading.get_ident() != self._gui_thread:
@@ -401,15 +407,18 @@ class NotificationManager(QObject):
         return theme_manager().theme()
 
     def setTheme(self, theme: ModernTheme | None) -> None:
+        """Override locally; None restores owner/ancestor/global inheritance."""
         self._check_thread()
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
-        self._theme_changed()
+        self._theme_binding.refresh()
 
     def _theme_changed(self, *_args) -> None:
         for record in list(self._records.values()):
             if isValid(record.card):
                 record.card._inherited_theme = self.theme()
-                record.card._apply_theme()
+                record.card._theme_binding.refresh()
 
     @staticmethod
     def _validate_screen(screen: QScreen | None) -> None:
@@ -797,7 +806,7 @@ class NotificationManager(QObject):
                 if handle.isClosed() or not isValid(record.card):
                     return
                 record.card.raise_()
-                if not was_visible and self._metrics.animation_duration > 0:
+                if not was_visible and self._metrics.animation_duration_ms > 0:
                     start = target + QPoint(0, -12 if bottom else 12)
                     if area.contains(QRect(start, size)):
                         record.card.move(start)

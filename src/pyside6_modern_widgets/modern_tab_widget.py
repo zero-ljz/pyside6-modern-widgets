@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect
+from PySide6.QtCore import QRect, Signal
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QTabBar, QTabWidget, QWidget
 
-from .theme import ModernTheme, palette_for_theme, theme_manager
+from ._theme_binding import ThemeBinding
+from .theme import ModernTheme, inherited_theme, palette_for_theme
 
 
 class _ModernSectionTabBar(QTabBar):
@@ -51,6 +52,8 @@ class ModernTabWidget(QTabWidget):
     closing, or moving tabs.
     """
 
+    themeChanged = Signal(object)
+
     def __init__(
         self,
         parent: QWidget | None = None,
@@ -58,8 +61,8 @@ class ModernTabWidget(QTabWidget):
         theme: ModernTheme | None = None,
     ) -> None:
         super().__init__(parent)
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
+        self._theme_override = theme
+        self._theme = theme if theme is not None else inherited_theme(self)
 
         self._tab_bar = _ModernSectionTabBar(self._theme, self)
         self.setTabBar(self._tab_bar)
@@ -68,24 +71,32 @@ class ModernTabWidget(QTabWidget):
         self._tab_bar.setExpanding(False)
         self._tab_bar.setObjectName("ModernTabWidgetBar")
 
-        theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self._apply_theme()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def theme(self) -> ModernTheme:
-        return self._theme
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
+
+    def takeTab(self, index: int) -> QWidget | None:
+        """Remove and hide a page, transferring ownership to the caller."""
+        page = self.widget(index)
+        if page is None:
+            return None
+        self.removeTab(index)
+        page.hide()
+        page.setParent(None)
+        return page
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        """Override the theme locally, or pass ``None`` to follow the global theme."""
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
-        self._apply_theme()
-
-    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
-        if self._uses_global_theme:
-            self._theme = theme
-            self._apply_theme()
+        """Override locally; None restores ancestor/global theme inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
+        self._theme_override = theme
+        self._theme_binding.refresh()
 
     def _apply_theme(self) -> None:
+        self._theme = self.theme()
         theme = self._theme
         self.setPalette(palette_for_theme(theme, QPalette()))
         self._tab_bar.setTheme(theme)

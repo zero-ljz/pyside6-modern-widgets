@@ -550,6 +550,8 @@ class _TrafficLightObserver:
 def release_macos_title_bar(widget: QWidget) -> None:
     _unguard_native_title_bar(widget)
     _release_traffic_light_observer(widget)
+    if hasattr(widget, "_modern_title_control_visibility"):
+        widget._modern_title_control_visibility = (0, {})  # type: ignore[attr-defined]
 
 
 def _release_traffic_light_observer(widget: QWidget) -> None:
@@ -593,6 +595,7 @@ def configure_macos_native_title_bar(
     title_bar_height: int = 0,
     content_size: QSize | None = None,
     guard_style: bool = False,
+    controls_visible: bool | None = None,
 ) -> bool:
     """Make a native title bar transparent while retaining its traffic lights."""
     if not uses_macos_native_title_bar() or not widget.isWindow():
@@ -616,6 +619,24 @@ def configure_macos_native_title_bar(
             )
         if title_bar_height > 0:
             _observe_traffic_lights(widget, bridge, window, title_bar_height)
+        if controls_visible is not None:
+            saved: tuple[int, dict[int, bool]] = getattr(
+                widget, "_modern_title_control_visibility", (0, {})
+            )
+            saved_window, hidden_states = saved
+            if saved_window != window:
+                hidden_states = {}
+            for kind in (0, 1, 2):
+                button = bridge.send_id_integer(window, "standardWindowButton:", kind)
+                if button:
+                    if not controls_visible:
+                        if kind not in hidden_states:
+                            hidden_states[kind] = bridge.send_bool(button, "isHidden")
+                        bridge.send_void_bool(button, "setHidden:", True)
+                    elif kind in hidden_states:
+                        bridge.send_void_bool(button, "setHidden:", hidden_states.pop(kind))
+            # Preserve Qt/AppKit's own button visibility when restoring the bar.
+            widget._modern_title_control_visibility = window, hidden_states  # type: ignore[attr-defined]
         widget.setAttribute(Qt.WidgetAttribute.WA_ContentsMarginsRespectsSafeArea, False)
         return True
     except (AttributeError, OSError, TypeError, ValueError):

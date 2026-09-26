@@ -27,7 +27,7 @@ def dock(monkeypatch):
     window.move(200, 200)
     window.show()
     _APP.processEvents()
-    controller = EdgeDockController(window, DockConfig(anim_duration=0, auto_hide=False))
+    controller = EdgeDockController(window, DockConfig(animation_duration_ms=0, auto_hide=False))
     monkeypatch.setattr(controller, "_buttons_pressed", lambda **_: False)
     yield window, controller
     controller.detach()
@@ -66,8 +66,8 @@ def test_atomic_config_updates_apply_timers_geometry_and_removed_edge(dock):
         controller.config(),
         handle_width=12,
         handle_length=90,
-        hide_delay=100,
-        anim_duration=40,
+        hide_delay_ms=100,
+        animation_duration_ms=40,
         dock_distance=30,
         safe_margin=5,
     )
@@ -120,7 +120,7 @@ def test_explicit_collapse_ignores_auto_hide_and_pointer_but_auto_timer_does_not
 
 def test_explicit_collapse_stops_docking_animation(dock):
     _, controller = dock
-    controller.setConfig(replace(controller.config(), anim_duration=250))
+    controller.setConfig(replace(controller.config(), animation_duration_ms=250))
     assert controller.dock(DockSide.RIGHT)
     assert controller.collapse()
     assert controller.isCollapsed()

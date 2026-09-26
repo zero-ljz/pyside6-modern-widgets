@@ -78,7 +78,7 @@ class ModernMetrics:
     tab_height: int = 38
     tab_min_width: int = 80
     tab_max_width: int = 200
-    animation_duration: int = 250
+    animation_duration_ms: int = 250
 
 
 LIGHT_THEME = ModernTheme(

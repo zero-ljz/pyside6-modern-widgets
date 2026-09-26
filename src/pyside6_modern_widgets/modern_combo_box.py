@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from PySide6.QtCore import QEvent, QMargins, QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QMargins, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._theme_binding import ThemeBinding
 from .modern_menu import (
     _MENU_ITEM_EXTRA_HEIGHT,
     _MENU_VERTICAL_MARGIN,
@@ -35,7 +36,6 @@ from .theme import (
     ModernTheme,
     inherited_theme,
     palette_for_theme,
-    theme_manager,
 )
 
 # WinUI ControlFillColor: default, pointer over, pressed, disabled (ARGB).
@@ -326,6 +326,8 @@ class ModernComboBox(QComboBox):
     the global theme when there is no themed ancestor.
     """
 
+    themeChanged = Signal(object)
+
     def __init__(
         self,
         parent: QWidget | None = None,
@@ -340,7 +342,6 @@ class ModernComboBox(QComboBox):
         self._applying_theme = False
         self._palette_override = QPalette()
         self._default_line_edit: QLineEdit | None = None
-        self._theme_ancestors: list[QWidget] = []
         self._popup: QWidget | None = None
         self._popup_margins: QMargins | None = None
         self._modern_style = _ComboBoxStyle(self)
@@ -359,17 +360,19 @@ class ModernComboBox(QComboBox):
         view.setPalette(view_palette)
         self.setItemDelegate(_ComboBoxDelegate(self))
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        theme_manager().themeChanged.connect(self._on_theme_changed)
-        self._watch_theme_ancestors()
         self._apply_theme()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        """Override the theme locally, or pass None to resume inheritance."""
+        """Override locally; None restores owner/ancestor/global inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
-        self._apply_theme()
+        self._theme_binding.refresh()
 
     def setEditable(self, editable: bool) -> None:
         was_editable = self.isEditable()
@@ -394,25 +397,12 @@ class ModernComboBox(QComboBox):
             editor.setPalette(self.palette())
         self._refresh_editor_surface()
 
-    def _on_theme_changed(self, _theme: ModernTheme) -> None:
-        self._apply_theme()
-
     def setPalette(self, palette: QPalette | Qt.GlobalColor | QColor) -> None:
         if not hasattr(self, "_palette_override"):
             super().setPalette(palette)
             return
         self._palette_override = QPalette(palette)
         self._apply_theme()
-
-    def _watch_theme_ancestors(self) -> None:
-        for previous in self._theme_ancestors:
-            previous.removeEventFilter(self)
-        self._theme_ancestors.clear()
-        ancestor = self.parentWidget()
-        while ancestor is not None:
-            ancestor.installEventFilter(self)
-            self._theme_ancestors.append(ancestor)
-            ancestor = ancestor.parentWidget()
 
     def eventFilter(self, watched, event) -> bool:
         # QComboBox may invoke this virtual method from its base constructor.
@@ -434,11 +424,6 @@ class ModernComboBox(QComboBox):
                 event.type() == QEvent.Type.PaletteChange and self._popup.isVisible()
             ):
                 self._refresh_popup_acrylic()
-        if watched in self._theme_ancestors:
-            if event.type() == QEvent.Type.ParentChange:
-                self._watch_theme_ancestors()
-            if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ParentChange):
-                self._apply_theme()
         return super().eventFilter(watched, event)
 
     def _refresh_popup_acrylic(self) -> None:
@@ -471,13 +456,6 @@ class ModernComboBox(QComboBox):
             self.view().window().update()
         finally:
             self._applying_theme = False
-
-    def event(self, event) -> bool:
-        handled = super().event(event)
-        if hasattr(self, "_styled_theme") and event.type() == QEvent.Type.ParentChange:
-            self._watch_theme_ancestors()
-            self._apply_theme()
-        return handled
 
     def showPopup(self) -> None:
         view = self.view()

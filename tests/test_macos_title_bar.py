@@ -515,6 +515,26 @@ def test_native_bridge_preserves_style_and_enables_full_size_content(monkeypatch
     assert layouts == [(456, 34)]
 
 
+def test_native_title_controls_restore_the_original_button_visibility(monkeypatch):
+    bridge = _BridgeProbe()
+    monkeypatch.setattr(macos_window, "uses_macos_native_title_bar", lambda: True)
+    monkeypatch.setattr(macos_window, "_objc_bridge", lambda: bridge)
+    original_send_bool = bridge.send_bool
+    monkeypatch.setattr(
+        bridge,
+        "send_bool",
+        lambda receiver, selector: (
+            receiver == 102 if selector == "isHidden" else original_send_bool(receiver, selector)
+        ),
+    )
+    widget = _NativeWidget()
+    for _ in range(2):
+        assert macos_window.configure_macos_native_title_bar(widget, controls_visible=False)
+        assert bridge.calls[-3:] == [(100 + kind, "setHidden:", True) for kind in (0, 1, 2)]
+    assert macos_window.configure_macos_native_title_bar(widget, controls_visible=True)
+    assert bridge.calls[-3:] == [(100 + kind, "setHidden:", kind == 2) for kind in (0, 1, 2)]
+
+
 def test_traffic_lights_support_flipped_title_bar_coordinates() -> None:
     bridge = _FrameNotificationProbe(flipped=True)
     observer = macos_window._TrafficLightObserver(bridge, 456, 34)

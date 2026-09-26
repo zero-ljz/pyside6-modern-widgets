@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
     QStackedWidget,
+    QStyle,
     QVBoxLayout,
     QWidget,
     QWidgetItem,
 )
 
+from ._theme_binding import ThemeBinding
 from .navigation_sidebar import (
     NavigationPosition,
     NavigationSidebar,
@@ -22,13 +25,15 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
+    inherited_theme,
     palette_for_theme,
-    theme_manager,
 )
 
 
 class NavigationView(QWidget):
     """Combine a ``NavigationSidebar`` with a synchronized page stack."""
+
+    themeChanged = Signal(object)
 
     SIDEBAR_OVERLAY_HYSTERESIS = 48
 
@@ -42,14 +47,13 @@ class NavigationView(QWidget):
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
         super().__init__(parent)
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
+        self._theme_override = theme
+        self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
         self._sidebar_overlay = False
         self._auto_sidebar_overlay = True
         self._sidebar_user_prefers_expanded = True
         self._outside_click_filter_installed = False
-        theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self.setObjectName("ModernNavigationView")
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -61,7 +65,6 @@ class NavigationView(QWidget):
 
         self.sidebar = NavigationSidebar(
             self,
-            theme=self._theme,
             metrics=self._metrics,
         )
         self.sidebar.installEventFilter(self)
@@ -94,6 +97,8 @@ class NavigationView(QWidget):
         self.stackedWidget.currentChanged.connect(self.stackedWidget.updateGeometry)
         self.stackedWidget.currentChanged.connect(self._on_current_changed)
         self.stackedWidget.widgetRemoved.connect(self._on_page_removed)
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def isSidebarOverlay(self) -> bool:
         return self._sidebar_overlay
@@ -195,7 +200,7 @@ class NavigationView(QWidget):
         self,
         page: QWidget,
         text: str,
-        icon=None,
+        icon: QIcon | QStyle.StandardPixmap | None = None,
         position: NavigationPosition = NavigationPosition.TOP,
         selected: bool = False,
     ) -> int:
@@ -212,11 +217,19 @@ class NavigationView(QWidget):
             self._on_current_changed(self.currentIndex())
         return page_index
 
-    def removePage(self, index: int) -> QWidget | None:
+    def removePage(self, index: int) -> None:
+        """Remove a page without deleting it or changing its Qt parent."""
+        page = self.widget(index)
+        if page is not None:
+            self.stackedWidget.removeWidget(page)
+            page.hide()
+
+    def takePage(self, index: int) -> QWidget | None:
+        """Remove and hide a page, transferring ownership to the caller."""
         page = self.widget(index)
         if page is None:
             return None
-        self.stackedWidget.removeWidget(page)
+        self.removePage(index)
         page.setParent(None)
         return page
 
@@ -245,6 +258,12 @@ class NavigationView(QWidget):
     def currentWidget(self) -> QWidget | None:
         return self.stackedWidget.currentWidget()
 
+    def indexOf(self, page: QWidget) -> int:
+        return self.stackedWidget.indexOf(page)
+
+    def setCurrentWidget(self, page: QWidget) -> None:
+        self.setCurrentIndex(self.indexOf(page))
+
     def currentIndex(self) -> int:
         return self.stackedWidget.currentIndex()
 
@@ -255,21 +274,18 @@ class NavigationView(QWidget):
         self.stackedWidget.setCurrentIndex(index)
 
     def theme(self) -> ModernTheme:
-        return self._theme
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
-        self._apply_theme()
-
-    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
-        if self._uses_global_theme:
-            self._theme = theme
-            self._apply_theme()
+        """Override locally; None restores ancestor/global theme inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
+        self._theme_override = theme
+        self._theme_binding.refresh()
 
     def _apply_theme(self) -> None:
+        self._theme = self.theme()
         self.setPalette(palette_for_theme(self._theme, self.palette()))
-        self.sidebar.setTheme(self._theme)
         self.contentContainer.setStyleSheet(navigation_content_style(self._theme))
 
     def _on_current_changed(self, index: int) -> None:

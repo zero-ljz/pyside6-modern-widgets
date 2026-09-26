@@ -602,12 +602,12 @@ class ExampleWindow(ModernWindow):
             self.tr("General settings for this section."),
             self.tr("More details in a separate section."),
         )
-        self.segmented_control.group.idClicked.connect(
+        self.segmented_control.currentChanged.connect(
             lambda index: segment_status.setText(descriptions[index])
         )
         layout.addWidget(segment_status)
         disabled_segments = ModernSegmentedControl([self.tr("General"), self.tr("Disabled")], page)
-        disabled_segments.buttons[1].setEnabled(False)
+        disabled_segments.setItemEnabled(1, False)
         layout.addWidget(disabled_segments, 0, Qt.AlignmentFlag.AlignLeft)
         return page
 

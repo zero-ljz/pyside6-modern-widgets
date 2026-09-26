@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtCore import QEvent, QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QMessageBox, QWidget
 
@@ -12,6 +12,7 @@ from ._macos_window import (
     uses_macos_native_title_bar,
     window_flags_with_chrome,
 )
+from ._theme_binding import ThemeBinding
 from ._window_chrome import (
     BackgroundFrame,
     WindowChrome,
@@ -25,12 +26,14 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
-    theme_manager,
+    inherited_theme,
 )
 
 
 class ModernMessageBox(QMessageBox):
     """Keep QMessageBox content and behavior, adding only themed window chrome."""
+
+    themeChanged = Signal(object)
 
     def __init__(
         self,
@@ -69,8 +72,8 @@ class ModernMessageBox(QMessageBox):
         self.setOption(QMessageBox.Option.DontUseNativeDialog)
         if self._uses_native_macos_title_bar:
             QWidget.setWindowTitle(self, title)
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
+        self._theme_override = theme
+        self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
         self._corner_radius = metrics.corner_radius
         self._surface_policy = current_window_surface_policy(
@@ -106,21 +109,27 @@ class ModernMessageBox(QMessageBox):
         self._chrome_overlay.show()
         self.windowTitleChanged.connect(self._title_bar.setTitle)
         self.windowIconChanged.connect(self._title_bar.setIcon)
-        theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self._sync_chrome_with_window_flags()
-        self.apply_window_style()
+        self._apply_window_style()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_window_style)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def theme(self) -> ModernTheme:
-        return self._theme
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
-        self.apply_window_style()
+        """Override locally; None restores ancestor/global theme inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
+        self._theme_override = theme
+        self._theme_binding.refresh()
+
+    def cornerRadius(self) -> int:
+        return self._corner_radius
 
     def setCornerRadius(self, radius: int) -> None:
         self._corner_radius = max(0, radius)
-        self.apply_window_style()
+        self._apply_window_style()
 
     def showSystemWindowMenu(self, position: QPoint) -> bool:
         if self._uses_native_macos_title_bar:
@@ -132,7 +141,8 @@ class ModernMessageBox(QMessageBox):
         # a titled native dialog so its caption remains a usable drag region.
         QWidget.setWindowTitle(self, title)
 
-    def apply_window_style(self) -> None:
+    def _apply_window_style(self) -> None:
+        self._theme = self.theme()
         self._chrome.apply(self._theme, self._corner_radius)
         if self._uses_native_macos_title_bar:
             self._title_bar.hide()
@@ -164,11 +174,6 @@ class ModernMessageBox(QMessageBox):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setAutoFillBackground(True)
         _enable_windows_rounded_corners(self, self._corner_radius)
-
-    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
-        if self._uses_global_theme:
-            self._theme = theme
-            self.apply_window_style()
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
         super().setWindowFlags(
@@ -213,14 +218,14 @@ class ModernMessageBox(QMessageBox):
                 self._sync_macos_appearance()
         if event.type() == QEvent.Type.Show:
             self._sync_chrome_with_window_flags()
-            self.apply_window_style()
+            self._apply_window_style()
             self._refresh_native_surface()
         elif event.type() == QEvent.Type.PaletteChange:
             self._refresh_native_surface()
         elif event.type() == QEvent.Type.Resize:
             self._layout_chrome()
         elif event.type() == QEvent.Type.WindowStateChange:
-            self.apply_window_style()
+            self._apply_window_style()
         return handled
 
     def nativeEvent(self, event_type, message):

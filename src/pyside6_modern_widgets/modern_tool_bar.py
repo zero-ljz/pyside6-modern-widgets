@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QPainter, QPen
 from PySide6.QtWidgets import QProxyStyle, QStyle, QToolBar, QToolButton, QWidget, QWidgetAction
 
+from ._theme_binding import ThemeBinding
 from .modern_menu import ModernMenu
 from .theme import (
     DEFAULT_METRICS,
@@ -13,7 +14,6 @@ from .theme import (
     ModernTheme,
     inherited_theme,
     palette_for_theme,
-    theme_manager,
     tinted_icon,
 )
 
@@ -91,6 +91,8 @@ class ModernToolBar(QToolBar):
     a second instance in the popup; addWidget() controls remain in the toolbar.
     """
 
+    themeChanged = Signal(object)
+
     def __init__(
         self,
         title: str | QWidget | None = None,
@@ -132,8 +134,9 @@ class ModernToolBar(QToolBar):
         self._update_timer.timeout.connect(self._sync_overflow)
         self.orientationChanged.connect(self._schedule_update)
         self.iconSizeChanged.connect(self._schedule_update)
-        theme_manager().themeChanged.connect(self._on_theme_changed)
         self._apply_theme()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def _retranslate_ui(self) -> None:
         text = self.tr("More actions")
@@ -144,9 +147,11 @@ class ModernToolBar(QToolBar):
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        """Override colors locally; None restores ancestor/global inheritance."""
+        """Override locally; None restores owner/ancestor/global inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
-        self._apply_theme()
+        self._theme_binding.refresh()
 
     def overflowMenu(self) -> ModernMenu:
         """Return the popup; its contents are managed from hidden toolbar actions."""
@@ -159,9 +164,6 @@ class ModernToolBar(QToolBar):
     def _menu_owner(self) -> QWidget | None:
         window = self.window()
         return window if window is not self else None
-
-    def _on_theme_changed(self, _theme: ModernTheme) -> None:
-        self._apply_theme()
 
     def _apply_theme(self) -> None:
         if self._applying_theme:

@@ -55,7 +55,7 @@ def managers(theme_manager_instance):
     created = []
 
     def create(**options):
-        options.setdefault("metrics", ModernMetrics(animation_duration=0))
+        options.setdefault("metrics", ModernMetrics(animation_duration_ms=0))
         manager = NotificationManager(host, **options)
         created.append(manager)
         return manager

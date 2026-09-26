@@ -58,7 +58,14 @@ keeping themed Qt message content and buttons.
 pip install pyside6-modern-widgets
 ```
 
-## Upgrading to 0.5.0
+## Upgrading to 0.6.0
+
+Version 0.6.0 standardizes theme inheritance, selection signals, page ownership,
+reversible title-bar visibility, and typed widget access. This is a breaking
+release: renamed APIs and parameters have no compatibility aliases.
+Read the [0.6.0 migration guide](docs/migration-0.6.md) before upgrading.
+
+## Upgrading from 0.4.x
 
 Version 0.5.0 adds modern dialogs, message boxes, menus, and menu bars, plus
 independent title-bar text/icon visibility and centered title text. It also
@@ -275,7 +282,7 @@ from PySide6.QtGui import QColor
 from pyside6_modern_widgets import DockPlacement, DockSide
 
 dock.setConfig(
-    replace(dock.config(), auto_hide=False, hide_delay=800, handle_color=QColor("#606060"))
+    replace(dock.config(), auto_hide=False, hide_delay_ms=800, handle_color=QColor("#606060"))
 )
 dock.dock(DockSide.LEFT)
 if dock.collapse():  # Explicit command; works with auto-hide off or pointer inside.
@@ -430,18 +437,23 @@ and enabled/disabled switches.
 ## Modern segmented control
 
 `ModernSegmentedControl(labels, parent=None, *, theme=None)` creates a compact
-row of exclusive `QPushButton` choices. Its public `buttons` list keeps the
-label order; `group` is an exclusive `QButtonGroup` whose button IDs are the
-zero-based label indices. The first button starts checked (an empty list has
-no selection). Use normal Qt button signals and methods:
+row of exclusive choices indexed in label order. `currentIndex()` starts at 0,
+or -1 for an empty control. `currentChanged(index)` reports both programmatic
+and user selection changes; `itemActivated(index)` reports clicks, including
+clicks on the current item. Use the indexed API:
 
 ```python
 from pyside6_modern_widgets import ModernSegmentedControl
 
 segments = ModernSegmentedControl(["All", "Open", "Closed"])
-segments.group.idClicked.connect(lambda index: print("Selected:", index))
-segments.buttons[2].setChecked(True)
+segments.currentChanged.connect(lambda index: print("Selected:", index))
+segments.setCurrentIndex(2)
+segments.setItemEnabled(1, False)
 ```
+
+`count()`, `itemText()` / `setItemText()`, and `isItemEnabled()` /
+`setItemEnabled()` expose item state. `button(index)` returns a borrowed
+`QPushButton` for advanced customization, or None for an invalid index.
 
 The control uses 1-pixel layout margins, no spacing, a 26-pixel minimum
 button content height, and a maximum-width/fixed-height size policy. Buttons
@@ -568,7 +580,7 @@ and keyboard focus. Supplied action lists and icons are copied on acceptance.
 | `width`, `margin`, `spacing` | 360, 16, 12 logical pixels. Cards fit the available area and are at most 360 pixels tall. |
 | `default_timeout_ms` | 5000 milliseconds; `None` makes notifications persistent by default. |
 | `desktop` | Automatic desktop delivery on Windows/macOS/X11; in-window delivery on Wayland. `False` explicitly selects in-window delivery. |
-| `theme`, `metrics` | Inherited theme and `ModernMetrics()`; set `animation_duration=0` to disable entry and stack movement animations. |
+| `theme`, `metrics` | Inherited theme and `ModernMetrics()`; set `animation_duration_ms=0` to disable entry and stack movement animations. |
 
 Full capacity raises `OverflowError` on the submitting caller without discarding
 another notification. Existing handles can still be updated or dismissed. When
@@ -772,7 +784,10 @@ instances for its internal layout.
 Run the navigation example's **Toolbar** page to vary the available width,
 toggle text labels and right-to-left layout, and try the overflow actions.
 
-`setTitleVisible()` controls only title text. `setIconVisible()` independently
+`setTitleBarVisible(False)` hides the entire title bar without deleting its
+custom widgets; pass `True` to restore it. `isTitleBarVisible()` reports the
+requested visibility even while the window is hidden. On macOS the native
+traffic-light controls follow this preference. `setTitleVisible()` controls only title text. `setIconVisible()` independently
 controls the title bar icon. Both default to `True` and preserve the actual
 window title and icon used by the operating system. Updating either while it is
 hidden does not show it again. `isTitleVisible()` and `isIconVisible()` return
@@ -825,6 +840,17 @@ remain effective.
 Use either a layout installed directly on `ModernWindow` or its optional
 `menuBar()`, `addToolBar()`, `statusBar()`, and `setCentralWidget()` compatibility
 APIs. The two layout models intentionally cannot be mixed in one window.
+`centralWidget()` reads the owned central widget; `takeCentralWidget()` removes
+and hides it, transferring ownership to the caller. Replacing it with
+`setCentralWidget()` deletes the previous owned widget. `addToolBar(title)`
+creates a `ModernToolBar` using the window's metrics, including its overflow menu.
+
+For `NavigationView`, `TabView`, and `ModernTabWidget`, `removePage(index)` /
+`removeTab(index)` removes and hides the page without deleting it or changing
+its Qt parent. Use `takePage(index)` / `takeTab(index)` to return the page and
+transfer ownership to the caller. Invalid indices are no-ops (take returns
+None). `NavigationView` also supports `indexOf(page)` and
+`setCurrentWidget(page)`.
 
 `ModernDialog` accepts ordinary Qt layouts directly and retains `exec()`,
 `accept()`, `reject()`, and the standard dialog result codes:
@@ -986,18 +1012,24 @@ palette and opaque fallback unchanged.
 
 ### Local overrides and application pages
 
-`ModernWindow`, `ModernDialog`, `ModernMessageBox`, `NavigationView`,
-`NavigationSidebar`, and `TabView` share this contract:
+Every component exposing `theme()` / `setTheme()` uses the same priority:
+explicit local override, nearest themed ancestor, then the global manager.
+This includes windows, dialogs, navigation, both tab views, combo boxes,
+switches, segmented controls, toolbars, flyouts, and notifications.
 
 ```python
-window.setTheme(DARK_THEME)  # Fix this component and its internal chrome.
-window.setTheme(None)  # Resume following the global manager.
+window.setTheme(DARK_THEME)  # Descendants without overrides inherit this theme.
+child.setTheme(LIGHT_THEME)  # Keep one child and its descendants light.
+child.setTheme(None)  # Resume inheritance from the nearest themed ancestor.
+window.setTheme(None)  # Inherit its parent, or follow the global manager if unowned.
 ```
 
-The constructor's `theme=` argument has the same semantics. Overrides stay fixed
-across global mode and wallpaper changes. Setting a window theme does not
-recursively override independently themed library widgets placed inside it.
-`ModernMenu` inherits its owner's Qt palette (including submenus); `ModernMenuBar`
+The constructor's `theme=` argument has the same semantics. A local override
+remains fixed across parent and global changes. `themeChanged(theme)` is emitted
+when effective tokens change, after the component applies them. Hidden widgets
+and widgets moved to another parent also update. A flyout treats its anchor as
+its theme owner; managed notification cards inherit their manager's theme.
+`ModernMenu` keeps Qt palette inheritance, including submenus; `ModernMenuBar`
 uses the nearest themed ancestor, or the global theme when standalone.
 
 Ordinary Qt controls inherit the application or parent palette, including disabled
@@ -1005,7 +1037,8 @@ text, placeholders, selection colors, tooltips, links, and alternating surfaces.
 Explicit widget palettes and hardcoded QSS colors can override that inheritance.
 The public `palette_for_theme(theme, base=None)` helper creates a matching palette
 without changing application state. For custom QSS or painting, read `theme()`
-initially and subscribe to `themeChanged`:
+initially and subscribe to the owning component's `themeChanged` (or the global
+manager when the page intentionally follows the application):
 
 ```python
 from PySide6.QtWidgets import QLabel

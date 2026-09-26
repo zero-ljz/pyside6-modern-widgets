@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from ._theme_binding import ThemeBinding
 from ._window_chrome import WindowDpiState, uses_windows_window_state
 from ._windows_window import redraw_native_window
 from .modern_menu import (
@@ -46,7 +47,6 @@ from .theme import (
     ModernTheme,
     inherited_theme,
     palette_for_theme,
-    theme_manager,
     tinted_icon,
 )
 
@@ -70,6 +70,8 @@ class ModernNotification(QWidget):
     When owned by a manager, use its NotificationHandle to change content;
     standalone cards retain their ordinary setters and action-button API.
     """
+
+    themeChanged = Signal(object)
 
     activated = Signal()
     actionTriggered = Signal(str)
@@ -115,7 +117,7 @@ class ModernNotification(QWidget):
         self._surface_settle_timer.setSingleShot(True)
         self._surface_settle_timer.timeout.connect(self._refresh_after_display_change)
         self._move_animation = QPropertyAnimation(self, QByteArray(b"pos"), self)
-        self._move_animation.setDuration(max(0, metrics.animation_duration))
+        self._move_animation.setDuration(max(0, metrics.animation_duration_ms))
         self._move_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
@@ -183,10 +185,11 @@ class ModernNotification(QWidget):
         self._layout.addWidget(self._scroll)
         for widget in (self._title, self._icon, self._message, body, self._scroll.viewport()):
             widget.installEventFilter(self)
-        theme_manager().themeChanged.connect(self._on_theme_changed)
         self._retranslate_ui()
         self._sync_accessibility()
         self._apply_theme()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def title(self) -> str:
         return self._title.text()
@@ -292,11 +295,11 @@ class ModernNotification(QWidget):
         return self._inherited_theme if self._inherited_theme is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
+        """Override locally; None restores owner/ancestor/global inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
-        self._apply_theme()
-
-    def _on_theme_changed(self, _theme: ModernTheme) -> None:
-        self._apply_theme()
+        self._theme_binding.refresh()
 
     def _apply_theme(self) -> None:
         self.setPalette(palette_for_theme(self.theme(), self.palette()))
@@ -479,7 +482,7 @@ class ModernNotification(QWidget):
         ):
             return
         self._move_animation.stop()
-        if animate and self.isVisible() and self._metrics.animation_duration > 0:
+        if animate and self.isVisible() and self._metrics.animation_duration_ms > 0:
             self._move_animation.setStartValue(self.pos())
             self._move_animation.setEndValue(point)
             self._move_animation.start()

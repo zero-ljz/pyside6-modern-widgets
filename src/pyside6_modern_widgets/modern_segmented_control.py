@@ -4,19 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QSizePolicy, QWidget
 
-from .theme import ModernTheme, inherited_theme, theme_manager
+from ._theme_binding import ThemeBinding
+from .theme import ModernTheme, inherited_theme
 
 
 class ModernSegmentedControl(QWidget):
     """One exclusive choice among related views, filters, or form modes.
 
-    ``group`` exposes Qt's button IDs (the label indices) and ``buttons`` exposes
-    the ordinary checkable QPushButtons for signals, text, and enabled state.
-    An empty sequence creates a control without a checked button.
+    Indices follow the input labels. Programmatic and user selection changes
+    emit currentChanged; itemActivated reports clicks, including repeated ones.
+    An empty control has currentIndex() == -1.
     """
+
+    themeChanged = Signal(object)
+    currentChanged = Signal(int)
+    itemActivated = Signal(int)
 
     def __init__(
         self,
@@ -29,68 +34,79 @@ class ModernSegmentedControl(QWidget):
         self._theme_override = theme
         self._styled_theme: ModernTheme | None = None
         self._applying_theme = False
-        self._theme_ancestors: list[QWidget] = []
         self.setObjectName("ModernSegmentedControl")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(1, 1, 1, 1)
         layout.setSpacing(0)
-        self.group = QButtonGroup(self)
-        self.group.setExclusive(True)
-        self.buttons: list[QPushButton] = []
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
+        self._buttons: list[QPushButton] = []
         for index, label in enumerate(labels):
             button = QPushButton(label, self)
             button.setObjectName("ModernSegmentButton")
             button.setCheckable(True)
             button.setAutoDefault(False)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.group.addButton(button, index)
-            self.buttons.append(button)
+            self._group.addButton(button, index)
+            self._buttons.append(button)
             layout.addWidget(button)
-        if self.buttons:
-            self.buttons[0].setChecked(True)
-        theme_manager().themeChanged.connect(self._on_theme_changed)
-        self._watch_theme_ancestors()
+        if self._buttons:
+            self._buttons[0].setChecked(True)
+        self._group.idToggled.connect(self._on_toggled)
+        self._group.idClicked.connect(self.itemActivated.emit)
         self._apply_theme()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
+
+    def count(self) -> int:
+        return len(self._buttons)
+
+    def currentIndex(self) -> int:
+        return self._group.checkedId()
+
+    def setCurrentIndex(self, index: int) -> None:
+        """Select a valid index; invalid indices leave the selection unchanged."""
+        button = self.button(index)
+        if button is not None:
+            button.setChecked(True)
+
+    def button(self, index: int) -> QPushButton | None:
+        """Return a borrowed button for advanced Qt customization."""
+        return self._buttons[index] if 0 <= index < self.count() else None
+
+    def itemText(self, index: int) -> str:
+        button = self.button(index)
+        return button.text() if button is not None else ""
+
+    def setItemText(self, index: int, text: str) -> None:
+        button = self.button(index)
+        if button is not None:
+            button.setText(text)
+
+    def isItemEnabled(self, index: int) -> bool:
+        button = self.button(index)
+        return button.isEnabled() if button is not None else False
+
+    def setItemEnabled(self, index: int, enabled: bool) -> None:
+        button = self.button(index)
+        if button is not None:
+            button.setEnabled(enabled)
+
+    def _on_toggled(self, index: int, checked: bool) -> None:
+        if checked:
+            self.currentChanged.emit(index)
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        """Override colors locally, or pass None to restore theme inheritance."""
+        """Override locally; None restores owner/ancestor/global inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
-        self._apply_theme()
-
-    def _watch_theme_ancestors(self) -> None:
-        for previous in self._theme_ancestors:
-            previous.removeEventFilter(self)
-        self._theme_ancestors.clear()
-        ancestor: QWidget | None = self.parentWidget()
-        while ancestor is not None:
-            ancestor.installEventFilter(self)
-            self._theme_ancestors.append(ancestor)
-            ancestor = ancestor.parentWidget()
-
-    def _on_theme_changed(self, _theme: ModernTheme) -> None:
-        self._apply_theme()
-
-    def eventFilter(self, watched, event) -> bool:
-        if hasattr(self, "_theme_ancestors") and watched in self._theme_ancestors:
-            if event.type() == QEvent.Type.ParentChange:
-                self._watch_theme_ancestors()
-                self._apply_theme()
-            elif event.type() in (QEvent.Type.PaletteChange, QEvent.Type.UpdateRequest):
-                # A theme-only token change can repaint an ancestor without changing its palette.
-                self._apply_theme()
-        return super().eventFilter(watched, event)
-
-    def event(self, event) -> bool:
-        result = super().event(event)
-        if hasattr(self, "_theme_ancestors") and event.type() == QEvent.Type.ParentChange:
-            self._watch_theme_ancestors()
-            self._apply_theme()
-        return result
+        self._theme_binding.refresh()
 
     def _apply_theme(self) -> None:
         if self._applying_theme:

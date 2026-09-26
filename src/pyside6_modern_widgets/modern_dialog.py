@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap, QPlatformSurfaceEvent
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
@@ -15,6 +15,7 @@ from ._macos_window import (
     uses_macos_native_title_bar,
     window_flags_with_chrome,
 )
+from ._theme_binding import ThemeBinding
 from ._window_chrome import (
     BackgroundFrame,
     WindowChrome,
@@ -29,7 +30,7 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
-    theme_manager,
+    inherited_theme,
 )
 
 _DEFAULT_DIALOG_FLAGS = (
@@ -42,6 +43,8 @@ _DEFAULT_DIALOG_FLAGS = (
 
 class ModernDialog(QDialog):
     """A native QDialog whose client-side chrome follows the modern theme."""
+
+    themeChanged = Signal(object)
 
     def __init__(
         self,
@@ -64,8 +67,8 @@ class ModernDialog(QDialog):
         self._macos_title_bar_resize_timer.setInterval(50)
         self._macos_title_bar_resize_timer.setSingleShot(True)
         self._macos_title_bar_resize_timer.timeout.connect(self._sync_macos_native_title_bar)
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
+        self._theme_override = theme
+        self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
         self._corner_radius = metrics.corner_radius
         self._resize_controller = WindowResizeController(self)
@@ -74,7 +77,6 @@ class ModernDialog(QDialog):
             native_macos_title_bar=self._uses_native_macos_title_bar
         )
 
-        theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self._surface_policy.apply_to(self)
         self.setMouseTracking(True)
 
@@ -115,10 +117,12 @@ class ModernDialog(QDialog):
         self._sync_chrome_with_window_flags()
         self._layout_chrome()
         self._install_resize_filters(self)
-        self.apply_window_style()
+        self._apply_window_style()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_window_style)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def theme(self) -> ModernTheme:
-        return self._theme
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
         QDialog.setWindowFlags(
@@ -139,20 +143,26 @@ class ModernDialog(QDialog):
             self._sync_chrome_with_window_flags()
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
-        self.apply_window_style()
+        """Override locally; None restores ancestor/global theme inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
+        self._theme_override = theme
+        self._theme_binding.refresh()
+
+    def cornerRadius(self) -> int:
+        return self._corner_radius
 
     def setCornerRadius(self, radius: int) -> None:
         self._corner_radius = max(0, radius)
-        self.apply_window_style()
+        self._apply_window_style()
 
     def showSystemWindowMenu(self, position: QPoint) -> bool:
         if self._uses_native_macos_title_bar:
             return False
         return self._system_menu_controller.show(position)
 
-    def apply_window_style(self) -> None:
+    def _apply_window_style(self) -> None:
+        self._theme = self.theme()
         self._chrome.apply(self._theme, self._corner_radius)
         if self._uses_native_macos_title_bar:
             self._chrome_overlay.hide()
@@ -216,7 +226,7 @@ class ModernDialog(QDialog):
             self._macos_title_bar_resize_timer.start(0)
         self._set_application_event_filter_enabled(True)
         if not event.spontaneous():
-            self.apply_window_style()
+            self._apply_window_style()
 
     def hideEvent(self, event) -> None:
         self._macos_title_bar_resize_timer.stop()
@@ -228,7 +238,7 @@ class ModernDialog(QDialog):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
             self._set_resize_cursor(Qt.Edge(0))
-            self.apply_window_style()
+            self._apply_window_style()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -282,11 +292,6 @@ class ModernDialog(QDialog):
 
     def _finish_manual_resize(self) -> None:
         self._resize_controller.finish()
-
-    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
-        if self._uses_global_theme:
-            self._theme = theme
-            self.apply_window_style()
 
     def _set_application_event_filter_enabled(self, enabled: bool) -> None:
         if enabled == self._application_event_filter_installed:

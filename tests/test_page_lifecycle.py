@@ -61,7 +61,7 @@ def test_page_removal_keeps_entries_and_selection_in_sync(view_class, removed_in
     elif isinstance(view, TabView):
         view.removeTab(removed_index)
     else:
-        assert view.removePage(removed_index) is removed
+        assert view.removePage(removed_index) is None
     _flush_deletes()
     assert view.count() == 2
     _assert_synced(view)
@@ -115,7 +115,7 @@ def test_navigation_page_preserves_background_setting(auto_fill):
 
     view.addPage(page, "Page")
     assert page.autoFillBackground() is auto_fill
-    assert view.removePage(0) is page
+    assert view.takePage(0) is page
     assert page.autoFillBackground() is auto_fill
     page.deleteLater()
     view.deleteLater()

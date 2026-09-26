@@ -55,24 +55,24 @@ def test_central_widget_destruction_and_none_leave_window_reusable(
     _destroy_deferred_objects(application)
 
     assert not isValid(first)
-    assert window.content is replacement
+    assert window.centralWidget() is replacement
 
     replacement.deleteLater()
     _destroy_deferred_objects(application)
 
-    assert window.content is None
+    assert window.centralWidget() is None
     second = QLabel("second")
     window.setCentralWidget(second)
-    assert window.content is second
+    assert window.centralWidget() is second
 
     window.setCentralWidget(None)
-    assert window.content is None
+    assert window.centralWidget() is None
     _destroy_deferred_objects(application)
     assert not isValid(second)
 
     third = QLabel("third")
     window.setCentralWidget(third)
-    assert window.content is third
+    assert window.centralWidget() is third
     assert window.frameLayout is not None
     assert window.frameLayout.indexOf(third) >= 0
     window.close()
@@ -92,7 +92,7 @@ def test_transferred_central_widget_survives_source_replacement(application, vis
             destination.setCentralWidget(page)
         else:
             page.setParent(None)
-        content = source.content if isinstance(source, ModernWindow) else source.centralWidget()
+        content = source.centralWidget()
         assert content is None
         source.setCentralWidget(QLabel("Replacement"))
         _destroy_deferred_objects(application)

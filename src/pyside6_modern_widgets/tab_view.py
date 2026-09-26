@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import cast
+from typing import cast, overload
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import (
@@ -31,12 +31,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._theme_binding import ThemeBinding
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
+    inherited_theme,
     palette_for_theme,
-    theme_manager,
 )
 
 
@@ -479,6 +480,8 @@ class _ModernTabBar(QTabBar):
 class TabView(QWidget):
     """A themeable tab view backed by ``QTabBar`` and ``QStackedWidget``."""
 
+    themeChanged = Signal(object)
+
     currentChanged = Signal(int)
     tabCloseRequested = Signal(int)
     tabMoved = Signal(int, int)
@@ -492,11 +495,10 @@ class TabView(QWidget):
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
         super().__init__(parent)
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
+        self._theme_override = theme
+        self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
         self._syncing = False
-        theme_manager().themeChanged.connect(self._on_global_theme_changed)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -534,6 +536,8 @@ class TabView(QWidget):
         self._setup_shortcuts()
         self._retranslate_ui()
         self._apply_theme()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def _retranslate_ui(self) -> None:
         text = self.tr("New tab")
@@ -545,13 +549,29 @@ class TabView(QWidget):
         if hasattr(self, "_add_button") and event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
 
+    @overload
+    def addTab(self, widget: QWidget, text: str, /) -> int: ...
+
+    @overload
+    def addTab(self, widget: QWidget, icon: QIcon, text: str, /) -> int: ...
+
     def addTab(
         self,
         widget: QWidget,
         icon_or_text: QIcon | str,
         text: str | None = None,
     ) -> int:
-        return self.insertTab(self.count(), widget, icon_or_text, text)
+        if isinstance(icon_or_text, QIcon) and text is not None:
+            return self.insertTab(self.count(), widget, icon_or_text, text)
+        if isinstance(icon_or_text, str) and text is None:
+            return self.insertTab(self.count(), widget, icon_or_text)
+        raise TypeError("addTab expects (widget, text) or (widget, icon, text)")
+
+    @overload
+    def insertTab(self, index: int, widget: QWidget, text: str, /) -> int: ...
+
+    @overload
+    def insertTab(self, index: int, widget: QWidget, icon: QIcon, text: str, /) -> int: ...
 
     def insertTab(
         self,
@@ -581,6 +601,7 @@ class TabView(QWidget):
         return page_index
 
     def removeTab(self, index: int) -> None:
+        """Remove a tab without deleting its page or changing its Qt parent."""
         page = self.widget(index)
         if page is None:
             return
@@ -593,6 +614,16 @@ class TabView(QWidget):
             self._stack.setCurrentIndex(new_index)
         if old_index != new_index or old_widget is not self.currentWidget():
             self.currentChanged.emit(new_index)
+
+    def takeTab(self, index: int) -> QWidget | None:
+        """Remove and hide a page, transferring ownership to the caller."""
+        page = self.widget(index)
+        if page is None:
+            return None
+        self.removeTab(index)
+        page.hide()
+        page.setParent(None)
+        return page
 
     def clear(self) -> None:
         while self.count():
@@ -676,12 +707,14 @@ class TabView(QWidget):
         return self._tab_bar.documentMode()
 
     def theme(self) -> ModernTheme:
-        return self._theme
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
-        self._apply_theme()
+        """Override locally; None restores ancestor/global theme inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
+        self._theme_override = theme
+        self._theme_binding.refresh()
 
     def nextTab(self) -> None:
         self._select_relative_tab(1)
@@ -771,12 +804,8 @@ class TabView(QWidget):
             if current_page is not None:
                 self._stack.setCurrentWidget(current_page)
 
-    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
-        if self._uses_global_theme:
-            self._theme = theme
-            self._apply_theme()
-
     def _apply_theme(self) -> None:
+        self._theme = self.theme()
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self._tab_bar.setTheme(self._theme)
         self._tab_row.setStyleSheet(
@@ -812,7 +841,7 @@ class TabView(QWidget):
             if text is None:
                 raise TypeError("addTab/insertTab requires text after an icon")
             return icon_or_text, text
-        if text is not None:
+        if text is not None or not isinstance(icon_or_text, str):
             raise TypeError("addTab/insertTab accepts (widget, text) or (widget, icon, text)")
         icon = QApplication.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
         return icon, str(icon_or_text)

@@ -64,8 +64,8 @@ class DockConfig:
     handle_length: int = 80
     handle_color: QColor = field(default_factory=lambda: QColor(150, 150, 150))
     handle_hover_color: QColor = field(default_factory=lambda: QColor(200, 200, 200))
-    anim_duration: int = 250
-    hide_delay: int = 500
+    animation_duration_ms: int = 250
+    hide_delay_ms: int = 500
     sides: tuple[DockSide, ...] = (DockSide.LEFT, DockSide.RIGHT, DockSide.TOP)
     handle_icon: QIcon = field(default_factory=QIcon)
     handle_icon_size: int = 24
@@ -78,8 +78,8 @@ class DockConfig:
         for name in (
             "dock_distance",
             "safe_margin",
-            "anim_duration",
-            "hide_delay",
+            "animation_duration_ms",
+            "hide_delay_ms",
             "handle_padding",
         ):
             if getattr(self, name) < 0:
@@ -289,12 +289,12 @@ class EdgeDockController(QObject):
         self._handle.restored.connect(self.expand)
         self.destroyed.connect(self._handle.deleteLater)
         self._animation = QPropertyAnimation(target, QByteArray(b"pos"), self)
-        self._animation.setDuration(self._config.anim_duration)
+        self._animation.setDuration(self._config.animation_duration_ms)
         self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._animation.finished.connect(self._position_finished)
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
-        self._hide_timer.setInterval(self._config.hide_delay)
+        self._hide_timer.setInterval(self._config.hide_delay_ms)
         self._hide_timer.timeout.connect(self._auto_collapse)
         self._monitor = QTimer(self)
         self._monitor.setInterval(200)
@@ -380,8 +380,8 @@ class EdgeDockController(QObject):
         self._cancel_activity()
         self._config = config
         self._handle._config = config
-        self._animation.setDuration(config.anim_duration)
-        self._hide_timer.setInterval(config.hide_delay)
+        self._animation.setDuration(config.animation_duration_ms)
+        self._hide_timer.setInterval(config.hide_delay_ms)
         self._handle.setToolTip(config.handle_tooltip)
         self._handle.setAccessibleName(config.handle_tooltip or self._target.windowTitle())
         self._handle.update()
@@ -778,7 +778,7 @@ class EdgeDockController(QObject):
         revision = self._revision
         end = self._target.pos() + rect.topLeft() - self._target.frameGeometry().topLeft()
         self._animation.stop()
-        if animate and self._config.anim_duration:
+        if animate and self._config.animation_duration_ms:
             self._animation.setStartValue(self._target.pos())
             self._animation.setEndValue(end)
             self._animation.start()

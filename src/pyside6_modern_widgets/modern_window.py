@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Literal
+from collections.abc import Callable, Iterable
+from typing import Any, Literal, overload
 from weakref import ref
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QPoint, QRect, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QAbstractNativeEventFilter,
+    QEvent,
+    QPoint,
+    QRect,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QCursor,
     QIcon,
@@ -32,6 +41,7 @@ from ._macos_window import (
     uses_macos_native_title_bar,
     window_flags_with_chrome,
 )
+from ._theme_binding import ThemeBinding
 from ._window_chrome import (
     BackgroundFrame,
     TitleBarButton,
@@ -93,7 +103,7 @@ from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
-    theme_manager,
+    inherited_theme,
     tinted_icon,
 )
 
@@ -290,6 +300,8 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 class ModernWindow(QWidget):
     """Cross-platform frameless shell with themeable modern chrome."""
 
+    themeChanged = Signal(object)
+
     _system_move_finished = Signal()
 
     def __init__(
@@ -310,10 +322,9 @@ class ModernWindow(QWidget):
         if parent is not None and not flags & Qt.WindowType.WindowType_Mask:
             flags |= Qt.WindowType.Window
         super().__init__(parent, flags)
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
+        self._theme_override = theme
+        self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
-        theme_manager().themeChanged.connect(self._on_global_theme_changed)
         QWidget.setWindowFlag(
             self,
             Qt.WindowType.FramelessWindowHint,
@@ -362,18 +373,21 @@ class ModernWindow(QWidget):
         self._surface_settle_timer = QTimer(self)
         self._surface_settle_timer.setSingleShot(True)
         self._surface_settle_timer.timeout.connect(self._refresh_window_surface)
-        self.cornerRadius = metrics.corner_radius
+        self._corner_radius = metrics.corner_radius
         self._menu_bar: ModernMenuBar | None = None
         self._status_bar: QStatusBar | None = None
         self.root_layout: QVBoxLayout | None = None
         self.frameLayout: QVBoxLayout | None = None
         self.toolbarLayout: QVBoxLayout | None = None
         self._bottom_toolbar_layout: QVBoxLayout | None = None
-        self.content: QWidget | None = None
+        self._central_widget: QWidget | None = None
         self._content_generation = 0
+        self._title_bar_visible = True
         self.titleBar: CustomTitleBar | None = None
-        self.initWindow()
-        self.apply_window_style()
+        self._init_window()
+        self._apply_window_style()
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_window_style)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     @staticmethod
     def _uses_windows_window_state() -> bool:
@@ -430,13 +444,13 @@ class ModernWindow(QWidget):
             self.titleBar.updateMaximizeIcon(is_maximized)
             self.titleBar.maximizeButton.setEnabled(self._can_maximize())
         if not self.isMinimized():
-            self.apply_window_style()
+            self._apply_window_style()
 
-    def initWindow(self) -> None:
+    def _init_window(self) -> None:
         self.frame = BackgroundFrame(
             self,
             theme=self._theme,
-            corner_radius=self._surface_policy.paint_corner_radius(self.cornerRadius),
+            corner_radius=self._surface_policy.paint_corner_radius(self._corner_radius),
             opaque_surface=self._surface_policy.opaque_surface,
         )
         self.frame.setObjectName("backgroundFrame")
@@ -458,7 +472,7 @@ class ModernWindow(QWidget):
         self.chromeOverlay = WindowChromeOverlay(
             self,
             theme=self._theme,
-            corner_radius=self.cornerRadius,
+            corner_radius=self._corner_radius,
         )
         self._chrome = WindowChrome(
             self, self.frame, self.chromeOverlay, self.titleBar, self._surface_policy
@@ -493,6 +507,9 @@ class ModernWindow(QWidget):
         if self.titleBar is None:
             return
         title_bar_visible = self.titleBar.syncWindowFlags(self.windowFlags())
+        if not self._title_bar_visible:
+            self.titleBar.hide()
+            title_bar_visible = False
         if self._uses_native_macos_title_bar and self._macos_title_bar_configured is False:
             self.titleBar.hide()
             title_bar_visible = False
@@ -505,15 +522,21 @@ class ModernWindow(QWidget):
     def _sync_macos_native_title_bar(self) -> None:
         if not self._uses_native_macos_title_bar:
             return
-        title_bar_height = self.titleBar.height() if self.titleBar is not None else 0
+        title_bar_height = (
+            self.titleBar.height() if self.titleBar is not None and self._title_bar_visible else 0
+        )
         self._macos_title_bar_configured = configure_macos_native_title_bar(
             self,
             title_bar_height=title_bar_height,
             guard_style=True,
+            controls_visible=self._title_bar_visible,
         )
         if self.titleBar is None:
             return
         title_bar_visible = self.titleBar.syncWindowFlags(self.windowFlags())
+        if not self._title_bar_visible:
+            self.titleBar.hide()
+            title_bar_visible = False
         if not self._macos_title_bar_configured:
             self.titleBar.hide()
             title_bar_visible = False
@@ -648,15 +671,33 @@ class ModernWindow(QWidget):
             self.titleBar.maximizeButton.setEnabled(self._can_maximize())
         self._schedule_native_frame_sync(force_refresh=True)
 
-    def setMinimumSize(self, *args) -> None:
+    @overload
+    def setMinimumSize(self, size: QSize, /) -> None: ...
+
+    @overload
+    def setMinimumSize(self, width: int, height: int, /) -> None: ...
+
+    def setMinimumSize(self, *args: Any) -> None:
         QWidget.setMinimumSize(self, *args)
         self._window_constraints_changed()
 
-    def setMaximumSize(self, *args) -> None:
+    @overload
+    def setMaximumSize(self, size: QSize, /) -> None: ...
+
+    @overload
+    def setMaximumSize(self, width: int, height: int, /) -> None: ...
+
+    def setMaximumSize(self, *args: Any) -> None:
         QWidget.setMaximumSize(self, *args)
         self._window_constraints_changed()
 
-    def setFixedSize(self, *args) -> None:
+    @overload
+    def setFixedSize(self, size: QSize, /) -> None: ...
+
+    @overload
+    def setFixedSize(self, width: int, height: int, /) -> None: ...
+
+    def setFixedSize(self, *args: Any) -> None:
         QWidget.setFixedSize(self, *args)
         self._window_constraints_changed()
 
@@ -684,9 +725,10 @@ class ModernWindow(QWidget):
         QWidget.setFixedHeight(self, h)
         self._window_constraints_changed()
 
-    def apply_window_style(self) -> None:
+    def _apply_window_style(self) -> None:
+        self._theme = self.theme()
         self._chrome.title_bar = self.titleBar
-        self._chrome.apply(self._theme, self.cornerRadius)
+        self._chrome.apply(self._theme, self._corner_radius)
         menu_bars: Iterable[ModernMenuBar] = self.findChildren(ModernMenuBar)
         for menu_bar in menu_bars:
             menu_bar._apply_theme()
@@ -707,27 +749,28 @@ class ModernWindow(QWidget):
         self._system_menu_controller.show_portable(position)
 
     def theme(self) -> ModernTheme:
-        return self._theme
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
-        self.apply_window_style()
-
-    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
-        if self._uses_global_theme:
-            self._theme = theme
-            self.apply_window_style()
+        """Override locally; None restores ancestor/global theme inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
+        self._theme_override = theme
+        self._theme_binding.refresh()
 
     def addTitleBarButton(
         self,
-        icon,
-        callback=None,
+        icon: QIcon | str,
+        callback: Callable[[], None] | Callable[[bool], None] | None = None,
         tooltip: str = "",
-        align: str = "right",
+        align: Literal["left", "right"] = "right",
     ) -> QPushButton | None:
         if not hasattr(self, "titleBar") or self.titleBar is None:
             return None
+        if not isinstance(icon, (QIcon, str)):
+            raise TypeError("icon must be a QIcon or path string")
+        if align not in ("left", "right"):
+            raise ValueError("align must be left or right")
         button = TitleBarButton(self.titleBar)
         if isinstance(icon, str):
             button.setIcon(QIcon(icon))
@@ -848,7 +891,7 @@ class ModernWindow(QWidget):
             self._sync_chrome_with_window_flags()
         self._sync_windows_native_frame()
         if not event.spontaneous():
-            self.apply_window_style()
+            self._apply_window_style()
         self._schedule_surface_refresh()
 
     def event(self, event) -> bool:
@@ -863,7 +906,7 @@ class ModernWindow(QWidget):
         if event.type() == QEvent.Type.ChildRemoved:
             # Ownership can change while hidden, when our application-wide
             # event filter is inactive.
-            if event.child() is getattr(self, "content", None):
+            if event.child() is getattr(self, "_central_widget", None):
                 self._track_content(None)
         elif event.type() == QEvent.Type.WinIdChange:
             self._schedule_native_frame_sync()
@@ -1082,7 +1125,7 @@ class ModernWindow(QWidget):
             restored_width,
             restored_height,
         )
-        self._set_native_corner_preference(self.cornerRadius > 0)
+        self._set_native_corner_preference(self._corner_radius > 0)
 
         set_mouse_capture(hwnd, False)
         if start_system_move(hwnd):
@@ -1262,9 +1305,9 @@ class ModernWindow(QWidget):
         self.toolbarLayout = QVBoxLayout()
         self.toolbarLayout.setSpacing(0)
         self.root_layout.addLayout(self.toolbarLayout)
-        self.content = QWidget(self)
-        self.root_layout.addWidget(self.content)
-        self._track_content(self.content)
+        self._central_widget = QWidget(self)
+        self.root_layout.addWidget(self._central_widget)
+        self._track_content(self._central_widget)
         self._bottom_toolbar_layout = QVBoxLayout()
         self._bottom_toolbar_layout.setSpacing(0)
         self.root_layout.addLayout(self._bottom_toolbar_layout)
@@ -1278,7 +1321,7 @@ class ModernWindow(QWidget):
     def _track_content(self, widget: QWidget | None) -> None:
         self._content_generation += 1
         generation = self._content_generation
-        self.content = widget
+        self._central_widget = widget
         if widget is not None:
             widget.destroyed.connect(
                 lambda _object=None, generation=generation: self._clear_content(generation)
@@ -1286,7 +1329,7 @@ class ModernWindow(QWidget):
 
     def _clear_content(self, generation: int) -> None:
         if generation == self._content_generation:
-            self.content = None
+            self._central_widget = None
 
     def menuBar(self) -> ModernMenuBar:
         if self._menu_bar is None:
@@ -1298,12 +1341,21 @@ class ModernWindow(QWidget):
             self._install_resize_filters(self._menu_bar)
         return self._menu_bar
 
+    @overload
+    def addToolBar(self, title: str, /) -> ModernToolBar: ...
+
+    @overload
+    def addToolBar(self, toolbar: QToolBar, /) -> QToolBar: ...
+
+    @overload
+    def addToolBar(self, area: Qt.ToolBarArea, toolbar: QToolBar, /) -> QToolBar: ...
+
     def addToolBar(self, *args: object) -> QToolBar:
         area = Qt.ToolBarArea.TopToolBarArea
         if len(args) == 1 and isinstance(args[0], QToolBar):
             toolbar = args[0]
         elif len(args) == 1 and isinstance(args[0], str):
-            toolbar = ModernToolBar(args[0], self)
+            toolbar = ModernToolBar(args[0], self, metrics=self._metrics)
         elif (
             len(args) == 2 and isinstance(args[0], Qt.ToolBarArea) and isinstance(args[1], QToolBar)
         ):
@@ -1342,14 +1394,29 @@ class ModernWindow(QWidget):
             self._install_resize_filters(self._status_bar)
         return self._status_bar
 
+    def centralWidget(self) -> QWidget | None:
+        """Return the owned central widget without creating a compatibility layout."""
+        return self._central_widget
+
+    def takeCentralWidget(self) -> QWidget | None:
+        """Remove and hide the central widget, transferring ownership to the caller."""
+        widget = self._central_widget
+        if widget is not None:
+            assert self.frameLayout is not None
+            self.frameLayout.removeWidget(widget)
+            self._track_content(None)
+            widget.hide()
+            widget.setParent(None)
+        return widget
+
     def setCentralWidget(self, widget: QWidget | None) -> None:
         if widget is not None and not isinstance(widget, QWidget):
             raise TypeError("setCentralWidget() expects a QWidget or None")
         self._ensure_compatibility_layout()
         assert self.frameLayout is not None
-        if widget is self.content:
+        if widget is self._central_widget:
             return
-        previous = self.content
+        previous = self._central_widget
         if previous is not None:
             self.frameLayout.removeWidget(previous)
         self._track_content(widget)
@@ -1367,9 +1434,12 @@ class ModernWindow(QWidget):
         self.frameLayout.insertWidget(bottom_layout_index, widget)
         self._install_resize_filters(widget)
 
+    def cornerRadius(self) -> int:
+        return self._corner_radius
+
     def setCornerRadius(self, radius: int) -> None:
-        self.cornerRadius = radius
-        self.apply_window_style()
+        self._corner_radius = max(0, radius)
+        self._apply_window_style()
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
@@ -1503,9 +1573,14 @@ class ModernWindow(QWidget):
     def _set_resize_cursor(self, edges: Qt.Edge) -> None:
         self._resize_controller.set_cursor(edges)
 
-    def hideTitleBar(self) -> None:
-        if hasattr(self, "titleBar") and self.titleBar:
-            self.titleBar.hide()
-            self.titleBar.deleteLater()
-            self.titleBar = None
-            QWidget.setContentsMargins(self, 0, 0, 0, 0)
+    def isTitleBarVisible(self) -> bool:
+        """Return the requested visibility, even while the window is hidden."""
+        return self._title_bar_visible
+
+    def setTitleBarVisible(self, visible: bool) -> None:
+        """Show or hide the title bar while preserving its widgets and settings."""
+        if self._title_bar_visible == bool(visible):
+            return
+        self._title_bar_visible = bool(visible)
+        self._sync_chrome_with_window_flags()
+        self.updateGeometry()

@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QRect, QRectF, QSize, Qt, QVariantAnimation
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QPoint,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+    QVariantAnimation,
+    Signal,
+)
 from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -12,7 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme, inherited_theme, theme_manager
+from ._theme_binding import ThemeBinding
+from .theme import DEFAULT_METRICS, ModernMetrics, ModernTheme, inherited_theme
 
 
 class ModernSwitch(QCheckBox):
@@ -23,6 +34,8 @@ class ModernSwitch(QCheckBox):
     The widget grows vertically when needed to fit its label.
     The enabled track reads Qt's system Accent role unless the theme overrides it.
     """
+
+    themeChanged = Signal(object)
 
     def __init__(
         self,
@@ -43,25 +56,25 @@ class ModernSwitch(QCheckBox):
         self._theme_override = theme
         self._position = float(self.isChecked())
         self._animation = QVariantAnimation(self)
-        self._animation.setDuration(metrics.animation_duration)
+        self._animation.setDuration(metrics.animation_duration_ms)
         self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._animation.valueChanged.connect(self._on_position_changed)
         self.toggled.connect(self._sync_position)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
-        theme_manager().themeChanged.connect(self._on_theme_changed)
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self.update)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        """Override colors locally, or pass None to restore theme inheritance."""
+        """Override locally; None restores owner/ancestor/global inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
-        self.update()
-
-    def _on_theme_changed(self, _theme: ModernTheme) -> None:
-        self.update()
+        self._theme_binding.refresh()
 
     def sizeHint(self) -> QSize:
         height = 20

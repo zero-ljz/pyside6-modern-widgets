@@ -1,0 +1,2 @@
+include CHANGELOG.md
+include docs/migration-0.6.md

@@ -36,13 +36,14 @@ from PySide6.QtWidgets import (
 )
 
 from . import _resources  # noqa: F401
+from ._theme_binding import ThemeBinding
 from ._window_chrome import SurfaceActivationTransition, inactive_surface_color, paint_watercolor
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
     ModernTheme,
+    inherited_theme,
     palette_for_theme,
-    theme_manager,
     tinted_icon,
 )
 
@@ -222,7 +223,7 @@ class _NavigationItem(_NavigationButton):
             self.setFixedWidth(width)
 
 
-def _coerce_icon(icon) -> QIcon:
+def _coerce_icon(icon: QIcon | QStyle.StandardPixmap | None) -> QIcon:
     if isinstance(icon, QIcon):
         return icon
     if icon is None:
@@ -232,6 +233,8 @@ def _coerce_icon(icon) -> QIcon:
 
 class NavigationSidebar(QWidget):
     """A standalone sidebar that emits an index when an item is selected."""
+
+    themeChanged = Signal(object)
 
     currentChanged = Signal(int)
     itemActivated = Signal(int)
@@ -246,10 +249,9 @@ class NavigationSidebar(QWidget):
         metrics: ModernMetrics = DEFAULT_METRICS,
     ) -> None:
         super().__init__(parent)
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
+        self._theme_override = theme
+        self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
-        theme_manager().themeChanged.connect(self._on_global_theme_changed)
         self.setObjectName("ModernNavigationSidebar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(_sidebar_style(self._theme, self._metrics))
@@ -268,6 +270,8 @@ class NavigationSidebar(QWidget):
         self._init_animation()
         self.setFixedWidth(self._expanded_width)
         self._activation_transition = SurfaceActivationTransition(self)
+        self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -333,13 +337,13 @@ class NavigationSidebar(QWidget):
             self,
         )
         for animation in (self._min_animation, self._max_animation):
-            animation.setDuration(self._metrics.animation_duration)
+            animation.setDuration(self._metrics.animation_duration_ms)
             animation.setEasingCurve(QEasingCurve.Type.OutQuint)
 
     def addItem(
         self,
         text: str,
-        icon=None,
+        icon: QIcon | QStyle.StandardPixmap | None = None,
         position: NavigationPosition = NavigationPosition.TOP,
     ) -> int:
         button = _NavigationItem(text, icon, self._metrics, self)
@@ -371,6 +375,7 @@ class NavigationSidebar(QWidget):
             self.currentChanged.emit(-1)
         elif index < self._current_index:
             self._current_index -= 1
+            self.currentChanged.emit(self._current_index)
         elif index == self._current_index:
             self._current_index = -1
             self.setCurrentIndex(min(index, len(self._items) - 1))
@@ -399,7 +404,7 @@ class NavigationSidebar(QWidget):
     def itemIcon(self, index: int) -> QIcon:
         return self._items[index].icon() if 0 <= index < len(self._items) else QIcon()
 
-    def setItemIcon(self, index: int, icon) -> None:
+    def setItemIcon(self, index: int, icon: QIcon | QStyle.StandardPixmap | None) -> None:
         if 0 <= index < len(self._items):
             self._items[index].setIcon(_coerce_icon(icon))
 
@@ -554,19 +559,17 @@ class NavigationSidebar(QWidget):
             self._retranslate_ui()
 
     def theme(self) -> ModernTheme:
-        return self._theme
+        return self._theme_override if self._theme_override is not None else inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        self._uses_global_theme = theme is None
-        self._theme = theme or theme_manager().theme()
-        self._apply_theme()
-
-    def _on_global_theme_changed(self, theme: ModernTheme) -> None:
-        if self._uses_global_theme:
-            self._theme = theme
-            self._apply_theme()
+        """Override locally; None restores ancestor/global theme inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
+        self._theme_override = theme
+        self._theme_binding.refresh()
 
     def _apply_theme(self) -> None:
+        self._theme = self.theme()
         self.setPalette(palette_for_theme(self._theme, self.palette()))
         self.setStyleSheet(_sidebar_style(self._theme, self._metrics))
         self.toggleButton.setIcon(

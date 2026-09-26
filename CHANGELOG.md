@@ -4,7 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-26
+
+This release intentionally breaks the APIs listed in the
+[migration guide](docs/migration-0.6.md); no compatibility aliases are retained.
+
 ### Added
+
+- Add effective `themeChanged` signals and shared ancestor theme tracking,
+  including hidden widgets and changes to parent hierarchies.
+- Add reversible `setTitleBarVisible()` / `isTitleBarVisible()` while preserving
+  custom title widgets; macOS traffic lights follow the same visibility setting.
+- Add indexed selection, activation signals, text/enabled accessors, and borrowed
+  `button(index)` access to `ModernSegmentedControl`.
+- Add `centralWidget()` / `takeCentralWidget()`, navigation `indexOf()` /
+  `setCurrentWidget()`, `takePage()`, and `takeTab()` ownership-transfer APIs.
 
 - Add opt-in handle dragging across screen edges and displays. Edge drops remain
   collapsed; interior drops expand and undock at the pointer's relative grab point.
@@ -21,6 +35,16 @@ All notable changes to this project are documented in this file.
   / `--language zh_CN` startup overrides to the navigation and edge-dock examples.
 
 ### Changed
+
+- Resolve all component theme overrides through the nearest themed ancestor,
+  falling back to the global manager. `setTheme(None)` restores inheritance.
+- Make `NavigationView.removePage()` retain Qt ownership and return None, matching
+  tab removal. Use `takePage()` when the caller needs to own the returned page.
+- Replace DockConfig `anim_duration` / `hide_delay` and ModernMetrics
+  `animation_duration` with `animation_duration_ms` / `hide_delay_ms`.
+- Remove the segmented control's public `group` / `buttons`, window `content`,
+  destructive `hideTitleBar()`, and public initialization/style internals. Expose
+  `cornerRadius()` as a getter, and add precise icon/callback/overload annotations.
 
 - Replace notification IDs/upserts with stable `NotificationHandle` objects and
   declarative `NotificationAction` values. Handles support partial updates,
@@ -51,6 +75,11 @@ All notable changes to this project are documented in this file.
   for replacing a destroyed or obsolete drag surface.
 
 ### Fixed
+
+- Emit `NavigationSidebar.currentChanged` when removing an earlier item shifts
+  the selected index, after the sidebar state has been updated.
+- Propagate window metrics to toolbars created by `addToolBar(title)` and their
+  overflow menus.
 
 - Preserve notifications and their clocks during delivery/host suspension, even
   at capacity. Cancel pending posts with `clear()`/`dismiss()`, coalesce worker
@@ -555,7 +584,8 @@ All notable changes to this project are documented in this file.
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.13...HEAD
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.13...v0.6.0
 [0.5.13]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.12...v0.5.13
 [0.5.12]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.10...v0.5.11

@@ -10,6 +10,7 @@ from PySide6.QtGui import QPainter, QPen
 from PySide6.QtWidgets import QApplication, QFrame, QScrollArea, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
+from ._theme_binding import ThemeBinding
 from .modern_menu import (
     _enable_windows_acrylic,
     _enable_windows_rounded_corners,
@@ -22,7 +23,6 @@ from .theme import (
     ModernTheme,
     inherited_theme,
     palette_for_theme,
-    theme_manager,
 )
 
 
@@ -88,6 +88,8 @@ class ModernFlyout(QWidget):
     the panel by default, so values survive subsequent opens.
     """
 
+    themeChanged = Signal(object)
+
     opened = Signal()
     closed = Signal()
 
@@ -124,8 +126,11 @@ class ModernFlyout(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(self._scroll)
-        theme_manager().themeChanged.connect(self._on_theme_changed)
         self._apply_theme()
+        self._theme_binding: ThemeBinding = ThemeBinding(
+            self, self.theme, self._apply_theme, source=self._theme_source
+        )
+        self._theme_binding.changed.connect(self.themeChanged.emit)
 
     def contentWidget(self) -> QWidget | None:
         return self._scroll.widget()
@@ -157,6 +162,9 @@ class ModernFlyout(QWidget):
         anchor = self._anchor() if self._anchor is not None else None
         return anchor if anchor is not None and isValid(anchor) else None
 
+    def _theme_source(self) -> QWidget | None:
+        return self.anchorWidget() or self.parentWidget()
+
     def theme(self) -> ModernTheme:
         if self._theme_override is not None:
             return self._theme_override
@@ -171,12 +179,11 @@ class ModernFlyout(QWidget):
         return inherited_theme(self)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
-        """Override colors, or pass None to follow the anchor's theme."""
+        """Override locally; None restores owner/ancestor/global inheritance."""
+        if theme is not None and not isinstance(theme, ModernTheme):
+            raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
-        self._apply_theme()
-
-    def _on_theme_changed(self, _theme: ModernTheme) -> None:
-        self._apply_theme()
+        self._theme_binding.refresh()
 
     def _apply_theme(self) -> None:
         if self._applying_theme:
@@ -229,6 +236,7 @@ class ModernFlyout(QWidget):
         if self.isVisible():
             self.hide()
         self._anchor = weakref.ref(anchor)
+        self._theme_binding.rebind()
         self._placement, self._gap = placement, gap
         ancestor: QWidget | None = anchor
         while ancestor is not None:
@@ -277,6 +285,7 @@ class ModernFlyout(QWidget):
 
     def _anchor_destroyed(self) -> None:
         self._anchor = None
+        self._theme_binding.rebind()
         self.close()
 
     def eventFilter(self, watched, event) -> bool:

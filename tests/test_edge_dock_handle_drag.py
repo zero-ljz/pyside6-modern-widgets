@@ -31,7 +31,7 @@ def collapsed(monkeypatch, theme_manager_instance, request):
     controller = EdgeDockController(
         window,
         DockConfig(
-            anim_duration=0,
+            animation_duration_ms=0,
             sides=options.get(
                 "sides", (DockSide.LEFT, DockSide.RIGHT, DockSide.TOP, DockSide.BOTTOM)
             ),

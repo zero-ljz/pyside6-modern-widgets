@@ -46,7 +46,7 @@ def test_restore_takes_foreground_from_another_process(modern, mode):
         target.show()
         app.processEvents()
         controller = EdgeDockController(
-            target, DockConfig(anim_duration=0, auto_hide=False, handle_mode=MODE)
+            target, DockConfig(animation_duration_ms=0, auto_hide=False, handle_mode=MODE)
         )
         controller._buttons_pressed = lambda **_: False
         controller.dock(DockSide.LEFT)
