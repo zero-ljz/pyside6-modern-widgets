@@ -22,6 +22,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Reduce the default edge-docking distance from 50 to 24 logical pixels for
+  window snapping and handle drops, reducing accidental docking near an edge.
 - Consolidate edge-handle interaction into `DockHandleMode` / `handle_mode` /
   `setHandleMode()`, replacing `DockRestoreTrigger`, `restore_trigger`,
   `handle_draggable`, `setRestoreTrigger()` and `setHandleDraggable()` before release.
@@ -42,6 +44,15 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Fix size inflation during native mixed-DPI dragging, including the edge-docking
+  controls in both languages. Evaluate `WM_WINDOWPOSCHANGING` layout constraints
+  using the target DPI while Qt still reports the old screen, preventing an
+  incorrect resize before it reaches Windows. Preserve normal border resizing
+  and runtime size constraints without release-time size restoration.
+- Request native foreground activation when restoring edge tools, with a scoped
+  input-thread handoff if Windows denies the initial request. Recheck occlusion
+  for up to 450 ms and retry if the previously active window covers the tool
+  again; stop when the pointer leaves or the tool's lifecycle changes.
 - Preserve pre-collapse logical window dimensions across hidden mixed-DPI round
   trips. Apply hidden native position and size together to avoid switching back
   to the old display during a resize; reuse shared native DPI handling for handles.

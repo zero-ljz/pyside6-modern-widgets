@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
@@ -45,7 +46,9 @@ from ._windows_window import (
     WM_GETDPISCALEDSIZE,
     WM_GETMINMAXINFO,
     WM_NCHITTEST,
+    WM_WINDOWPOSCHANGING,
     WindowsMessage,
+    constrain_window_position,
     read_message,
     set_size_constraints,
     set_window_corner_preference,
@@ -205,6 +208,22 @@ class WindowDpiState:
                 self.scale *= _rounded_dpi_scale(dpi) / _rounded_dpi_scale(self.dpi)
                 self.dpi = dpi
                 self._changed = True
+        elif message.message == WM_WINDOWPOSCHANGING:
+            if (
+                self._changed
+                and self.scale is not None
+                and abs(self.scale - widget.devicePixelRatioF()) > 1e-6
+            ):
+                # Qt 6.8's closestAcceptableGeometry() converts this target-DPI
+                # rectangle using QWindow's still-old screen. Height-for-width
+                # layouts then enlarge it before the native resize is applied.
+                # Run the same layout constraints using the committed DPI here;
+                # let Qt handle the ensuing screen/geometry notifications.
+                def acceptable_size(size: tuple[int, int]) -> tuple[int, int]:
+                    accepted = QLayout.closestAcceptableSize(widget, QSize(*size))
+                    return accepted.width(), accepted.height()
+
+                return constrain_window_position(message.l_param, self.scale, acceptable_size)
         elif message.message == WM_GETMINMAXINFO:
             if self._pending_scale is not None and self.scale is not None:
                 # Qt still interprets native resize events using the source DPR

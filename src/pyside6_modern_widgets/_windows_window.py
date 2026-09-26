@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+from collections.abc import Callable
 from ctypes import wintypes
 from dataclasses import dataclass
 
@@ -27,6 +28,7 @@ WM_DISPLAYCHANGE = 0x007E
 WM_DPICHANGED = 0x02E0
 WM_GETDPISCALEDSIZE = 0x02E4
 WM_GETMINMAXINFO = 0x0024
+WM_WINDOWPOSCHANGING = 0x0046
 WM_MOUSEMOVE = 0x0200
 WM_LBUTTONUP = 0x0202
 WM_CAPTURECHANGED = 0x0215
@@ -143,6 +145,27 @@ def set_size_constraints(
             setattr(info.ptMaxTrackSize, axis, int(upper * maximum_scale + 0.5))
 
 
+def constrain_window_position(
+    l_param: int,
+    scale: float,
+    constrain_size: Callable[[tuple[int, int]], tuple[int, int]],
+) -> bool:
+    """Apply logical layout constraints to a proposed native client rectangle."""
+    position = ctypes.cast(l_param, ctypes.POINTER(_WindowPosition)).contents
+    if position.flags & 0x0001:  # SWP_NOSIZE: cx/cy need not contain valid sizes.
+        return False
+    physical = (position.cx, position.cy)
+    logical = tuple(int(value / scale + 0.5) for value in physical)
+    accepted = constrain_size((logical[0], logical[1]))
+    # Keep the native dimension verbatim unless a constraint actually changes it;
+    # converting through integer logical pixels can otherwise introduce drift.
+    for field, before, after in zip(("cx", "cy"), logical, accepted):
+        if before != after:
+            setattr(position, field, int(after * scale + 0.5))
+    position.flags |= 0x0100  # SWP_NOCOPYBITS, as in Qt's native resize handler.
+    return True
+
+
 def read_message(address: int) -> WindowsMessage:
     message = ctypes.cast(address, ctypes.POINTER(wintypes.MSG)).contents
     return WindowsMessage(
@@ -220,9 +243,19 @@ def set_window_topmost(hwnd: int, on_top: bool) -> bool:
 
 
 def bring_window_to_front(hwnd: int) -> bool:
-    """Raise a normal window's native Z order without making it topmost."""
+    """Activate a restored window without changing its topmost band.
+
+    Hover restoration may originate in a background process with no recent
+    keyboard/mouse input. If a regular foreground request is denied, temporarily
+    share the foreground thread's input queue for this one activation. Always
+    detach it afterward; never change the global foreground-lock policy.
+    """
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.IsWindow.argtypes = (wintypes.HWND,)
+        user32.IsWindow.restype = wintypes.BOOL
+        if not user32.IsWindow(wintypes.HWND(hwnd)):
+            return False
         user32.SetWindowPos.argtypes = (
             wintypes.HWND,
             wintypes.HWND,
@@ -233,17 +266,45 @@ def bring_window_to_front(hwnd: int) -> bool:
             wintypes.UINT,
         )
         user32.SetWindowPos.restype = wintypes.BOOL
-        return bool(
-            user32.SetWindowPos(
-                wintypes.HWND(hwnd),
-                wintypes.HWND(0),  # HWND_TOP; retain the normal Z-order band.
-                0,
-                0,
-                0,
-                0,
-                0x0001 | 0x0002 | 0x0010,  # SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
-            )
+        user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+        user32.SetForegroundWindow.restype = wintypes.BOOL
+        user32.GetForegroundWindow.argtypes = ()
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        window = wintypes.HWND(hwnd)
+        user32.SetWindowPos(
+            window,
+            wintypes.HWND(0),
+            0,
+            0,
+            0,
+            0,
+            0x0001 | 0x0002 | 0x0010,  # SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
         )
+        user32.SetForegroundWindow(window)
+        foreground = user32.GetForegroundWindow()
+        if foreground == hwnd:
+            return True
+        if not foreground:
+            return False
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetCurrentThreadId.argtypes = ()
+        kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+        user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        user32.AttachThreadInput.argtypes = (wintypes.DWORD, wintypes.DWORD, wintypes.BOOL)
+        user32.AttachThreadInput.restype = wintypes.BOOL
+        current_thread = kernel32.GetCurrentThreadId()
+        foreground_thread = user32.GetWindowThreadProcessId(foreground, None)
+        if not foreground_thread or foreground_thread == current_thread:
+            return False
+        if not user32.AttachThreadInput(current_thread, foreground_thread, True):
+            return False
+        try:
+            user32.SetForegroundWindow(window)
+            return user32.GetForegroundWindow() == hwnd
+        finally:
+            user32.AttachThreadInput(current_thread, foreground_thread, False)
     except (AttributeError, OSError, TypeError, ValueError):
         return False
 

@@ -19,6 +19,37 @@ class _NativeFunction:
         return self._callback(*args)
 
 
+@pytest.mark.parametrize("resize", [False, True])
+def test_window_position_constraints_preserve_native_rounding_and_other_fields(resize):
+    position = _windows_window._WindowPosition(123, 456, -100, 200, 415, 649, 0x0014)
+
+    def constrain(size):
+        assert size == (277, 433)
+        return (300, 500) if resize else size
+
+    assert _windows_window.constrain_window_position(ctypes.addressof(position), 1.5, constrain)
+    assert (position.cx, position.cy) == ((450, 750) if resize else (415, 649))
+    assert (position.hwnd, position.hwndInsertAfter, position.x, position.y) == (
+        123,
+        456,
+        -100,
+        200,
+    )
+    assert position.flags == 0x0114
+
+
+def test_window_position_without_resize_does_not_run_layout_constraints():
+    position = _windows_window._WindowPosition(123, 456, -100, 200, 0, 0, 0x0015)
+
+    def unexpected_layout(_):
+        pytest.fail("SWP_NOSIZE does not contain a proposed size")
+
+    assert not _windows_window.constrain_window_position(
+        ctypes.addressof(position), 1.25, unexpected_layout
+    )
+    assert (position.cx, position.cy, position.flags) == (0, 0, 0x0015)
+
+
 @pytest.mark.parametrize("rounded", [False, True])
 @pytest.mark.parametrize("result", [0, -1, "error"])
 def test_shared_corner_preference_reports_dwm_success(monkeypatch, rounded, result):
@@ -126,11 +157,55 @@ def test_bring_window_to_front_keeps_normal_z_order_band(monkeypatch) -> None:
 
     class User32:
         SetWindowPos = _NativeFunction(set_position)
+        SetForegroundWindow = _NativeFunction(lambda hwnd: calls.append(("activate", hwnd.value)))
+        GetForegroundWindow = _NativeFunction(lambda: 12345)
+        IsWindow = _NativeFunction(lambda hwnd: True)
 
     monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())
 
     assert _windows_window.bring_window_to_front(12345)
-    assert calls == [(12345, None, 0, 0, 0, 0, 0x13)]
+    assert calls == [(12345, None, 0, 0, 0, 0, 0x13), ("activate", 12345)]
+
+
+@pytest.mark.parametrize("fallback", ["success", "denied", "error", "attach_denied"])
+def test_foreground_fallback_always_releases_shared_input_queue(monkeypatch, fallback):
+    calls = []
+    foreground = [67890]
+    attached = [False]
+
+    def activate(hwnd):
+        calls.append(("activate", hwnd.value))
+        if attached[0]:
+            if fallback == "error":
+                raise OSError("window closed during activation")
+            if fallback == "success":
+                foreground[0] = hwnd.value
+        return foreground[0] == hwnd.value
+
+    def attach(current, other, enabled):
+        calls.append(("attach", current, other, enabled))
+        if fallback == "attach_denied":
+            return False
+        attached[0] = enabled
+        return True
+
+    user32 = SimpleNamespace(
+        IsWindow=_NativeFunction(lambda hwnd: True),
+        SetWindowPos=_NativeFunction(lambda *args: True),
+        SetForegroundWindow=_NativeFunction(activate),
+        GetForegroundWindow=_NativeFunction(lambda: foreground[0]),
+        GetWindowThreadProcessId=_NativeFunction(lambda *args: 20),
+        AttachThreadInput=_NativeFunction(attach),
+    )
+    kernel32 = SimpleNamespace(GetCurrentThreadId=_NativeFunction(lambda: 10))
+    monkeypatch.setattr(
+        ctypes, "WinDLL", lambda name, **_: user32 if name == "user32" else kernel32
+    )
+    assert _windows_window.bring_window_to_front(12345) == (fallback == "success")
+    assert not attached[0]
+    assert calls[:2] == [("activate", 12345), ("attach", 10, 20, True)]
+    if fallback != "attach_denied":
+        assert calls[-1] == ("attach", 10, 20, False)
 
 
 @pytest.mark.parametrize("hit_root", [12345, 67890])

@@ -58,7 +58,7 @@ class DockHandleMode(str, Enum):
 class DockConfig:
     """Distances are Qt logical pixels; durations are milliseconds."""
 
-    dock_distance: int = 50
+    dock_distance: int = 24
     safe_margin: int = 2
     handle_width: int = 6
     handle_length: int = 80
@@ -317,6 +317,7 @@ class EdgeDockController(QObject):
         self._foreground_settle_timer = QTimer(self)
         self._foreground_settle_timer.setSingleShot(True)
         self._foreground_settle_timer.timeout.connect(self._check_restored_foreground)
+        self._foreground_checks_left = 0
         if isinstance(target, ModernWindow):
             self._connections.append(
                 target._system_move_finished.connect(self._complete_system_drag)
@@ -579,6 +580,7 @@ class EdgeDockController(QObject):
         self._hide_timer.stop()
         self._foreground_timer.stop()
         self._foreground_settle_timer.stop()
+        self._foreground_checks_left = 0
         if state == DockState.COLLAPSED and self._collapsed_size is None:
             self._collapsed_size = self._target.size()
         restore_size = self._collapsed_size
@@ -890,35 +892,62 @@ class EdgeDockController(QObject):
 
     def _raise_and_activate_target(self) -> None:
         """Restore the target to the foreground without changing its topmost flag."""
-        if not self.isEnabled() or self.isCollapsed() or not self._target.isVisible():
+        if (
+            not self.isEnabled()
+            or self.isCollapsed()
+            or not self._target.isVisible()
+            or self._target.isMinimized()
+            or QApplication.activePopupWidget() is not None
+            or QApplication.activeModalWidget() is not None
+        ):
             return
+        revision = self._revision
         self._target.raise_()
+        if not self._is_current(revision):
+            return
         self._target.activateWindow()
+        if not self._is_current(revision):
+            return
         handle = self._target.windowHandle()
-        if handle is not None:
+        if handle is not None and uses_windows_window_state():
             bring_window_to_front(int(handle.winId()))
 
     def _schedule_foreground(self) -> None:
         if not self.isEnabled() or self.isCollapsed() or not self._target.isVisible():
             return
+        revision = self._revision
         self._raise_and_activate_target()
+        if not self._is_current(revision):
+            return
         self._foreground_timer.start(0)
         if uses_windows_window_state():
+            self._foreground_checks_left = 3
             self._foreground_settle_timer.start(150)
 
     def _check_restored_foreground(self) -> None:
+        self._foreground_checks_left = max(0, self._foreground_checks_left - 1)
         if (
             not self.isEnabled()
             or self.isCollapsed()
             or not self._target.isVisible()
+            or self._target.isMinimized()
             or not self._target.frameGeometry().contains(QCursor.pos())
             or QApplication.activePopupWidget() is not None
             or QApplication.activeModalWidget() is not None
         ):
+            self._foreground_checks_left = 0
+            self._foreground_settle_timer.stop()
             return
+        revision = self._revision
         handle = self._target.windowHandle()
-        if handle is not None and window_is_at_cursor(int(handle.winId())) is False:
+        if (
+            not self._buttons_pressed()
+            and handle is not None
+            and window_is_at_cursor(int(handle.winId())) is False
+        ):
             self._raise_and_activate_target()
+        if self._is_current(revision) and self._foreground_checks_left:
+            self._foreground_settle_timer.start(150)
 
     def expand(self) -> bool:
         """Show the target and remove its edge handle, including external reopens."""
@@ -941,6 +970,7 @@ class EdgeDockController(QObject):
             self._target._finish_system_move()
 
     def _cancel_activity(self) -> None:
+        self._foreground_checks_left = 0
         self._cancel_handle_gesture()
         for timer in (
             self._monitor,

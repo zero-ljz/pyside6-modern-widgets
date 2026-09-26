@@ -555,6 +555,90 @@ def test_restore_rechecks_native_occlusion_at_cursor(docked, monkeypatch):
     assert calls == []
 
 
+def test_foreground_settling_retries_late_occlusion_with_a_fixed_budget(docked, monkeypatch):
+    from pyside6_modern_widgets import edge_dock
+
+    window, controller, _, _ = docked
+    monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: window.frameGeometry().center()))
+    occluded = [False]
+    monkeypatch.setattr(edge_dock, "window_is_at_cursor", lambda _: not occluded[0])
+    calls = []
+    monkeypatch.setattr(controller, "_raise_and_activate_target", lambda: calls.append(True))
+    controller._schedule_foreground()
+    controller._foreground_timer.stop()
+    calls.clear()
+    controller._check_restored_foreground()  # Initially in front.
+    assert calls == []
+    assert controller._foreground_settle_timer.isActive()
+    occluded[0] = True  # The previous active window reasserts foreground later.
+    for _ in range(2):
+        controller._foreground_settle_timer.stop()
+        controller._check_restored_foreground()
+    assert len(calls) == 2
+    assert controller._foreground_checks_left == 0
+    assert not controller._foreground_settle_timer.isActive()
+
+
+@pytest.mark.parametrize("cancel", ["pointer_left", "popup", "dismiss", "detach", "disable"])
+def test_foreground_retries_stop_when_restore_is_no_longer_relevant(docked, monkeypatch, cancel):
+    from pyside6_modern_widgets import edge_dock
+
+    window, controller, _, _ = docked
+    monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(edge_dock, "window_is_at_cursor", lambda _: False)
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: window.frameGeometry().center()))
+    calls = []
+    monkeypatch.setattr(controller, "_raise_and_activate_target", lambda: calls.append(True))
+    controller._schedule_foreground()
+    controller._foreground_timer.stop()
+    calls.clear()
+    if cancel == "pointer_left":
+        monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(-10000, -10000)))
+    elif cancel == "popup":
+        monkeypatch.setattr(QApplication, "activePopupWidget", staticmethod(lambda: window))
+    elif cancel == "disable":
+        controller.setEnabled(False)
+    else:
+        getattr(controller, cancel)()
+    controller._check_restored_foreground()
+    assert calls == []
+    assert not controller._foreground_settle_timer.isActive()
+    assert controller._foreground_checks_left == 0
+
+
+def test_foreground_retries_wait_for_mouse_release(docked, monkeypatch):
+    from pyside6_modern_widgets import edge_dock
+
+    window, controller, _, _ = docked
+    monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(edge_dock, "window_is_at_cursor", lambda _: False)
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: window.frameGeometry().center()))
+    calls = []
+    monkeypatch.setattr(controller, "_raise_and_activate_target", lambda: calls.append(True))
+    controller._schedule_foreground()
+    controller._foreground_timer.stop()
+    calls.clear()
+    monkeypatch.setattr(controller, "_buttons_pressed", lambda **_: True)
+    controller._check_restored_foreground()
+    assert calls == []
+    monkeypatch.setattr(controller, "_buttons_pressed", lambda **_: False)
+    controller._check_restored_foreground()
+    assert calls == [True]
+
+
+def test_activation_callback_can_dismiss_without_rearming_foreground_timers(docked, monkeypatch):
+    from pyside6_modern_widgets import edge_dock
+
+    window, controller, _, _ = docked
+    monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(window, "activateWindow", controller.dismiss)
+    controller.expand()
+    assert not window.isVisible()
+    assert not controller._foreground_timer.isActive()
+    assert not controller._foreground_settle_timer.isActive()
+
+
 @pytest.mark.parametrize("action", ["hide", "close", "showMinimized", "showMaximized"])
 def test_external_lifecycle_clears_state_and_timers(docked, action):
     window, controller, _, _ = docked

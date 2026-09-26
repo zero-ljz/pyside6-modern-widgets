@@ -219,7 +219,9 @@ The desktop platform must permit global positioning and mouse capture. Wayland
 restrictions also apply to this optional interaction.
 
 `DockConfig` controls the snap distance, margin, handle dimensions and colors, animation
-duration, hide delay, and enabled `sides`. Defaults enable left, right, and top;
+duration, hide delay, and enabled `sides`. The default `dock_distance` is 24 logical
+pixels for both window snapping and handle drops; use `setConfig()` to adjust it.
+Defaults enable left, right, and top;
 include `DockSide.BOTTOM` to enable the bottom edge. Coordinates and sizes are
 Qt logical pixels, including on mixed-DPI displays. Distances use the window's
 frame and its screen's available work area; dragging can cross display boundaries.
@@ -242,6 +244,11 @@ docking state. A close request on a collapsed window expands it before its
 Use `dock.dismiss()` to hide a window and remove its handle from any attached state.
 Calling `window.hide()` on an already collapsed window does **not** dismiss the
 handle: the window is already hidden, so Qt sends no additional hide event.
+On Windows, restoring requests native foreground activation, including a temporary
+input-thread handoff if the normal request is denied. For up to 450 ms, the
+controller rechecks whether the tool is covered at the pointer and retries when
+needed. Leaving the tool, opening a popup/modal dialog, or disabling/dismissing/
+detaching cancels those checks. Restoration preserves the window's topmost flag.
 Screen geometry changes reposition docked windows and handles. Maximized and
 full-screen windows do not dock. The target owns the controller and handle;
 `detach()` permanently removes the behavior, disconnects external notifications,
@@ -754,6 +761,12 @@ with custom hit testing can call `startSystemMove(global_position)` directly;
 it uses native movement when available and a client-side fallback elsewhere.
 On Windows, tool windows receive the same mixed-DPI size protection as regular
 modern windows without acquiring taskbar or Alt+Tab behavior.
+Native caption moves preserve logical window dimensions when crossing displays,
+including windows with wrapped content such as the edge-docking controls. The
+shared DPI handler evaluates pending native resize constraints using the target
+display's scale before the resize is applied, keeping the window stable while
+the mouse is held. Border resizing and updated minimum/maximum constraints
+remain effective.
 
 Use either a layout installed directly on `ModernWindow` or its optional
 `menuBar()`, `addToolBar()`, `statusBar()`, and `setCentralWidget()` compatibility

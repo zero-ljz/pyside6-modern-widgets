@@ -7,8 +7,8 @@ import sys
 import textwrap
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt
+from PySide6.QtWidgets import QApplication, QLabel, QLayout, QVBoxLayout, QWidget
 
 from pyside6_modern_widgets import ModernDialog, ModernMessageBox, ModernWindow
 from pyside6_modern_widgets import _window_chrome as chrome_module
@@ -18,11 +18,70 @@ from pyside6_modern_widgets._windows_window import (
     WM_EXITSIZEMOVE,
     WM_GETDPISCALEDSIZE,
     WM_GETMINMAXINFO,
+    WM_WINDOWPOSCHANGING,
     WindowsMessage,
     _MinMaxInfo,
+    _WindowPosition,
 )
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize("global_scale", [1.0, 2.0])
+def test_dpi_resize_constrains_wrapped_layout_using_target_scale(monkeypatch, global_scale):
+    window = QWidget()
+    layout = QVBoxLayout(window)
+    label = QLabel("Wrapped control-window instructions. " * 12)
+    label.setWordWrap(True)
+    layout.addWidget(label)
+    window.setMinimumSize(275, 438)
+    window.resize(460, 520)
+    window.show()
+    _APP.processEvents()
+    state = chrome_module.WindowDpiState(dpi=216, scale=2.25 * global_scale)
+    try:
+        assert window.hasHeightForWidth()
+        assert QLayout.closestAcceptableSize(window, QSize(256, 289)).height() > 289
+        # Include reversals before Qt's QScreen catches up. The proposed physical
+        # size is already correct; the layout must see 460x520 on every screen.
+        for dpi in (120, 216, 120):
+            monkeypatch.setattr(window, "devicePixelRatioF", lambda old=state.scale: old)
+            state.handle_message(window, WindowsMessage(1, WM_DPICHANGED, dpi << 16, 0))
+            scale = dpi / 96 * global_scale
+            physical = (round(460 * scale), round(520 * scale))
+            position = _WindowPosition(1, 0, -2100, 100, *physical, 0x0014)
+            message = WindowsMessage(1, WM_WINDOWPOSCHANGING, 0, ctypes.addressof(position))
+            assert state.handle_message(window, message)
+            assert (position.cx, position.cy) == physical
+            assert (position.x, position.y) == (-2100, 100)
+            # The handler constrains the pending rectangle without resizing the
+            # widget or scheduling a correction after the native message.
+            assert window.size() == QSize(460, 520)
+            _APP.processEvents()
+            assert window.size() == QSize(460, 520)
+        # Runtime constraints remain effective, including while changing DPI.
+        window.setMinimumHeight(600)
+        window.setMaximumWidth(420)
+        position.cx, position.cy = physical
+        assert state.handle_message(window, message)
+        assert (position.cx, position.cy) == (round(420 * scale), round(600 * scale))
+        # Once Qt agrees, ordinary native resize/layout handling owns the size.
+        monkeypatch.setattr(window, "devicePixelRatioF", lambda: scale)
+        assert not state.handle_message(window, message)
+        state.reset(dpi, scale)
+        assert not state.handle_message(window, message)
+    finally:
+        window.close()
+
+
+def test_speculative_dpi_query_does_not_take_over_native_layout():
+    window = QWidget()
+    state = chrome_module.WindowDpiState(dpi=216, scale=2.25)
+    state.handle_message(window, WindowsMessage(1, WM_GETDPISCALEDSIZE, 120, 0))
+    position = _WindowPosition(1, 0, 100, 200, 575, 650, 0x0014)
+    message = WindowsMessage(1, WM_WINDOWPOSCHANGING, 0, ctypes.addressof(position))
+    assert not state.handle_message(window, message)
+    assert (position.cx, position.cy, position.flags) == (575, 650, 0x0014)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Requires the Windows Qt platform plugin")
