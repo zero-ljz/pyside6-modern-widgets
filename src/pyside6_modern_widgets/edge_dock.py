@@ -21,7 +21,7 @@ from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
 from ._window_chrome import uses_windows_window_state
-from ._windows_window import mouse_buttons_pressed
+from ._windows_window import bring_window_to_front, mouse_buttons_pressed, window_is_at_cursor
 from .modern_window import ModernWindow
 
 
@@ -180,6 +180,12 @@ class EdgeDockController(QObject):
         self._snap_timer = QTimer(self)
         self._snap_timer.setSingleShot(True)
         self._snap_timer.timeout.connect(self.snap)
+        self._foreground_timer = QTimer(self)
+        self._foreground_timer.setSingleShot(True)
+        self._foreground_timer.timeout.connect(self._raise_and_activate_target)
+        self._foreground_settle_timer = QTimer(self)
+        self._foreground_settle_timer.setSingleShot(True)
+        self._foreground_settle_timer.timeout.connect(self._check_restored_foreground)
         if isinstance(target, ModernWindow):
             target._system_move_finished.connect(self._complete_system_drag)
         target.installEventFilter(self)
@@ -226,6 +232,8 @@ class EdgeDockController(QObject):
         self._target.removeEventFilter(self)
         self._surface.removeEventFilter(self)
         self._refresh_timer.stop()
+        self._foreground_timer.stop()
+        self._foreground_settle_timer.stop()
 
     def _set_side(self, side: DockSide) -> None:
         if side != self._side:
@@ -374,6 +382,8 @@ class EdgeDockController(QObject):
         """Auto-hide only when idle, outside the window, and without open popups."""
         if not self._can_hide():
             return
+        self._foreground_timer.stop()
+        self._foreground_settle_timer.stop()
         self._hide_timer.stop()
         self._changing_visibility = True
         try:
@@ -385,6 +395,36 @@ class EdgeDockController(QObject):
         finally:
             self._changing_visibility = False
         self._sync_monitor()
+
+    def _raise_and_activate_target(self) -> None:
+        """Restore the target to the foreground without changing its topmost flag."""
+        if not self.isEnabled() or self._collapsed or not self._target.isVisible():
+            return
+        self._target.raise_()
+        self._target.activateWindow()
+        handle = self._target.windowHandle()
+        if handle is not None:
+            bring_window_to_front(int(handle.winId()))
+
+    def _schedule_foreground(self) -> None:
+        self._raise_and_activate_target()
+        self._foreground_timer.start(0)
+        if uses_windows_window_state():
+            self._foreground_settle_timer.start(150)
+
+    def _check_restored_foreground(self) -> None:
+        if (
+            not self.isEnabled()
+            or self._collapsed
+            or not self._target.isVisible()
+            or not self._target.frameGeometry().contains(QCursor.pos())
+            or QApplication.activePopupWidget() is not None
+            or QApplication.activeModalWidget() is not None
+        ):
+            return
+        handle = self._target.windowHandle()
+        if handle is not None and window_is_at_cursor(int(handle.winId())) is False:
+            self._raise_and_activate_target()
 
     def expand(self) -> None:
         """Show the target and remove its edge handle, including external reopens."""
@@ -403,7 +443,7 @@ class EdgeDockController(QObject):
             self._set_collapsed(False)
         finally:
             self._changing_visibility = False
-        self._target.raise_()
+        self._schedule_foreground()
         self._sync_monitor()
 
     def _finish_drag(self) -> None:
@@ -420,6 +460,8 @@ class EdgeDockController(QObject):
 
     def _reset(self) -> None:
         self._snap_timer.stop()
+        self._foreground_timer.stop()
+        self._foreground_settle_timer.stop()
         self._animation.stop()
         self._finish_drag()
         self._handle.hide()
@@ -489,10 +531,13 @@ class EdgeDockController(QObject):
                     self._reset()
             elif kind == QEvent.Type.Show:
                 if not self._changing_visibility:
+                    was_collapsed = self._collapsed
                     self._handle.hide()
                     if self._collapsed:
                         self._position()
                     self._set_collapsed(False)
+                    if was_collapsed:
+                        self._schedule_foreground()
                     self._sync_monitor()
             elif kind == QEvent.Type.WindowStateChange:
                 self._reset()

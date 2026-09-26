@@ -314,6 +314,68 @@ def test_handle_hover_and_external_show_restore_without_stale_handle(docked):
     assert controller.dockSide() == DockSide.RIGHT
 
 
+def test_expand_raises_and_activates_target(docked, monkeypatch):
+    window, controller, _, _ = docked
+    calls = []
+    monkeypatch.setattr(window, "raise_", lambda: calls.append("raise"))
+    monkeypatch.setattr(window, "activateWindow", lambda: calls.append("activate"))
+    monkeypatch.setattr(controller, "_can_hide", lambda: True)
+
+    controller.collapse()
+    assert controller.isCollapsed()
+    monkeypatch.setattr(controller, "_can_hide", lambda: False)
+    controller.expand()
+
+    assert calls == ["raise", "activate"]
+    assert controller._foreground_timer.isActive()
+    _APP.processEvents()
+    assert calls[:4] == ["raise", "activate", "raise", "activate"]
+
+    monkeypatch.setattr(controller, "_can_hide", lambda: True)
+    controller.collapse()
+    assert controller.isCollapsed()
+    assert not controller._foreground_timer.isActive()
+    calls.clear()
+    controller._raise_and_activate_target()
+    assert calls == []
+
+
+def test_external_show_restores_foreground_after_show_event(docked, monkeypatch):
+    window, controller, _, _ = docked
+    calls = []
+    monkeypatch.setattr(window, "raise_", lambda: calls.append("raise"))
+    monkeypatch.setattr(window, "activateWindow", lambda: calls.append("activate"))
+    monkeypatch.setattr(controller, "_can_hide", lambda: True)
+
+    controller.collapse()
+    assert controller.isCollapsed()
+    monkeypatch.setattr(controller, "_can_hide", lambda: False)
+    window.show()
+    _APP.processEvents()
+
+    assert calls[:4] == ["raise", "activate", "raise", "activate"]
+
+
+def test_restore_rechecks_native_occlusion_at_cursor(docked, monkeypatch):
+    from pyside6_modern_widgets import edge_dock
+
+    window, controller, _, _ = docked
+    calls = []
+    monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
+    monkeypatch.setattr(edge_dock, "window_is_at_cursor", lambda _hwnd: False)
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: window.frameGeometry().center()))
+    monkeypatch.setattr(window, "raise_", lambda: calls.append("raise"))
+    monkeypatch.setattr(window, "activateWindow", lambda: calls.append("activate"))
+
+    controller._check_restored_foreground()
+    assert calls == ["raise", "activate"]
+
+    calls.clear()
+    monkeypatch.setattr(edge_dock, "window_is_at_cursor", lambda _hwnd: True)
+    controller._check_restored_foreground()
+    assert calls == []
+
+
 @pytest.mark.parametrize("action", ["hide", "close", "showMinimized", "showMaximized"])
 def test_external_lifecycle_clears_state_and_timers(docked, action):
     window, controller, _, _ = docked

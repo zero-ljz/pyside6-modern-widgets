@@ -219,6 +219,54 @@ def set_window_topmost(hwnd: int, on_top: bool) -> bool:
         return False
 
 
+def bring_window_to_front(hwnd: int) -> bool:
+    """Raise a normal window's native Z order without making it topmost."""
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.SetWindowPos.argtypes = (
+            wintypes.HWND,
+            wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        )
+        user32.SetWindowPos.restype = wintypes.BOOL
+        return bool(
+            user32.SetWindowPos(
+                wintypes.HWND(hwnd),
+                wintypes.HWND(0),  # HWND_TOP; retain the normal Z-order band.
+                0,
+                0,
+                0,
+                0,
+                0x0001 | 0x0002 | 0x0010,  # SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
+            )
+        )
+    except (AttributeError, OSError, TypeError, ValueError):
+        return False
+
+
+def window_is_at_cursor(hwnd: int) -> bool | None:
+    """Check which top-level HWND receives input at the live cursor position."""
+    position = _cursor_screen_position()
+    if position is None:
+        return None
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.WindowFromPoint.argtypes = (wintypes.POINT,)
+        user32.WindowFromPoint.restype = wintypes.HWND
+        user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+        user32.GetAncestor.restype = wintypes.HWND
+        hit = user32.WindowFromPoint(wintypes.POINT(*position))
+        if not hit:
+            return None
+        return int(user32.GetAncestor(hit, 2) or 0) == hwnd  # GA_ROOT
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
 def track_non_client_mouse_leave(hwnd: int) -> None:
     try:
         user32 = ctypes.WinDLL("user32", use_last_error=True)

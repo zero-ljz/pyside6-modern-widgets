@@ -2,6 +2,7 @@
 
 import sys
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from pyside6_modern_widgets import EdgeDockController, ModernSwitch, ModernWindow
@@ -10,7 +11,7 @@ from pyside6_modern_widgets import EdgeDockController, ModernSwitch, ModernWindo
 def main() -> int:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    window = ModernWindow()
+    window = ModernWindow(None, Qt.WindowType.Tool)
     window.setWindowTitle("Screen-edge docking")
     window.resize(400, 240)
     content = QWidget()

@@ -117,6 +117,39 @@ def test_topmost_changes_only_native_z_order(monkeypatch, on_top, succeeded) -> 
     assert calls == [(12345, wintypes.HWND(-1 if on_top else -2).value, 0, 0, 0, 0, 0x13)]
 
 
+def test_bring_window_to_front_keeps_normal_z_order_band(monkeypatch) -> None:
+    calls = []
+
+    def set_position(hwnd, after, x, y, width, height, flags):
+        calls.append((hwnd.value, after.value, x, y, width, height, flags))
+        return True
+
+    class User32:
+        SetWindowPos = _NativeFunction(set_position)
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())
+
+    assert _windows_window.bring_window_to_front(12345)
+    assert calls == [(12345, None, 0, 0, 0, 0, 0x13)]
+
+
+@pytest.mark.parametrize("hit_root", [12345, 67890])
+def test_window_is_at_cursor_uses_native_hit_test(monkeypatch, hit_root) -> None:
+    calls = []
+
+    class User32:
+        WindowFromPoint = _NativeFunction(
+            lambda point: calls.append((point.x, point.y)) or 11111
+        )
+        GetAncestor = _NativeFunction(lambda hit, mode: hit_root)
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())
+    monkeypatch.setattr(_windows_window, "_cursor_screen_position", lambda: (-500, 700))
+
+    assert _windows_window.window_is_at_cursor(12345) is (hit_root == 12345)
+    assert calls == [(-500, 700)]
+
+
 def test_l_param_coordinates_use_full_width_cursor_position_when_available(monkeypatch) -> None:
     x, y = 70_000, -40_000
     l_param = (x & 0xFFFF) | ((y & 0xFFFF) << 16)
