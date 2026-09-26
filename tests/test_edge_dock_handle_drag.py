@@ -11,7 +11,8 @@ from shiboken6 import isValid
 
 from pyside6_modern_widgets import (
     DockConfig,
-    DockRestoreTrigger,
+    DockHandleMode,
+    DockPlacement,
     DockSide,
     EdgeDockController,
     ModernWindow,
@@ -24,7 +25,7 @@ _APP = QApplication.instance() or QApplication([])
 def collapsed(monkeypatch, theme_manager_instance, request):
     options = getattr(request, "param", {})
     target_class = ModernWindow if options.get("modern") else QWidget
-    window = target_class(None, Qt.FramelessWindowHint)
+    window = target_class(None, Qt.Window if options.get("framed") else Qt.FramelessWindowHint)
     window.resize(240, 160)
     window.move(250, 250)
     controller = EdgeDockController(
@@ -35,7 +36,7 @@ def collapsed(monkeypatch, theme_manager_instance, request):
                 "sides", (DockSide.LEFT, DockSide.RIGHT, DockSide.TOP, DockSide.BOTTOM)
             ),
             handle_icon=QIcon(":/pyside6_modern_widgets/icons/application.png"),
-            handle_draggable=True,
+            handle_mode=DockHandleMode.DRAG_OR_CLICK,
         ),
     )
     pointer = [QPoint(100000, 100000)]
@@ -75,19 +76,14 @@ def collapsed(monkeypatch, theme_manager_instance, request):
     _APP.processEvents()
 
 
-def test_drag_option_selects_click_and_rejects_hover_until_disabled(collapsed):
+def test_handle_modes_are_complete_and_can_be_switched_directly(collapsed):
     _, controller, _, _, _, _, _ = collapsed
-    assert not DockConfig().handle_draggable
-    assert controller.handleDraggable()
-    assert controller.restoreTrigger() == DockRestoreTrigger.CLICK
+    assert DockConfig().handle_mode == DockHandleMode.HOVER_OR_CLICK
+    assert controller.handleMode() == DockHandleMode.DRAG_OR_CLICK
     point = QPointF(controller._handle.rect().center())
     QApplication.sendEvent(controller._handle, QEnterEvent(point, point, point))
     assert controller.isCollapsed()
-    with pytest.raises(ValueError, match="disable handle dragging"):
-        controller.setRestoreTrigger("hover")
-    controller.setHandleDraggable(False)
-    controller.setRestoreTrigger("hover")
-    assert not controller.handleDraggable()
+    controller.setHandleMode("hover_or_click")
     QApplication.sendEvent(controller._handle, QEnterEvent(point, point, point))
     assert not controller.isCollapsed()
 
@@ -263,7 +259,7 @@ def test_cancelled_drag_restores_original_handle_without_opening(collapsed, canc
     elif cancel == "appearance":
         controller.setHandleToolTip("Updated")
     else:
-        controller.setHandleDraggable(False)
+        controller.setHandleMode(DockHandleMode.CLICK)
     release(destination)
     assert controller._handle_gesture is None
     assert controller.isCollapsed()
@@ -348,7 +344,11 @@ def test_destruction_during_handle_drag_has_no_dead_object_calls(collapsed, monk
     assert errors == []
 
 
-@pytest.mark.parametrize("collapsed", [{"modern": False}, {"modern": True}], indirect=True)
+@pytest.mark.parametrize(
+    "collapsed",
+    [{"modern": False}, {"modern": True}, {"framed": True}, {"modern": True, "framed": True}],
+    indirect=True,
+)
 def test_native_handle_drop_across_available_displays(collapsed):
     if QApplication.platformName() in ("offscreen", "minimal") or len(QApplication.screens()) < 2:
         pytest.skip("requires a native desktop with multiple displays")
@@ -422,3 +422,144 @@ def test_native_interior_drop_across_available_displays(collapsed):
         controller.dock(DockSide.LEFT)
         controller.collapse()
         assert controller.isCollapsed()
+
+
+@pytest.mark.parametrize("collapsed", [{"modern": False}, {"modern": True}], indirect=True)
+def test_native_programmatic_placement_preserves_size_visible_and_folded(collapsed):
+    if QApplication.platformName() in ("offscreen", "minimal") or len(QApplication.screens()) < 2:
+        pytest.skip("requires a native desktop with multiple displays")
+    window, controller, _, _, _, _, _ = collapsed
+    original_size = window.size()
+    for folded in (True, False):
+        for screen in QApplication.screens() + list(reversed(QApplication.screens())):
+            controller.collapse() if folded else controller.expand()
+            assert controller.setPlacement(DockPlacement(DockSide.RIGHT, screen.name(), 0.6))
+            QTest.qWait(100)
+            assert controller.isCollapsed() == folded
+            controller.expand()
+            QTest.qWait(100)
+            assert window.size() == original_size
+            assert window.screen() is screen
+            assert screen.availableGeometry().contains(window.frameGeometry())
+
+
+@pytest.mark.parametrize("collapsed", [{"modern": False}, {"modern": True}], indirect=True)
+def test_native_hidden_round_trips_preserve_constrained_tool_size(collapsed):
+    if QApplication.platformName() in ("offscreen", "minimal") or len(QApplication.screens()) < 2:
+        pytest.skip("requires a native desktop with multiple displays")
+    from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QVBoxLayout
+
+    window, controller, press, move, release, pointer, held = collapsed
+    controller.expand()
+    content = QWidget()
+    layout = QVBoxLayout(content)
+    layout.addWidget(QLabel("Drag here to a screen edge"))
+    layout.addWidget(QLineEdit("Text selection still works"))
+    layout.addWidget(QLabel("Use the controls to hide or restore this tool."))
+    layout.addWidget(QPushButton("Close tool"))
+    if isinstance(window, ModernWindow):
+        window.setCentralWidget(content)
+    else:
+        QVBoxLayout(window).addWidget(content)
+    window.resize(400, 240)
+    _APP.processEvents()
+    original_size = window.size()
+    pointer[0] = QPoint(100000, 100000)
+    controller.collapse()
+    screens = QApplication.screens()
+    for cycle in range(3):
+        for screen in screens + list(reversed(screens)):
+            area = screen.availableGeometry()
+            destination = QPoint(area.right() - 4, area.center().y())
+            press()
+            move(destination)
+            QTest.qWait(40)
+            release(destination)
+            QTest.qWait(40)
+            assert controller.isCollapsed()
+        controller.expand()
+        QTest.qWait(100)
+        assert window.size() == original_size, (cycle, window.size(), original_size)
+        pointer[0] = QPoint(100000, 100000)
+        held[0] = False
+        controller.collapse()
+
+
+@pytest.mark.parametrize("preview_only", [False, True])
+@pytest.mark.parametrize("start_screen", [0, 1])
+def test_native_gallery_tool_hidden_round_trips(
+    theme_manager_instance, monkeypatch, preview_only, start_screen
+):
+    if QApplication.platformName() in ("offscreen", "minimal") or len(QApplication.screens()) < 2:
+        pytest.skip("requires a native desktop with multiple displays")
+    from examples.edge_dock_example import EdgeDockExample
+
+    demo = EdgeDockExample()
+    demo.show()
+    demo.floating_window.move(QApplication.screens()[start_screen].availableGeometry().center())
+    demo.show_floating()
+    demo.handle_mode.setCurrentIndex(2)
+    controller = demo.dock
+    window = demo.floating_window
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(100000, 100000)))
+    monkeypatch.setattr(controller, "_buttons_pressed", lambda **_kwargs: True)
+    _APP.processEvents()
+    original_size = window.size()
+
+    def send(kind, point, buttons):
+        QApplication.sendEvent(
+            controller._handle,
+            QMouseEvent(
+                kind,
+                QPointF(controller._handle.mapFromGlobal(point)),
+                QPointF(point),
+                Qt.NoButton if kind == QEvent.MouseMove else Qt.LeftButton,
+                buttons,
+                Qt.NoModifier,
+            ),
+        )
+
+    try:
+        controller.dock(DockSide.LEFT)
+        QTest.qWait(300)
+        for cycle in range(4):
+            monkeypatch.setattr(controller, "_buttons_pressed", lambda **_kwargs: False)
+            controller.collapse()
+            assert controller.isCollapsed(), (
+                controller._state,
+                window.isVisible(),
+                controller._animation.state(),
+            )
+            monkeypatch.setattr(controller, "_buttons_pressed", lambda **_kwargs: True)
+            for screen in QApplication.screens() + list(reversed(QApplication.screens())):
+                area = screen.availableGeometry()
+                destination = QPoint(area.right() - 4, area.center().y())
+                send(
+                    QEvent.MouseButtonPress,
+                    controller._handle.frameGeometry().center(),
+                    Qt.LeftButton,
+                )
+                send(QEvent.MouseMove, area.center(), Qt.LeftButton)
+                if preview_only:
+                    for other in reversed(QApplication.screens()):
+                        send(QEvent.MouseMove, other.availableGeometry().center(), Qt.LeftButton)
+                        QTest.qWait(40)
+                send(QEvent.MouseMove, destination, Qt.LeftButton)
+                QTest.qWait(40)
+                send(QEvent.MouseButtonRelease, destination, Qt.NoButton)
+                QTest.qWait(120)
+                assert controller.isCollapsed(), (
+                    cycle,
+                    screen.name(),
+                    controller._state,
+                    window.size(),
+                    destination,
+                    controller._handle_gesture,
+                )
+            controller.expand()
+            QTest.qWait(150)
+            assert window.size() == original_size, (cycle, window.size(), original_size)
+    finally:
+        demo.close()
+        demo.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)

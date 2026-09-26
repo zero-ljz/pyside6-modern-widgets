@@ -44,11 +44,15 @@ The controls window remains available while the tool is hidden:
 
 - **Handle appearance** switches between the thin strip and application/settings
   icons, including while collapsed. **Icon size** changes the icon bounds, and
-  **Restore action** selects hover-or-click versus click-only restoration.
-- **Drag handle across edges and screens** selects click-only restoration. Drag
+  **Handle interaction** selects hover-or-click, click-only, or drag-or-click.
+- Select **Drag or click** to move handles across edges and screens. Drag
   the collapsed handle to another edge/display and release to remain folded, or
   release inside a screen to expand the tool. Click without dragging to restore;
-  press Escape while dragging to cancel. Turning the option off retains click mode.
+  press Escape while dragging to cancel. Switch directly to either other mode.
+- **Collapse tool** explicitly folds a docked tool, including with auto-hide off.
+- **Save dock position** keeps the current screen, edge and fractional position in
+  memory; **Restore dock position** reapplies it, including while folded. Applications
+  can persist the same `DockPlacement` value to their own settings.
 - **Hide tool and handle** uses `dismiss()`, including when the tool is already
   collapsed; **Show / restore tool** uses `expand()`. Closing the tool also leaves
   the controls available to reopen it.

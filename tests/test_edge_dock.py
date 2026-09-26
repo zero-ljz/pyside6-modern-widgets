@@ -21,7 +21,7 @@ from shiboken6 import isValid
 
 from pyside6_modern_widgets import (
     DockConfig,
-    DockRestoreTrigger,
+    DockHandleMode,
     DockSide,
     EdgeDockController,
     ModernWindow,
@@ -50,7 +50,7 @@ def test_icon_handle_stays_upright_and_inside_each_edge(docked, side):
             anim_duration=0,
             sides=tuple(list(DockSide)[1:]),
             handle_icon=_two_color_icon(),
-            restore_trigger=DockRestoreTrigger.CLICK,
+            handle_mode=DockHandleMode.CLICK,
         ),
         drag_widget=strip,
     )
@@ -70,7 +70,7 @@ def test_icon_handle_stays_upright_and_inside_each_edge(docked, side):
 
 def test_live_handle_updates_preserve_collapse_and_allow_strip_fallback(docked):
     window, controller, _, _ = docked
-    controller.setRestoreTrigger("click")
+    controller.setHandleMode("click")
     controller.dock(DockSide.LEFT)
     controller.collapse()
     position = window.pos()
@@ -100,10 +100,10 @@ def test_live_handle_updates_preserve_collapse_and_allow_strip_fallback(docked):
 
 
 @pytest.mark.parametrize("icon", [False, True])
-@pytest.mark.parametrize("trigger", list(DockRestoreTrigger))
+@pytest.mark.parametrize("trigger", list(DockHandleMode))
 def test_handle_restore_trigger_controls_hover_and_left_click(docked, trigger, icon):
     window, controller, _, _ = docked
-    controller.setRestoreTrigger(trigger)
+    controller.setHandleMode(trigger)
     if icon:
         controller.setHandleIcon(_two_color_icon())
     controller.dock(DockSide.LEFT)
@@ -111,7 +111,7 @@ def test_handle_restore_trigger_controls_hover_and_left_click(docked, trigger, i
     handle = controller._handle
     point = QPointF(handle.rect().center())
     QApplication.sendEvent(handle, QEnterEvent(point, point, point))
-    if trigger == DockRestoreTrigger.HOVER:
+    if trigger == DockHandleMode.HOVER_OR_CLICK:
         assert window.isVisible()
         controller.collapse()
     else:
@@ -127,18 +127,18 @@ def test_handle_restore_trigger_controls_hover_and_left_click(docked, trigger, i
 
 def test_switching_trigger_while_collapsed_applies_to_next_entry(docked):
     _, controller, _, _ = docked
-    controller.setRestoreTrigger("click")
+    controller.setHandleMode("click")
     controller.dock(DockSide.LEFT)
     controller.collapse()
-    controller.setRestoreTrigger("hover")
-    assert controller.restoreTrigger() == DockRestoreTrigger.HOVER
+    controller.setHandleMode("hover_or_click")
+    assert controller.handleMode() == DockHandleMode.HOVER_OR_CLICK
     point = QPointF(controller._handle.rect().center())
     QApplication.sendEvent(controller._handle, QEnterEvent(point, point, point))
     assert not controller.isCollapsed()
 
 
 @pytest.mark.parametrize(
-    "kwargs", [{"handle_icon_size": 0}, {"handle_padding": -1}, {"restore_trigger": "invalid"}]
+    "kwargs", [{"handle_icon_size": 0}, {"handle_padding": -1}, {"handle_mode": "invalid"}]
 )
 def test_invalid_handle_config(kwargs):
     with pytest.raises(ValueError):
@@ -147,30 +147,30 @@ def test_invalid_handle_config(kwargs):
 
 def test_invalid_handle_updates_are_atomic_and_detach_makes_them_inert(docked):
     _, controller, _, _ = docked
-    controller.setRestoreTrigger("click")
+    controller.setHandleMode("click")
     controller.setHandleIcon(_two_color_icon())
     controller.dock(DockSide.LEFT)
     controller.collapse()
     for setter, value in (
         (controller.setHandleIconSize, 0),
         (controller.setHandlePadding, -1),
-        (controller.setRestoreTrigger, "invalid"),
+        (controller.setHandleMode, "invalid"),
     ):
         with pytest.raises(ValueError):
             setter(value)
     assert controller._handle.size() == QSize(36, 36)
-    assert controller.restoreTrigger() == DockRestoreTrigger.CLICK
+    assert controller.handleMode() == DockHandleMode.CLICK
     controller.detach()
     controller.setHandleIcon(None)
     controller.setHandleIconSize(48)
     controller.setHandlePadding(12)
     controller.setHandleToolTip("ignored")
-    controller.setRestoreTrigger("hover")
+    controller.setHandleMode("hover_or_click")
     assert not controller.handleIcon().isNull()
     assert controller.handleIconSize() == 24
     assert controller.handlePadding() == 6
     assert controller.handleToolTip() == ""
-    assert controller.restoreTrigger() == DockRestoreTrigger.CLICK
+    assert controller.handleMode() == DockHandleMode.CLICK
 
 
 def test_icon_handle_shrinks_to_small_work_area(docked, monkeypatch):
@@ -183,7 +183,7 @@ def test_icon_handle_shrinks_to_small_work_area(docked, monkeypatch):
 
     monkeypatch.setattr(controller, "_screen", lambda: Screen())
     controller.setHandleIcon(_two_color_icon())
-    controller.setRestoreTrigger("click")
+    controller.setHandleMode("click")
     controller.dock(DockSide.LEFT)
     controller.collapse()
     assert area.adjusted(2, 2, -2, -2).contains(controller._handle.geometry())
@@ -583,11 +583,12 @@ def test_disabling_auto_hide_retains_docking_and_disable_restores(docked):
     controller.dock(DockSide.LEFT)
     controller.collapse()
     controller.setAutoHide(False)
-    assert window.isVisible()
+    assert controller.isCollapsed()
     assert controller.dockSide() == DockSide.LEFT
     assert not controller._monitor.isActive()
-    controller.collapse()
-    assert window.isVisible()
+    controller.expand()
+    assert controller.collapse()
+    assert controller.isCollapsed()
     controller.setAutoHide(True)
     controller.collapse()
     controller.setEnabled(False)

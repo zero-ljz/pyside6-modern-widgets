@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 from shiboken6 import isValid
 
 from examples.navigation_view_example import ExampleWindow
-from pyside6_modern_widgets import DockRestoreTrigger, DockSide, EdgeDockController
+from pyside6_modern_widgets import DockHandleMode, DockSide, EdgeDockController
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -56,32 +56,36 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
             "停靠边缘：左侧 | 把手已隐藏" if language == "zh_CN" else "Edge: Left | Handle hidden"
         )
         assert demo.status.text() == expected_status
-        demo.auto_hide_switch.setChecked(True)
-        demo.dock.collapse()
+        demo.save_position_button.click()
+        saved = demo.saved_placement
+        assert saved is not None and saved.side == DockSide.LEFT
+        demo.collapse_button.click()  # Explicit folding also works with auto-hide off.
         assert demo.dock.isCollapsed()
-        demo.restore_trigger.setCurrentIndex(1)
+        demo.dock.setPlacement(None)
+        demo.restore_position_button.click()
+        assert demo.dock.placement() == saved
+        demo.collapse_button.click()
+        assert demo.dock.isCollapsed()
+        demo.auto_hide_switch.setChecked(True)
+        demo.handle_mode.setCurrentIndex(1)
         demo.handle_style.setCurrentIndex(1)
         demo.handle_icon_size.setValue(32)
         assert demo.dock.isCollapsed()
-        assert demo.dock.restoreTrigger() == DockRestoreTrigger.CLICK
+        assert demo.dock.handleMode() == DockHandleMode.CLICK
         assert demo.dock._handle.size() == QSize(44, 44)
         assert not demo.dock.handleIcon().isNull()
         assert demo.handle_style.currentText() == (
             "应用图标" if language == "zh_CN" else "Application icon"
         )
-        assert demo.restore_trigger.currentText() == (
-            "仅点击" if language == "zh_CN" else "Click only"
-        )
+        assert demo.handle_mode.currentText() == ("仅点击" if language == "zh_CN" else "Click only")
         assert demo.dock.handleToolTip() == (
             "恢复悬浮工具" if language == "zh_CN" else "Restore floating tool"
         )
-        demo.handle_drag_switch.setChecked(True)
-        assert demo.dock.handleDraggable()
-        assert not demo.restore_trigger.isEnabled()
-        assert demo.handle_drag_switch.text() == (
-            "跨边缘和屏幕拖动把手"
-            if language == "zh_CN"
-            else "Drag handle across edges and screens"
+        demo.handle_mode.setCurrentIndex(2)
+        assert demo.dock.handleMode() == DockHandleMode.DRAG_OR_CLICK
+        assert demo.handle_mode.isEnabled()
+        assert demo.handle_mode.currentText() == (
+            "拖动或点击" if language == "zh_CN" else "Drag or click"
         )
         launch.click()
         assert window.edge_dock_example is demo
@@ -97,10 +101,10 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
         )
         demo.toggle_attachment()
         assert demo.dock.isEnabled()
-        assert demo.dock.restoreTrigger() == DockRestoreTrigger.CLICK
+        assert demo.dock.handleMode() == DockHandleMode.DRAG_OR_CLICK
         assert demo.dock.handleIconSize() == 32
         assert not demo.dock.handleIcon().isNull()
-        assert demo.dock.handleDraggable()
+        assert demo.dock.handleMode() == DockHandleMode.DRAG_OR_CLICK
         demo.close()
         assert window.isVisible()
         assert not demo.floating_window.isVisible()

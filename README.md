@@ -132,7 +132,7 @@ their mouse and keyboard behavior. A dedicated drag strip also works:
 from pyside6_modern_widgets import DockConfig, DockSide, EdgeDockController
 
 dock = EdgeDockController(window, drag_widget=drag_strip, auto_hide=True)
-dock.setAutoHide(False)  # Keep snapping, without hiding.
+dock.setAutoHide(False)  # Stop automatic hiding; explicit collapse still works.
 dock.setEnabled(False)  # Restore a collapsed window and suspend the behavior.
 dock.setEnabled(True)
 dock.dock(DockSide.RIGHT)  # Explicitly dock a visible window.
@@ -148,7 +148,7 @@ to the available work area on small displays. For example:
 
 ```python
 from PySide6.QtGui import QIcon
-from pyside6_modern_widgets import DockConfig, DockRestoreTrigger, EdgeDockController
+from pyside6_modern_widgets import DockConfig, DockHandleMode, EdgeDockController
 
 dock = EdgeDockController(
     window,
@@ -157,7 +157,7 @@ dock = EdgeDockController(
         handle_icon_size=24,
         handle_padding=6,
         handle_tooltip="Restore notes",
-        restore_trigger=DockRestoreTrigger.CLICK,
+        handle_mode=DockHandleMode.CLICK,
     ),
     drag_widget=drag_strip,
 )
@@ -165,7 +165,7 @@ dock.setHandleIcon(QIcon(":/app/unread.svg"))  # Also works while collapsed.
 dock.setHandleIconSize(32)
 dock.setHandlePadding(8)
 dock.setHandleToolTip("Restore unread notes")
-dock.setRestoreTrigger("hover")  # Hover or left click; "click" requires left click.
+dock.setHandleMode(DockHandleMode.HOVER_OR_CLICK)
 dock.setHandleIcon(None)  # Return to the configured thin strip.
 ```
 
@@ -173,15 +173,15 @@ Use this configuration when creating the controller, rather than attaching a
 second controller to the same window. A null `QIcon` (including an unavailable
 image) uses the thin-strip fallback. `handle_width` and `handle_length` apply only
 to the strip; colors apply to both backgrounds. Runtime handle updates keep the
-docking state and do not reopen the target. Changing the trigger takes effect on
-the next entry or click. Matching getters (`handleIcon()`, `handleIconSize()`,
-`handlePadding()`, `handleToolTip()`, `restoreTrigger()`) expose current settings.
+docking state and do not reopen the target. Changing the mode takes effect on
+the next gesture. Matching getters (`handleIcon()`, `handleIconSize()`,
+`handlePadding()`, `handleToolTip()`, `handleMode()`) expose current settings.
 
 Handle dragging is opt-in and works with both icons and strips:
 
 ```python
-dock.setHandleDraggable(True)  # Selects click restoration so the handle can be grabbed.
-# Or use DockConfig(handle_draggable=True, handle_icon=your_icon).
+dock.setHandleMode(DockHandleMode.DRAG_OR_CLICK)
+# Or use DockConfig(handle_mode=DockHandleMode.DRAG_OR_CLICK, handle_icon=your_icon).
 ```
 
 A press followed by release restores the window. Movement beyond Qt's system drag
@@ -200,16 +200,20 @@ displays or outside the desktop, use the nearest display. At corners, the neares
 enabled edge wins; overflow takes priority and `sides` order breaks ties. Handle
 dragging uses the pointer's edge distance, while dragging the expanded window
 uses its frame's edge distance. The controller preserves the window's logical
-size when transferring a hidden target to a display with a different DPI.
+size across hidden transfers and round trips between displays with different DPI.
+The pre-collapse logical size is retained until restoration. Hidden native position
+and size are committed together, avoiding a resize at the previous monitor's coordinates.
+New minimum/maximum constraints are respected; resize an expanded window to change
+its preferred restore size.
 
 Escape or lost mouse capture cancels the gesture and returns the handle to its
 previous position. Changes to screen geometry or handle appearance cancel an
 active gesture before repositioning. Disable, dismiss, detach, external show/close,
 and destruction also clear grabs and pending drag callbacks. Releasing after
-cancellation does not reopen the window. While dragging is enabled, hover
-restoration is unavailable: `setRestoreTrigger("hover")` raises `ValueError`.
-Call `setHandleDraggable(False)` before choosing hover; disabling dragging alone
-retains click restoration. Inspect `handleDraggable()` for the current setting.
+cancellation does not reopen the window. `DockHandleMode` represents one complete
+interaction: `HOVER_OR_CLICK`, `CLICK`, or `DRAG_OR_CLICK`. Switch directly between
+modes using `setHandleMode()`; there are no conflicting flags or implicit changes
+to another preference. String values are `hover_or_click`, `click`, and `drag_or_click`.
 
 The desktop platform must permit global positioning and mouse capture. Wayland
 restrictions also apply to this optional interaction.
@@ -228,7 +232,7 @@ window can still move onto a second display.
 
 Auto-hide waits while the pointer is inside, a mouse button is down, an animation
 is running, or a popup/modal dialog is open. Hovering or clicking the gray edge
-handle restores the window by default; `DockRestoreTrigger.CLICK` disables hover
+handle restores the window by default; `DockHandleMode.CLICK` disables hover
 restoration and requires a left click. Its default color is RGB (150, 150, 150), with
 RGB (200, 200, 200) on hover; override `handle_color` / `handle_hover_color` in
 `DockConfig` to customize it. External `show()` removes the handle. Hiding a visible
@@ -251,6 +255,58 @@ Inspect `dockSide()` / `isCollapsed()` or connect `dockSideChanged` /
 `collapsedChanged` to observe state. Notifications are emitted after geometry,
 visibility, and timers have been updated; slots may disable, dismiss, or detach
 the controller immediately.
+
+All settings can be applied atomically, including colors, allowed edges, distances,
+animation duration and automatic hiding. Snapshots copy Qt colors/icons; changing
+a returned value cannot mutate the live controller. Invalid updates leave the
+previous configuration intact. Equal updates do not cancel a gesture or emit signals.
+Removing the current edge restores and undocks the tool.
+
+```python
+from dataclasses import asdict, replace
+from PySide6.QtGui import QColor
+from pyside6_modern_widgets import DockPlacement, DockSide
+
+dock.setConfig(
+    replace(dock.config(), auto_hide=False, hide_delay=800, handle_color=QColor("#606060"))
+)
+dock.dock(DockSide.LEFT)
+if dock.collapse():  # Explicit command; works with auto-hide off or pointer inside.
+    print("Tool folded")
+
+# Save a JSON-compatible value: screen name, edge, fractional position (0..1).
+saved = asdict(dock.placement()) if dock.placement() is not None else None
+dock.setPlacement(DockPlacement(**saved) if saved is not None else None)
+# Also possible: DockPlacement(DockSide.RIGHT, screen.name(), offset=0.75).
+```
+
+`collapse()` stops a docking animation and folds immediately, but refuses active
+mouse gestures, popup/modal dialogs and non-normal window states. Automatic hiding
+still checks pointer position, animation and delay. `setAutoHide(False)` changes
+only the automatic policy and preserves a folded tool. `auto_hide` lives in
+`DockConfig`; the optional constructor keyword overrides it for convenience.
+`dock()`, `snap()`, `collapse()`, `expand()`, `dismiss()` and `setPlacement()` return
+whether the request succeeded and remained committed through synchronous callbacks.
+Invalid configuration/edge values raise `ValueError`; unavailable operations return
+`False`. Detached controllers ignore mutating commands.
+
+`placement()` returns `None` when undocked. `setPlacement()` preserves a folded
+state and opens an otherwise hidden tool. Applying a location returns `False`
+while disabled or in a minimized/maximized/full-screen state. A missing screen name falls back to the current
+screen. Offsets run top-to-bottom on vertical edges and left-to-right on horizontal
+edges; near the endpoints the handle is clamped to fit. `setPlacement(None)` undocks
+and restores a folded tool. `placementChanged` observes moves along the same edge
+and between screens, as well as docking/undocking; animation completion publishes
+the final placement. The application owns persistence, including storage and loading.
+
+`state()` exposes `DockState` (`FLOATING`, `DOCKED`, `COLLAPSED`, `DISABLED`,
+`DETACHED`). `isAttached()` distinguishes a temporarily disabled controller from a
+permanently detached one. Observe `stateChanged`, `enabledChanged`, `attachedChanged`,
+`autoHideChanged`, and `configChanged` alongside the existing side/collapse signals.
+`configChanged` has no arguments; read a fresh `config()` snapshot in the slot.
+Notifications reconcile reentrant updates and expose committed values. `target()`
+and `dragWidget()` expose the attached widgets; the latter is `None` after surface
+destruction or detach. Window visibility remains available through the target.
 
 Native title-bar dragging remains controlled by the platform; use the dedicated
 drag widget for automatic snapping, or call `snap()` after an external move.

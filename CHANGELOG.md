@@ -13,7 +13,7 @@ All notable changes to this project are documented in this file.
 - Add a bilingual handle-dragging control to the standalone and gallery demos.
 - Add optional `QIcon` edge handles with logical icon size, padding, and tooltip;
   keep icons upright on every edge and retain the thin-strip fallback.
-- Add `DockRestoreTrigger` for hover-or-click and click-only restoration, plus
+- Add `DockHandleMode` for hover-or-click, click-only and drag-or-click interaction, plus
   runtime handle setters and bilingual controls in the edge-docking demo.
 - Add an edge-docking demo launcher to the navigation gallery, reusing the same
   owned demo window and cleaning up its restore handle when the gallery closes.
@@ -21,6 +21,17 @@ All notable changes to this project are documented in this file.
   / `--language zh_CN` startup overrides to the navigation and edge-dock examples.
 
 ### Changed
+
+- Consolidate edge-handle interaction into `DockHandleMode` / `handle_mode` /
+  `setHandleMode()`, replacing `DockRestoreTrigger`, `restore_trigger`,
+  `handle_draggable`, `setRestoreTrigger()` and `setHandleDraggable()` before release.
+- Add atomic `config()` / `setConfig()` snapshots, including `auto_hide`; copy Qt
+  colors/icons and keep equal updates inert. Removing a docked edge restores the tool.
+- Separate explicit `collapse()` from automatic hide policy. Disabling auto-hide
+  preserves an already collapsed tool; conditional commands now return success.
+- Expose `DockPlacement`, position restoration/notifications, `DockState`, attachment
+  queries and lifecycle/configuration signals. Demonstrate manual collapse and saved
+  positions in the bilingual gallery.
 
 - Refactor edge docking around explicit floating, docked, collapsed, disabled,
   and detached states, committing visibility and timers before state notifications.
@@ -30,6 +41,11 @@ All notable changes to this project are documented in this file.
   for replacing a destroyed or obsolete drag surface.
 
 ### Fixed
+
+- Preserve pre-collapse logical window dimensions across hidden mixed-DPI round
+  trips. Apply hidden native position and size together to avoid switching back
+  to the old display during a resize; reuse shared native DPI handling for handles.
+- Isolate live dock colors from mutations of caller-owned configuration values.
 
 - Expand collapsed windows before processing close requests so cancelling a close
   keeps the window accessible and docked.
