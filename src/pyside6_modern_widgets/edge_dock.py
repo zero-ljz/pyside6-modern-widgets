@@ -9,6 +9,7 @@ from PySide6.QtCore import (
     QByteArray,
     QEasingCurve,
     QEvent,
+    QMetaObject,
     QObject,
     QPoint,
     QPropertyAnimation,
@@ -19,6 +20,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
+from shiboken6 import isValid
 
 from ._window_chrome import uses_windows_window_state
 from ._windows_window import bring_window_to_front, mouse_buttons_pressed, window_is_at_cursor
@@ -31,6 +33,14 @@ class DockSide(str, Enum):
     RIGHT = "right"
     TOP = "top"
     BOTTOM = "bottom"
+
+
+class _DockState(Enum):
+    FLOATING = "floating"
+    DOCKED = "docked"
+    COLLAPSED = "collapsed"
+    DISABLED = "disabled"
+    DETACHED = "detached"
 
 
 @dataclass(frozen=True)
@@ -123,6 +133,8 @@ class EdgeDockController(QObject):
     controls retain their input. Pass a dedicated drag strip for custom chrome;
     native/system dragging is not intercepted. Call snap() after external moves.
     The target owns the controller and handle. detach() removes the behavior.
+    Only one controller may be attached to a target. Use dismiss() to hide both
+    the window and its handle, and setDragWidget() when replacing the drag surface.
     """
 
     dockSideChanged = Signal(object)
@@ -139,17 +151,24 @@ class EdgeDockController(QObject):
         if not target.isWindow():
             raise ValueError("target must be a top-level widget")
         surface = target if drag_widget is None else drag_widget
-        if surface is not target and not target.isAncestorOf(surface):
+        if surface is not target and (surface.isWindow() or not target.isAncestorOf(surface)):
             raise ValueError("drag_widget must belong to target")
+        for child in target.children():
+            if isinstance(child, EdgeDockController) and child._state != _DockState.DETACHED:
+                raise ValueError("target already has an attached EdgeDockController")
         super().__init__(target)
         self._target = target
-        self._surface = surface
+        self._surface: QWidget | None = None
+        self._surface_connection: QMetaObject.Connection | None = None
+        self._connections: list[QMetaObject.Connection] = []
         self._config = config or DockConfig()
-        self._enabled = True
-        self._attached = True
-        self._auto_hide = auto_hide
+        self._state: _DockState = _DockState.FLOATING
+        self._auto_hide = bool(auto_hide)
         self._side = DockSide.NONE
-        self._collapsed = False
+        self._notified_side = DockSide.NONE
+        self._notified_collapsed = False
+        self._notifying = False
+        self._revision = 0
         self._changing_visibility = False
         self._moving = False
         self._press: QPoint | None = None
@@ -187,35 +206,38 @@ class EdgeDockController(QObject):
         self._foreground_settle_timer.setSingleShot(True)
         self._foreground_settle_timer.timeout.connect(self._check_restored_foreground)
         if isinstance(target, ModernWindow):
-            target._system_move_finished.connect(self._complete_system_drag)
+            self._connections.append(
+                target._system_move_finished.connect(self._complete_system_drag)
+            )
         target.installEventFilter(self)
-        if surface is not target:
-            surface.installEventFilter(self)
+        self.setDragWidget(surface)
         app = QApplication.instance()
         assert isinstance(app, QApplication)
-        app.screenAdded.connect(self._watch_screen)
-        app.screenRemoved.connect(self._schedule_refresh)
+        self._connections.append(app.screenAdded.connect(self._watch_screen))
+        self._connections.append(app.screenRemoved.connect(self._schedule_refresh))
         for screen in app.screens():
             self._watch_screen(screen)
 
     def isEnabled(self) -> bool:
-        return self._enabled and self._attached
+        return self._state not in (_DockState.DISABLED, _DockState.DETACHED)
 
     def setEnabled(self, enabled: bool) -> None:
-        if not self._attached:
+        if self._state == _DockState.DETACHED or bool(enabled) == self.isEnabled():
             return
-        if not enabled:
-            if self._collapsed:
-                self.expand()
-            self._reset()
-        self._enabled = bool(enabled)
+        self._cancel_activity()
+        self._transition(
+            _DockState.FLOATING if enabled else _DockState.DISABLED,
+            show=True if self.isCollapsed() else None,
+        )
 
     def autoHide(self) -> bool:
         return self._auto_hide
 
     def setAutoHide(self, enabled: bool) -> None:
+        if self._state == _DockState.DETACHED:
+            return
         self._auto_hide = bool(enabled)
-        if not enabled and self._collapsed:
+        if not enabled and self.isCollapsed():
             self.expand()
         self._sync_monitor()
 
@@ -223,28 +245,145 @@ class EdgeDockController(QObject):
         return self._side
 
     def isCollapsed(self) -> bool:
-        return self._collapsed
+        return self._state == _DockState.COLLAPSED
+
+    def setDragWidget(self, widget: QWidget | None = None) -> None:
+        """Bind a drag surface; None selects the target's empty space.
+
+        Destroying the surface suspends dragging until another surface is bound.
+        Docking and auto-hide remain available in the meantime.
+        """
+        if self._state == _DockState.DETACHED:
+            return
+        surface = self._target if widget is None else widget
+        if surface is not self._target and (
+            surface.isWindow() or not self._target.isAncestorOf(surface)
+        ):
+            raise ValueError("drag_widget must belong to target")
+        self._finish_drag()
+        self._snap_timer.stop()
+        self._unbind_surface()
+        self._surface = surface
+        if surface is not self._target:
+            surface.installEventFilter(self)
+            self._surface_connection = surface.destroyed.connect(self._surface_destroyed)
+
+    def _unbind_surface(self) -> None:
+        if self._surface_connection is not None:
+            if self._surface_connection:
+                QObject.disconnect(self._surface_connection)
+            self._surface_connection = None
+        if (
+            self._surface is not None
+            and isValid(self._surface)
+            and self._surface is not self._target
+        ):
+            self._surface.removeEventFilter(self)
+        self._surface = None
+
+    def _surface_destroyed(self) -> None:
+        self._surface = None
+        self._surface_connection = None
+        self._finish_drag()
+        self._snap_timer.stop()
+
+    def dismiss(self) -> None:
+        """Hide the target and its handle, clearing docking without closing it.
+
+        Use this instead of target.hide() when the target may already be collapsed:
+        Qt does not send another Hide event for an already hidden widget.
+        """
+        if self._state == _DockState.DETACHED:
+            return
+        self._cancel_activity()
+        state = _DockState.FLOATING if self.isEnabled() else _DockState.DISABLED
+        self._transition(state, show=False)
 
     def detach(self) -> None:
         """Restore a collapsed target and permanently remove this controller."""
-        self.setEnabled(False)
-        self._attached = False
+        if self._state == _DockState.DETACHED:
+            return
+        self._cancel_activity()
+        self._unbind_surface()
         self._target.removeEventFilter(self)
-        self._surface.removeEventFilter(self)
-        self._refresh_timer.stop()
+        for connection in self._connections:
+            if connection:
+                QObject.disconnect(connection)
+        self._connections.clear()
+        self._transition(_DockState.DETACHED, show=True if self.isCollapsed() else None)
+
+    def _transition(
+        self,
+        state: _DockState,
+        side: DockSide = DockSide.NONE,
+        *,
+        show: bool | None = None,
+        animate: bool = False,
+        activate: bool = False,
+    ) -> bool:
+        """Commit geometry, visibility and timers before notifying observers."""
+        assert (side != DockSide.NONE) == (state in (_DockState.DOCKED, _DockState.COLLAPSED))
+        self._revision += 1
+        revision = self._revision
+        self._animation.stop()
+        self._hide_timer.stop()
         self._foreground_timer.stop()
         self._foreground_settle_timer.stop()
-
-    def _set_side(self, side: DockSide) -> None:
-        if side != self._side:
-            self._side = side
-            self.dockSideChanged.emit(side)
+        self._state, self._side = state, side
+        changing = self._changing_visibility
+        self._changing_visibility = True
+        try:
+            if state == _DockState.COLLAPSED:
+                self._position()
+                if not self._is_current(revision):
+                    return False
+                self._target.hide()
+                if not self._is_current(revision):
+                    return False
+                self._handle.show()
+                self._handle.raise_()
+            else:
+                self._handle.hide()
+                if show is True:
+                    self._target.show()
+                elif show is False:
+                    self._target.hide()
+                if not self._is_current(revision):
+                    return False
+                if state == _DockState.DOCKED:
+                    self._position(animate=animate)
+        finally:
+            self._changing_visibility = changing
+        if not self._is_current(revision):
+            return False
         self._sync_monitor()
+        if activate:
+            self._schedule_foreground()
+        self._publish_state()
+        return self._is_current(revision)
 
-    def _set_collapsed(self, collapsed: bool) -> None:
-        if collapsed != self._collapsed:
-            self._collapsed = collapsed
-            self.collapsedChanged.emit(collapsed)
+    def _is_current(self, revision: int) -> bool:
+        # A widget's show/hide/move handler can itself invoke another transition.
+        return isValid(self) and self._revision == revision
+
+    def _publish_state(self) -> None:
+        # Slots may immediately disable, detach, dismiss or reopen the target.
+        # Emit only committed values and reconcile again after each callback.
+        if self._notifying:
+            return
+        self._notifying = True
+        try:
+            while isValid(self):
+                if self._notified_side != self._side:
+                    self._notified_side = self._side
+                    self.dockSideChanged.emit(self._side)
+                elif self._notified_collapsed != self.isCollapsed():
+                    self._notified_collapsed = self.isCollapsed()
+                    self.collapsedChanged.emit(self.isCollapsed())
+                else:
+                    break
+        finally:
+            self._notifying = False
 
     def _screen(self, point: QPoint | None = None):
         center = self._target.frameGeometry().center() if point is None else point
@@ -273,9 +412,10 @@ class EdgeDockController(QObject):
         if distances[side] <= self._config.dock_distance:
             self.dock(side)
         else:
-            self._set_side(DockSide.NONE)
             # Disabled edges still constrain the released frame, without auto-hide.
             rect = _edge_rect(frame, area, DockSide.NONE, self._config.safe_margin)
+            if not self._transition(_DockState.FLOATING):
+                return
             if rect != frame:
                 self._move_frame(rect, animate=True)
 
@@ -287,9 +427,8 @@ class EdgeDockController(QObject):
         if not self.isEnabled():
             return
         if side == DockSide.NONE:
-            if self._collapsed:
-                self.expand()
-            self._reset()
+            self._cancel_activity()
+            self._transition(_DockState.FLOATING, show=True if self.isCollapsed() else None)
             return
         if (
             not self._target.isVisible()
@@ -297,9 +436,8 @@ class EdgeDockController(QObject):
             or self._target.isFullScreen()
         ):
             return
-        self._animation.stop()
-        self._set_side(side)
-        self._position(animate=True)
+        self._cancel_activity()
+        self._transition(_DockState.DOCKED, side, animate=True)
 
     def _position(self, *, animate: bool = False) -> None:
         screen = self._screen()
@@ -308,7 +446,7 @@ class EdgeDockController(QObject):
         frame = self._target.frameGeometry()
         rect = _edge_rect(frame, screen.availableGeometry(), self._side, self._config.safe_margin)
         self._move_frame(rect, animate=animate)
-        if self._collapsed:
+        if isValid(self) and self.isCollapsed():
             self._position_handle(rect, screen.availableGeometry())
 
     def _move_frame(self, rect: QRect, *, animate: bool) -> None:
@@ -341,10 +479,8 @@ class EdgeDockController(QObject):
 
     def _can_hide(self) -> bool:
         return (
-            self.isEnabled()
+            self._state == _DockState.DOCKED
             and self._auto_hide
-            and self._side != DockSide.NONE
-            and not self._collapsed
             and self._target.isVisible()
             and not self._target.isMinimized()
             and not self._target.isMaximized()
@@ -358,13 +494,7 @@ class EdgeDockController(QObject):
         )
 
     def _sync_monitor(self) -> None:
-        active = (
-            self.isEnabled()
-            and self._auto_hide
-            and self._side != DockSide.NONE
-            and not self._collapsed
-            and self._target.isVisible()
-        )
+        active = self._state == _DockState.DOCKED and self._auto_hide and self._target.isVisible()
         if active:
             self._monitor.start()
         else:
@@ -382,23 +512,12 @@ class EdgeDockController(QObject):
         """Auto-hide only when idle, outside the window, and without open popups."""
         if not self._can_hide():
             return
-        self._foreground_timer.stop()
-        self._foreground_settle_timer.stop()
-        self._hide_timer.stop()
-        self._changing_visibility = True
-        try:
-            self._set_collapsed(True)
-            self._position()
-            self._target.hide()
-            self._handle.show()
-            self._handle.raise_()
-        finally:
-            self._changing_visibility = False
-        self._sync_monitor()
+        self._cancel_activity()
+        self._transition(_DockState.COLLAPSED, self._side)
 
     def _raise_and_activate_target(self) -> None:
         """Restore the target to the foreground without changing its topmost flag."""
-        if not self.isEnabled() or self._collapsed or not self._target.isVisible():
+        if not self.isEnabled() or self.isCollapsed() or not self._target.isVisible():
             return
         self._target.raise_()
         self._target.activateWindow()
@@ -407,6 +526,8 @@ class EdgeDockController(QObject):
             bring_window_to_front(int(handle.winId()))
 
     def _schedule_foreground(self) -> None:
+        if not self.isEnabled() or self.isCollapsed() or not self._target.isVisible():
+            return
         self._raise_and_activate_target()
         self._foreground_timer.start(0)
         if uses_windows_window_state():
@@ -415,7 +536,7 @@ class EdgeDockController(QObject):
     def _check_restored_foreground(self) -> None:
         if (
             not self.isEnabled()
-            or self._collapsed
+            or self.isCollapsed()
             or not self._target.isVisible()
             or not self._target.frameGeometry().contains(QCursor.pos())
             or QApplication.activePopupWidget() is not None
@@ -428,23 +549,10 @@ class EdgeDockController(QObject):
 
     def expand(self) -> None:
         """Show the target and remove its edge handle, including external reopens."""
-        if not self._attached:
+        if self._state == _DockState.DETACHED:
             return
-        self._hide_timer.stop()
-        self._handle.hide()
-        was_collapsed = self._collapsed
-        self._changing_visibility = True
-        try:
-            self._target.show()
-            if was_collapsed:
-                # Hidden QWidget geometry can lag behind platform move events.
-                # Reapply the edge after restoring the native window.
-                self._position()
-            self._set_collapsed(False)
-        finally:
-            self._changing_visibility = False
-        self._schedule_foreground()
-        self._sync_monitor()
+        state = _DockState.DOCKED if self.isCollapsed() else self._state
+        self._transition(state, self._side, show=True, activate=True)
 
     def _finish_drag(self) -> None:
         was_system_move = self._system_move
@@ -453,20 +561,28 @@ class EdgeDockController(QObject):
         self._press = None
         self._dragging = False
         if self._saved_cursor is not None:
-            self._surface.setCursor(self._saved_cursor)
+            if self._surface is not None and isValid(self._surface):
+                self._surface.setCursor(self._saved_cursor)
             self._saved_cursor = None
-        if was_system_move and isinstance(self._target, ModernWindow):
+        if was_system_move and isValid(self._target) and isinstance(self._target, ModernWindow):
             self._target._finish_system_move()
 
-    def _reset(self) -> None:
-        self._snap_timer.stop()
-        self._foreground_timer.stop()
-        self._foreground_settle_timer.stop()
+    def _cancel_activity(self) -> None:
+        for timer in (
+            self._monitor,
+            self._hide_timer,
+            self._refresh_timer,
+            self._snap_timer,
+            self._foreground_timer,
+            self._foreground_settle_timer,
+        ):
+            timer.stop()
         self._animation.stop()
         self._finish_drag()
-        self._handle.hide()
-        self._set_collapsed(False)
-        self._set_side(DockSide.NONE)
+
+    def _reset(self) -> None:
+        self._cancel_activity()
+        self._transition(_DockState.FLOATING)
 
     def _start_system_drag(self, position: QPoint) -> bool:
         # Mark the handoff before entering the OS move loop: it can release Qt's
@@ -507,13 +623,19 @@ class EdgeDockController(QObject):
         return pressed
 
     def _watch_screen(self, screen) -> None:
-        screen.availableGeometryChanged.connect(self._schedule_refresh)
-        screen.geometryChanged.connect(self._schedule_refresh)
-        screen.logicalDotsPerInchChanged.connect(self._schedule_refresh)
+        if self._state == _DockState.DETACHED:
+            return
+        self._connections.extend(
+            (
+                screen.availableGeometryChanged.connect(self._schedule_refresh),
+                screen.geometryChanged.connect(self._schedule_refresh),
+                screen.logicalDotsPerInchChanged.connect(self._schedule_refresh),
+            )
+        )
         self._schedule_refresh()
 
     def _schedule_refresh(self, *args) -> None:
-        if self._attached and self._side != DockSide.NONE:
+        if self.isEnabled() and self._side != DockSide.NONE:
             self._refresh_timer.start(0)
 
     def _refresh_geometry(self) -> None:
@@ -526,19 +648,21 @@ class EdgeDockController(QObject):
             return False
         kind = event.type()
         if watched is self._target:
-            if kind in (QEvent.Type.Hide, QEvent.Type.Close):
+            if kind == QEvent.Type.Close:
+                # Close is a request, not a completed hide. Restore first so a
+                # veto or a confirmation dialog cannot strand a hidden target.
+                # An accepted close subsequently sends Hide and clears state.
+                if self.isCollapsed() and not self._changing_visibility:
+                    self.expand()
+            elif kind == QEvent.Type.Hide:
                 if not self._changing_visibility:
                     self._reset()
             elif kind == QEvent.Type.Show:
                 if not self._changing_visibility:
-                    was_collapsed = self._collapsed
-                    self._handle.hide()
-                    if self._collapsed:
-                        self._position()
-                    self._set_collapsed(False)
-                    if was_collapsed:
-                        self._schedule_foreground()
-                    self._sync_monitor()
+                    if self.isCollapsed():
+                        self._transition(_DockState.DOCKED, self._side, activate=True)
+                    else:
+                        self._sync_monitor()
             elif kind == QEvent.Type.WindowStateChange:
                 self._reset()
             elif kind in (QEvent.Type.Resize, QEvent.Type.ScreenChangeInternal):
@@ -547,11 +671,11 @@ class EdgeDockController(QObject):
                 kind == QEvent.Type.Move
                 and not self._moving
                 and not self._changing_visibility
-                and not self._collapsed
+                and not self.isCollapsed()
                 and self._animation.state() != QPropertyAnimation.State.Running
             ):
-                self._set_side(DockSide.NONE)
-        if watched is self._surface:
+                self._transition(_DockState.FLOATING)
+        if self._surface is not None and watched is self._surface:
             if kind == QEvent.Type.Enter:
                 self._hide_timer.stop()
             elif kind == QEvent.Type.UngrabMouse and not self._system_move:
@@ -588,7 +712,8 @@ class EdgeDockController(QObject):
                     self._dragging = True
                     self._saved_cursor = self._surface.cursor()
                     self._surface.setCursor(Qt.CursorShape.ClosedHandCursor)
-                    self._set_side(DockSide.NONE)
+                    if not self._transition(_DockState.FLOATING):
+                        return True
                 # Do not clamp during a drag: the pointer can cross onto another monitor.
                 self._target.move(self._start_pos + delta)
                 return True

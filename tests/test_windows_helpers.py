@@ -138,9 +138,7 @@ def test_window_is_at_cursor_uses_native_hit_test(monkeypatch, hit_root) -> None
     calls = []
 
     class User32:
-        WindowFromPoint = _NativeFunction(
-            lambda point: calls.append((point.x, point.y)) or 11111
-        )
+        WindowFromPoint = _NativeFunction(lambda point: calls.append((point.x, point.y)) or 11111)
         GetAncestor = _NativeFunction(lambda hit, mode: hit_root)
 
     monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: User32())

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, QRect, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QPointF, QRect, Qt, Signal
 from PySide6.QtGui import QCursor, QEnterEvent, QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QMenu, QVBoxLayout, QWidget
@@ -316,6 +318,7 @@ def test_handle_hover_and_external_show_restore_without_stale_handle(docked):
 
 def test_expand_raises_and_activates_target(docked, monkeypatch):
     window, controller, _, _ = docked
+    controller.dock(DockSide.LEFT)
     calls = []
     monkeypatch.setattr(window, "raise_", lambda: calls.append("raise"))
     monkeypatch.setattr(window, "activateWindow", lambda: calls.append("activate"))
@@ -342,6 +345,7 @@ def test_expand_raises_and_activates_target(docked, monkeypatch):
 
 def test_external_show_restores_foreground_after_show_event(docked, monkeypatch):
     window, controller, _, _ = docked
+    controller.dock(DockSide.LEFT)
     calls = []
     monkeypatch.setattr(window, "raise_", lambda: calls.append("raise"))
     monkeypatch.setattr(window, "activateWindow", lambda: calls.append("activate"))
@@ -558,3 +562,281 @@ def test_windows_drag_completion_uses_live_state_when_qt_release_is_missing(dock
     assert not controller._system_move
     controller.collapse()
     assert controller.isCollapsed()  # Stale Qt LeftButton must not block auto-hide.
+
+
+@pytest.mark.parametrize("collapsed", [False, True])
+def test_rejected_close_preserves_accessible_docked_window(
+    theme_manager_instance, monkeypatch, collapsed
+):
+    class VetoWindow(QWidget):
+        def closeEvent(self, event):
+            # A confirmation dialog can now safely be parented to a visible target.
+            assert self.isVisible()
+            event.ignore()
+
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
+    window = VetoWindow(None, Qt.FramelessWindowHint)
+    window.resize(240, 160)
+    controller = EdgeDockController(window, DockConfig(anim_duration=0, hide_delay=10000))
+    try:
+        window.show()
+        _APP.processEvents()
+        controller.dock(DockSide.LEFT)
+        if collapsed:
+            controller.collapse()
+            assert controller.isCollapsed()
+        assert window.close() is False
+        _APP.processEvents()
+        assert window.isVisible()
+        assert controller.dockSide() == DockSide.LEFT
+        assert not controller.isCollapsed()
+        assert not controller._handle.isVisible()
+    finally:
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+@pytest.mark.parametrize("collapsed", [False, True])
+def test_dismiss_removes_all_restore_ui_and_allows_reopening(docked, collapsed):
+    window, controller, _, _ = docked
+    controller.dock(DockSide.RIGHT)
+    if collapsed:
+        controller.collapse()
+    controller.dismiss()
+    controller.dismiss()
+    QTest.qWait(250)  # Old hide/monitor/foreground callbacks must not resurrect it.
+    assert not window.isVisible()
+    assert not controller._handle.isVisible()
+    assert not controller.isCollapsed()
+    assert controller.dockSide() == DockSide.NONE
+    assert controller.isEnabled()
+    controller.expand()
+    assert window.isVisible()
+    assert controller.dockSide() == DockSide.NONE
+
+
+def test_plain_hide_of_collapsed_target_requires_explicit_dismiss(docked):
+    window, controller, _, _ = docked
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    window.hide()  # Already hidden: Qt sends no Hide event.
+    assert controller.isCollapsed()
+    assert controller._handle.isVisible()
+    controller.dismiss()
+    assert not controller._handle.isVisible()
+
+
+def test_destroyed_drag_surface_can_be_replaced_and_detached(docked):
+    window, controller, strip, field = docked
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    strip.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert controller.isCollapsed()
+    controller.expand()
+    controller.setAutoHide(False)
+    replacement = QLabel("Replacement", window)
+    window.layout().addWidget(replacement)
+    _APP.processEvents()
+    controller.setDragWidget(replacement)
+    _drag(replacement, QPoint(100, 50))
+    assert controller.dockSide() == DockSide.NONE
+    start = window.pos()
+    QTest.mouseClick(field, Qt.LeftButton)
+    assert window.pos() == start
+    replacement.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    controller.detach()
+    controller.detach()
+    assert not controller.isEnabled()
+    assert window.isVisible()
+
+
+def test_destroyed_surface_cancels_native_drag_and_pending_snap(docked, monkeypatch):
+    window, controller, strip, _ = docked
+    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: True)
+    local = strip.rect().center()
+    pointer = strip.mapToGlobal(local)
+    _mouse(strip, QEvent.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton)
+    window.move(window.screen().availableGeometry().left() + 5, window.y())
+    strip.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    controller._check_drag_finished()
+    _APP.processEvents()
+    assert controller.dockSide() == DockSide.NONE
+    assert controller._press is None
+    assert not controller._drag_watch.isActive()
+
+
+def test_binding_new_surface_removes_old_surface_drag_behavior(docked):
+    window, controller, strip, _ = docked
+    replacement = QLabel("Replacement", window)
+    window.layout().addWidget(replacement)
+    _APP.processEvents()
+    controller.setDragWidget(replacement)
+    start = window.pos()
+    _drag(strip, QPoint(100, 50))
+    assert window.pos() == start
+    _drag(replacement, QPoint(100, 50))
+    assert window.pos() != start
+
+
+def test_only_one_attached_controller_can_own_a_target(docked):
+    window, controller, _, _ = docked
+    with pytest.raises(ValueError, match="already has"):
+        EdgeDockController(window)
+    controller.setEnabled(False)
+    with pytest.raises(ValueError, match="already has"):
+        EdgeDockController(window)
+    controller.detach()
+    replacement = EdgeDockController(window, DockConfig(anim_duration=0))
+    replacement.dock(DockSide.RIGHT)
+    assert replacement.dockSide() == DockSide.RIGHT
+
+
+def test_observers_see_committed_visibility_and_can_detach_during_collapse(docked):
+    window, controller, _, _ = docked
+    observed = []
+
+    def collapsed_changed(collapsed):
+        observed.append((collapsed, window.isVisible(), controller._handle.isVisible()))
+        if collapsed:
+            controller.detach()
+
+    controller.collapsedChanged.connect(collapsed_changed)
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    assert observed == [(True, False, True), (False, True, False)]
+    assert window.isVisible()
+    assert not controller.isEnabled()
+    assert controller.dockSide() == DockSide.NONE
+    QTest.qWait(250)
+    assert not controller._handle.isVisible()
+
+
+def test_dock_observer_can_disable_without_leaving_an_animation(docked):
+    window, previous, strip, _ = docked
+    previous.detach()
+    controller = EdgeDockController(window, DockConfig(anim_duration=100), drag_widget=strip)
+
+    def side_changed(side):
+        if side != DockSide.NONE:
+            controller.setEnabled(False)
+
+    controller.dockSideChanged.connect(side_changed)
+    controller.dock(DockSide.RIGHT)
+    position = window.pos()
+    QTest.qWait(150)
+    assert window.pos() == position
+    assert not controller.isEnabled()
+    assert controller.dockSide() == DockSide.NONE
+
+
+def test_detach_disconnects_screen_notifications(docked):
+    class Screen(QObject):
+        availableGeometryChanged = Signal(QRect)
+        geometryChanged = Signal(QRect)
+        logicalDotsPerInchChanged = Signal(float)
+
+    class Controller(EdgeDockController):
+        def _schedule_refresh(self, *args):
+            calls.append(True)
+            super()._schedule_refresh(*args)
+
+    window, previous, _, _ = docked
+    previous.detach()
+    calls = []
+    controller = Controller(window)
+    screen = Screen()
+    controller._watch_screen(screen)
+    calls.clear()
+    screen.geometryChanged.emit(QRect(0, 0, 1000, 800))
+    assert calls == [True]
+    controller.detach()
+    calls.clear()
+    screen.geometryChanged.emit(QRect(0, 0, 800, 600))
+    screen.availableGeometryChanged.emit(QRect(0, 0, 800, 560))
+    screen.logicalDotsPerInchChanged.emit(144.0)
+    assert calls == []
+
+
+def test_detached_controller_cannot_mutate_target(docked):
+    window, controller, strip, _ = docked
+    controller.detach()
+    controller.dismiss()
+    assert window.isVisible()
+    window.hide()
+    controller.expand()
+    controller.setEnabled(True)
+    controller.setDragWidget(strip)
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    _APP.processEvents()
+    assert not window.isVisible()
+    assert not controller._handle.isVisible()
+    assert controller.dockSide() == DockSide.NONE
+    assert not controller.isEnabled()
+
+
+def test_widget_hide_handler_can_detach_without_leaving_a_restore_handle(
+    theme_manager_instance, monkeypatch
+):
+    class Window(QWidget):
+        def hideEvent(self, event):
+            if controller.isCollapsed():
+                controller.detach()
+            super().hideEvent(event)
+
+    monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
+    window = Window(None, Qt.FramelessWindowHint)
+    window.resize(240, 160)
+    controller = EdgeDockController(window, DockConfig(anim_duration=0))
+    try:
+        window.show()
+        _APP.processEvents()
+        controller.dock(DockSide.LEFT)
+        controller.collapse()
+        assert window.isVisible()
+        assert not controller.isEnabled()
+        assert not controller._handle.isVisible()
+        assert not controller.isCollapsed()
+    finally:
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+@pytest.mark.parametrize("action", ["dismiss", "setEnabled", "detach"])
+def test_lifecycle_action_cancels_a_pending_snap(docked, action):
+    window, controller, _, _ = docked
+    area = window.screen().availableGeometry()
+    window.move(area.left() + 5, area.top() + 150)
+    controller._snap_timer.start(0)
+    if action == "setEnabled":
+        controller.setEnabled(False)
+    else:
+        getattr(controller, action)()
+    _APP.processEvents()
+    assert controller.dockSide() == DockSide.NONE
+    assert not controller.isCollapsed()
+    assert not controller._handle.isVisible()
+
+
+def test_target_destruction_during_system_drag_does_not_call_dead_window(
+    theme_manager_instance, monkeypatch
+):
+    errors = []
+    monkeypatch.setattr(sys, "excepthook", lambda kind, error, traceback: errors.append(error))
+    window = ModernWindow()
+    strip = QLabel("Drag", window)
+    controller = EdgeDockController(window, drag_widget=strip)
+    window.show()
+    _APP.processEvents()
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
+    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: True)
+    assert controller._start_system_drag(window.pos())
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _APP.processEvents()
+    assert not isValid(controller)
+    assert not isValid(window)
+    assert errors == []

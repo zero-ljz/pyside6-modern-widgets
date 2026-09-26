@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QLibraryInfo, QLocale, QSize, Qt, QTimer, QTranslator
+from PySide6.QtCore import QCoreApplication, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -45,9 +44,15 @@ from pyside6_modern_widgets import (
     NotificationManager,
     NotificationPosition,
     ThemeMode,
-    load_translator,
     theme_manager,
 )
+
+if __package__:
+    from ._example_i18n import example_locale, install_translators
+    from .edge_dock_example import EdgeDockExample
+else:
+    from _example_i18n import example_locale, install_translators
+    from edge_dock_example import EdgeDockExample
 
 
 def standard_icon(name: QStyle.StandardPixmap) -> QIcon:
@@ -62,6 +67,7 @@ class ExampleWindow(ModernWindow):
         self.setTitleAlignment("center")
         self.setWindowIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
         self.resize(1000, 640)
+        self.edge_dock_example: EdgeDockExample | None = None
 
         self.navigation = NavigationView()
         self.setCentralWidget(self.navigation)
@@ -118,6 +124,11 @@ class ExampleWindow(ModernWindow):
             standard_icon(QStyle.StandardPixmap.SP_MessageBoxInformation),
         )
         self.navigation.addPage(
+            self._create_edge_dock_page(),
+            self.tr("Edge docking"),
+            standard_icon(QStyle.StandardPixmap.SP_TitleBarNormalButton),
+        )
+        self.navigation.addPage(
             self._create_settings_page(),
             self.tr("Settings"),
             QIcon(":/pyside6_modern_widgets/icons/settings.png"),
@@ -153,6 +164,34 @@ class ExampleWindow(ModernWindow):
         layout.addWidget(description)
         layout.addStretch()
         return page
+
+    def _create_edge_dock_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("Edge docking"))
+        description = QLabel(
+            self.tr(
+                "Open a floating tool and its controls to try screen-edge docking. "
+                "Drag between displays, hide and restore the tool, replace its drag strip, "
+                "or detach and reattach docking."
+            )
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        launch = QPushButton(self.tr("Open edge-docking demo"))
+        launch.clicked.connect(self._show_edge_dock_example)
+        layout.addWidget(launch, 0, Qt.AlignmentFlag.AlignLeft)
+        note = QLabel(self.tr("Opening again reuses the same demo and restores the floating tool."))
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch()
+        return page
+
+    def _show_edge_dock_example(self) -> None:
+        if self.edge_dock_example is None:
+            self.edge_dock_example = EdgeDockExample(self)
+        self.edge_dock_example.showNormal()
+        self.edge_dock_example.raise_()
+        self.edge_dock_example.activateWindow()
+        self.edge_dock_example.show_floating()
 
     def _create_dialog_page(self) -> QWidget:
         page, layout = self._create_page("ModernDialog")
@@ -489,6 +528,8 @@ class ExampleWindow(ModernWindow):
     def closeEvent(self, event) -> None:
         super().closeEvent(event)
         if event.isAccepted():
+            if self.edge_dock_example is not None:
+                self.edge_dock_example.close()
             for manager in self.notification_managers:
                 manager.clear()
 
@@ -1023,35 +1064,11 @@ class ExampleWindow(ModernWindow):
             self.showMaximized()
 
 
-def _install_translators(app: QApplication, locale: QLocale) -> None:
-    qt_translator = QTranslator(app)
-    if qt_translator.load(
-        locale,
-        "qtbase",
-        "_",
-        QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath),
-    ):
-        app.installTranslator(qt_translator)
-
-    widgets_translator = load_translator(locale, app)
-    if widgets_translator is not None:
-        app.installTranslator(widgets_translator)
-
-    example_translator = QTranslator(app)
-    if example_translator.load(
-        locale,
-        "examples",
-        "_",
-        str(Path(__file__).with_name("translations")),
-    ):
-        app.installTranslator(example_translator)
-
-
 def main() -> int:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    locale = QLocale.system()
-    _install_translators(app, locale)
+    locale = example_locale()
+    install_translators(app, locale)
     app.setApplicationName(QCoreApplication.translate("ExampleWindow", "Modern Widgets Example"))
     window = ExampleWindow()
     window.show()

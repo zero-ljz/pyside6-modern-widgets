@@ -137,6 +137,8 @@ dock.setEnabled(False)  # Restore a collapsed window and suspend the behavior.
 dock.setEnabled(True)
 dock.dock(DockSide.RIGHT)  # Explicitly dock a visible window.
 dock.expand()  # Also use this when reopening from a launcher or shortcut.
+dock.dismiss()  # Hide both the window and its handle, without closing the window.
+dock.setDragWidget(new_drag_strip)  # Rebind after replacing your window content.
 ```
 
 `DockConfig` controls the snap distance, margin, handle dimensions and colors, animation
@@ -155,13 +157,26 @@ Auto-hide waits while the pointer is inside, a mouse button is down, an animatio
 is running, or a popup/modal dialog is open. Hovering or clicking the gray edge
 handle restores the window. Its default color is RGB (150, 150, 150), with
 RGB (200, 200, 200) on hover; override `handle_color` / `handle_hover_color` in
-`DockConfig` to customize it. External `show()` removes the handle; external
-hide/close, minimize, maximize, or full-screen transitions clear docking state.
+`DockConfig` to customize it. External `show()` removes the handle. Hiding a visible
+window, accepting a close, minimizing, maximizing, or entering full-screen clears
+docking state. A close request on a collapsed window expands it before its
+`closeEvent()` runs: if closing is cancelled, the window remains visible and docked.
+Use `dock.dismiss()` to hide a window and remove its handle from any attached state.
+Calling `window.hide()` on an already collapsed window does **not** dismiss the
+handle: the window is already hidden, so Qt sends no additional hide event.
 Screen geometry changes reposition docked windows and handles. Maximized and
 full-screen windows do not dock. The target owns the controller and handle;
-`detach()` permanently removes the behavior and restores a collapsed window.
+`detach()` permanently removes the behavior, disconnects external notifications,
+and restores a collapsed window. Repeated detaches are safe; subsequent commands
+on that controller do nothing. Only one controller may be attached to each target,
+including while disabled; detach it before attaching a replacement.
+If the drag widget is destroyed, dragging stops while docking and auto-hide remain
+available. Bind a replacement with `setDragWidget(widget)`, or pass `None` to use
+the target's empty space.
 Inspect `dockSide()` / `isCollapsed()` or connect `dockSideChanged` /
-`collapsedChanged` to observe state.
+`collapsedChanged` to observe state. Notifications are emitted after geometry,
+visibility, and timers have been updated; slots may disable, dismiss, or detach
+the controller immediately.
 
 Native title-bar dragging remains controlled by the platform; use the dedicated
 drag widget for automatic snapping, or call `snap()` after an external move.
@@ -173,7 +188,12 @@ This behavior requires a desktop platform that permits global window placement
 and pointer queries; Wayland compositors may restrict those operations.
 The controller does not change application quit policy or the target's window flags.
 
-Run `python examples/edge_dock_example.py` for a floating-window example.
+Run `python examples/edge_dock_example.py` for a floating tool with a separate
+controls window. Try dismiss/restore, replacing the drag strip, and detaching and
+reattaching docking without losing the ability to reopen the tool.
+The navigation example also provides an **Edge docking** page with a launch button.
+Both support English and Simplified Chinese; pass `--language en` or
+`--language zh_CN` to override the system language at startup.
 
 ## Modern combo box
 

@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add an edge-docking demo launcher to the navigation gallery, reusing the same
+  owned demo window and cleaning up its restore handle when the gallery closes.
+- Translate the edge-docking demo into Simplified Chinese and add `--language en`
+  / `--language zh_CN` startup overrides to the navigation and edge-dock examples.
+
+### Changed
+
+- Refactor edge docking around explicit floating, docked, collapsed, disabled,
+  and detached states, committing visibility and timers before state notifications.
+- Add `EdgeDockController.dismiss()` to hide both the target and its restore handle.
+  Use it instead of `window.hide()` when the window may already be collapsed.
+- Enforce one attached edge-dock controller per target and add `setDragWidget()`
+  for replacing a destroyed or obsolete drag surface.
+
+### Fixed
+
+- Expand collapsed windows before processing close requests so cancelling a close
+  keeps the window accessible and docked.
+- Cancel dragging safely when the drag surface is destroyed, and disconnect screen
+  and system-move notifications on detach.
+- Keep edge-dock state consistent when notification handlers disable, dismiss,
+  or detach the controller during a transition.
+
 ## [0.5.13] - 2026-09-23
 
 ### Added

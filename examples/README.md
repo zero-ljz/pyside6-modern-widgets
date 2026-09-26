@@ -12,21 +12,54 @@ Run the window and navigation example:
 python examples/navigation_view_example.py
 ```
 
-The navigation and tab examples support English and Simplified Chinese. English is the source
+The navigation, tab, and edge-dock examples support English and Simplified Chinese. English is the source
 language; when the system locale is `zh_CN`, each example installs Qt's standard
 catalog, the component library catalog, and its own `examples_zh_CN` catalog
 before constructing the window. Library-owned and example-owned text therefore
 remain in separate translation domains.
 
+In the navigation example, select **Edge docking** and click **Open edge-docking
+demo**. Repeated launches reuse the demo and restore its floating tool. Closing
+the demo leaves navigation open; closing navigation also closes the demo and its
+restore handle.
+
+Navigation and standalone edge docking also accept an explicit language override:
+
+```shell
+python examples/navigation_view_example.py --language zh_CN
+python examples/navigation_view_example.py --language en
+python examples/edge_dock_example.py --language zh_CN
+```
+
+Language is selected at startup. The launched demo shares the navigation example's
+language, including buttons, instructions, docking sides, and status messages.
+
 Run `python examples/edge_dock_example.py` for the standalone screen-edge docking
-example. Drag its labeled strip between displays or near an edge, toggle auto-hide,
-and move away to show the restore handle. The text field retains normal selection.
+example. It opens a controls window and a floating tool. Drag the tool's labeled
+strip between displays or near an edge, toggle auto-hide, and move away to show
+the restore handle. The text field retains normal selection. This example enables
+all four edges, including the optional bottom edge.
+
+The controls window remains available while the tool is hidden:
+
+- **Hide tool and handle** uses `dismiss()`, including when the tool is already
+  collapsed; **Show / restore tool** uses `expand()`. Closing the tool also leaves
+  the controls available to reopen it.
+- **Replace drag strip** binds a new widget with `setDragWidget()` and deletes the
+  old strip without replacing the controller.
+- **Enable docking** temporarily disables or re-enables the existing controller.
+- **Detach docking** restores a collapsed tool and removes docking permanently;
+  **Attach docking** creates a new controller for the same tool.
+
+The status line observes the committed docking side and handle visibility. Close
+the controls window to exit the example.
 
 After changing example text, update and compile its catalog with:
 
 ```shell
 pyside6-lupdate -extensions py examples/navigation_view_example.py \
-  examples/tab_view_example.py -source-language en_US -target-language zh_CN \
+  examples/tab_view_example.py examples/edge_dock_example.py \
+  -source-language en_US -target-language zh_CN \
   -ts examples/translations/examples_zh_CN.ts
 pyside6-lrelease examples/translations/examples_zh_CN.ts \
   -qm examples/translations/examples_zh_CN.qm
@@ -34,7 +67,7 @@ pyside6-lrelease examples/translations/examples_zh_CN.ts \
 
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
 `ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**,
-**Notifications**, **Toolbar**, and **Tab widget** pages.
+**Notifications**, **Toolbar**, **Tab widget**, and **Edge docking** pages.
 
 The **Toolbar** page compares native `QToolBar` and `ModernToolBar` side by side,
 using matching actions and icon sizes. The shared width slider, text-beside-icons
