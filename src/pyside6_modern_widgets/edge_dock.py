@@ -12,13 +12,14 @@ from PySide6.QtCore import (
     QMetaObject,
     QObject,
     QPoint,
+    QPointF,
     QPropertyAnimation,
     QRect,
     Qt,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QCursor, QIcon, QMouseEvent, QPainter
+from PySide6.QtGui import QColor, QCursor, QIcon, QKeyEvent, QMouseEvent, QPainter, QScreen
 from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import isValid
 
@@ -68,6 +69,7 @@ class DockConfig:
     handle_padding: int = 6
     handle_tooltip: str = ""
     restore_trigger: DockRestoreTrigger = DockRestoreTrigger.HOVER
+    handle_draggable: bool = False
 
     def __post_init__(self) -> None:
         for name in (
@@ -85,10 +87,20 @@ class DockConfig:
             raise ValueError("handle_icon_size must be positive")
         object.__setattr__(self, "handle_icon", QIcon(self.handle_icon))
         object.__setattr__(self, "restore_trigger", DockRestoreTrigger(self.restore_trigger))
+        if self.handle_draggable:
+            object.__setattr__(self, "restore_trigger", DockRestoreTrigger.CLICK)
         sides = tuple(DockSide(side) for side in self.sides)
         if not sides or DockSide.NONE in sides:
             raise ValueError("sides must contain at least one screen edge")
         object.__setattr__(self, "sides", sides)
+
+
+@dataclass
+class _HandleGesture:
+    press: QPoint
+    handle_grab: QPointF
+    window_grab: QPointF
+    dragging: bool = False
 
 
 def _edge_rect(rect: QRect, area: QRect, side: DockSide, margin: int) -> QRect:
@@ -213,7 +225,11 @@ class EdgeDockController(QObject):
         self._system_move = False
         self._saved_cursor: QCursor | None = None
         self._start_pos = QPoint()
+        self._handle_gesture: _HandleGesture | None = None
+        self._handle_anchor: QPoint | None = None
+        self._handle_screen: QScreen | None = None
         self._handle = _EdgeHandle(target, self._config)
+        self._handle.installEventFilter(self)
         self._handle.restored.connect(self.expand)
         self.destroyed.connect(self._handle.deleteLater)
         self._animation = QPropertyAnimation(target, QByteArray(b"pos"), self)
@@ -233,6 +249,9 @@ class EdgeDockController(QObject):
         self._drag_watch = QTimer(self)
         self._drag_watch.setInterval(30)
         self._drag_watch.timeout.connect(self._check_drag_finished)
+        self._handle_drag_watch = QTimer(self)
+        self._handle_drag_watch.setInterval(30)
+        self._handle_drag_watch.timeout.connect(self._check_handle_release)
         self._snap_timer = QTimer(self)
         self._snap_timer.setSingleShot(True)
         self._snap_timer.timeout.connect(self.snap)
@@ -315,18 +334,30 @@ class EdgeDockController(QObject):
 
     def setRestoreTrigger(self, trigger: DockRestoreTrigger | str) -> None:
         if self._state != _DockState.DETACHED:
-            self._update_handle(restore_trigger=DockRestoreTrigger(trigger))
+            trigger = DockRestoreTrigger(trigger)
+            if self.handleDraggable() and trigger != DockRestoreTrigger.CLICK:
+                raise ValueError("disable handle dragging before enabling hover restoration")
+            self._update_handle(restore_trigger=trigger)
+
+    def handleDraggable(self) -> bool:
+        return self._config.handle_draggable
+
+    def setHandleDraggable(self, enabled: bool) -> None:
+        """Enable dragging across edges/screens; enabling selects click restoration."""
+        self._update_handle(handle_draggable=bool(enabled))
 
     def _update_handle(self, **changes) -> None:
         if self._state == _DockState.DETACHED:
             return
         # Validate before assigning so invalid updates preserve the live handle.
-        self._config = replace(self._config, **changes)
+        config = replace(self._config, **changes)
+        self._cancel_handle_gesture()
+        self._config = config
         self._handle._config = self._config
         self._handle.setToolTip(self._config.handle_tooltip)
         self._handle.setAccessibleName(self._config.handle_tooltip or self._target.windowTitle())
         if self.isCollapsed():
-            screen = self._screen()
+            screen = self._placement_screen()
             if screen is not None:
                 self._position_handle(self._target.frameGeometry(), screen.availableGeometry())
         self._handle.update()
@@ -390,6 +421,7 @@ class EdgeDockController(QObject):
         self._cancel_activity()
         self._unbind_surface()
         self._target.removeEventFilter(self)
+        self._handle.removeEventFilter(self)
         for connection in self._connections:
             if connection:
                 QObject.disconnect(connection)
@@ -404,9 +436,11 @@ class EdgeDockController(QObject):
         show: bool | None = None,
         animate: bool = False,
         activate: bool = False,
+        floating_drop: tuple[QPoint, QPointF] | None = None,
     ) -> bool:
         """Commit geometry, visibility and timers before notifying observers."""
         assert (side != DockSide.NONE) == (state in (_DockState.DOCKED, _DockState.COLLAPSED))
+        self._cancel_handle_gesture()
         self._revision += 1
         revision = self._revision
         self._animation.stop()
@@ -414,6 +448,9 @@ class EdgeDockController(QObject):
         self._foreground_timer.stop()
         self._foreground_settle_timer.stop()
         self._state, self._side = state, side
+        if side == DockSide.NONE:
+            self._handle_anchor = None
+            self._handle_screen = None
         changing = self._changing_visibility
         self._changing_visibility = True
         try:
@@ -428,6 +465,10 @@ class EdgeDockController(QObject):
                 self._handle.raise_()
             else:
                 self._handle.hide()
+                if floating_drop is not None:
+                    self._place_floating_drop(*floating_drop)
+                    if not self._is_current(revision):
+                        return False
                 if show is True:
                     self._target.show()
                 elif show is False:
@@ -436,6 +477,9 @@ class EdgeDockController(QObject):
                     return False
                 if state == _DockState.DOCKED:
                     self._position(animate=animate)
+                elif floating_drop is not None:
+                    # Native frame size/DPI may settle only after showing.
+                    self._place_floating_drop(*floating_drop)
         finally:
             self._changing_visibility = changing
         if not self._is_current(revision):
@@ -521,13 +565,19 @@ class EdgeDockController(QObject):
         ):
             return
         self._cancel_activity()
+        self._handle_anchor = None
+        self._handle_screen = None
         self._transition(_DockState.DOCKED, side, animate=True)
 
     def _position(self, *, animate: bool = False) -> None:
-        screen = self._screen()
+        screen = self._placement_screen()
         if screen is None or self._side == DockSide.NONE:
             return
         frame = self._target.frameGeometry()
+        if self._handle_anchor is not None:
+            self._select_target_screen(screen)
+            frame = self._target.frameGeometry()
+            frame.moveCenter(self._handle_anchor)
         rect = _edge_rect(frame, screen.availableGeometry(), self._side, self._config.safe_margin)
         self._move_frame(rect, animate=animate)
         if isValid(self) and self.isCollapsed():
@@ -561,7 +611,7 @@ class EdgeDockController(QObject):
         width = min(width, max(1, area.width() - 2 * cfg.safe_margin))
         height = min(height, max(1, area.height() - 2 * cfg.safe_margin))
         rect = QRect(0, 0, width, height)
-        rect.moveCenter(frame.center())
+        rect.moveCenter(frame.center() if self._handle_anchor is None else self._handle_anchor)
         self._handle.setGeometry(_edge_rect(rect, area, self._side, cfg.safe_margin))
 
     def _can_hide(self) -> bool:
@@ -655,6 +705,7 @@ class EdgeDockController(QObject):
             self._target._finish_system_move()
 
     def _cancel_activity(self) -> None:
+        self._cancel_handle_gesture()
         for timer in (
             self._monitor,
             self._hide_timer,
@@ -727,12 +778,189 @@ class EdgeDockController(QObject):
 
     def _refresh_geometry(self) -> None:
         if self.isEnabled() and self._side != DockSide.NONE:
+            self._cancel_handle_gesture()
             self._position()
             self._handle.update()
+
+    @staticmethod
+    def _nearest_screen(point: QPoint):
+        screen = QApplication.screenAt(point)
+        if screen is not None:
+            return screen
+
+        def distance(screen):
+            area = screen.geometry()
+            dx = max(area.left() - point.x(), 0, point.x() - area.right())
+            dy = max(area.top() - point.y(), 0, point.y() - area.bottom())
+            return dx * dx + dy * dy
+
+        return min(QApplication.screens(), key=distance, default=None)
+
+    def _placement_screen(self):
+        if self._handle_anchor is None:
+            return self._screen()
+        if self._handle_screen in QApplication.screens():
+            return self._handle_screen
+        return self._nearest_screen(self._handle_anchor)
+
+    def _select_target_screen(self, screen) -> None:
+        handle = self._target.windowHandle()
+        if isinstance(screen, QScreen) and handle is not None and handle.screen() != screen:
+            size = self._target.size()
+            handle.setScreen(screen)
+            # Hidden QWidget geometry is cached. Resize its QWindow as well so
+            # showing on a new DPI does not reinterpret the old physical size.
+            handle.resize(size)
+            self._target.resize(size)
+
+    def _place_floating_drop(self, point: QPoint, grab: QPointF) -> None:
+        screen = self._nearest_screen(point)
+        if screen is None:
+            return
+        self._select_target_screen(screen)
+        frame = self._target.frameGeometry()
+        frame.moveTopLeft(
+            point - QPoint(round(grab.x() * frame.width()), round(grab.y() * frame.height()))
+        )
+        self._move_frame(
+            _edge_rect(frame, screen.availableGeometry(), DockSide.NONE, self._config.safe_margin),
+            animate=False,
+        )
+
+    def _cancel_handle_gesture(self, *, restore: bool = True) -> None:
+        if self._handle_gesture is None:
+            return
+        self._handle_gesture = None
+        self._handle_drag_watch.stop()
+        if isValid(self._handle):
+            if QWidget.mouseGrabber() is self._handle:
+                self._handle.releaseMouse()
+            if QWidget.keyboardGrabber() is self._handle:
+                self._handle.releaseKeyboard()
+            self._handle.unsetCursor()
+            if restore and isValid(self._target) and self.isCollapsed():
+                screen = self._placement_screen()
+                if screen is not None:
+                    self._position_handle(self._target.frameGeometry(), screen.availableGeometry())
+
+    def _check_handle_release(self) -> None:
+        if self._handle_gesture is not None and not self._buttons_pressed(left_only=True):
+            if self._handle_gesture.dragging:
+                self._finish_handle_gesture(QCursor.pos())
+            else:
+                # A missing release must not synthesize a click/activation.
+                self._cancel_handle_gesture()
+
+    def _move_handle_gesture(self, point: QPoint) -> None:
+        gesture = self._handle_gesture
+        if gesture is None:
+            return
+        if not gesture.dragging:
+            if (point - gesture.press).manhattanLength() < QApplication.startDragDistance():
+                return
+            gesture.dragging = True
+            self._handle.setCursor(Qt.CursorShape.ClosedHandCursor)
+            self._handle.grabKeyboard()
+        if self._handle_gesture is not gesture:
+            return
+        # Keep the same fractional grab point when Qt changes the handle's DPI.
+        offset = QPoint(
+            round(gesture.handle_grab.x() * self._handle.width()),
+            round(gesture.handle_grab.y() * self._handle.height()),
+        )
+        self._handle.move(point - offset)
+
+    def _finish_handle_gesture(self, point: QPoint) -> None:
+        gesture = self._handle_gesture
+        if gesture is None:
+            return
+        if not gesture.dragging:
+            inside = self._handle.frameGeometry().contains(point)
+            self._cancel_handle_gesture()
+            if inside:
+                self.expand()
+            return
+        self._move_handle_gesture(point)
+        if self._handle_gesture is not gesture:
+            return
+        anchor = self._handle.frameGeometry().center()
+        self._cancel_handle_gesture(restore=False)
+        screen = self._nearest_screen(point)
+        if screen is None:
+            self._position()
+            return
+        area = screen.availableGeometry()
+        gaps = {
+            DockSide.LEFT: point.x() - area.left(),
+            DockSide.RIGHT: area.right() - point.x(),
+            DockSide.TOP: point.y() - area.top(),
+            DockSide.BOTTOM: area.bottom() - point.y(),
+        }
+        side = min(self._config.sides, key=gaps.__getitem__)
+        if gaps[side] <= self._config.dock_distance:
+            self._handle_anchor = anchor
+            self._handle_screen = screen
+            self._transition(_DockState.COLLAPSED, side)
+        else:
+            self._transition(
+                _DockState.FLOATING,
+                show=True,
+                activate=True,
+                floating_drop=(point, gesture.window_grab),
+            )
+
+    def _handle_event(self, event: QEvent) -> bool:
+        kind = event.type()
+        if kind in (QEvent.Type.UngrabMouse, QEvent.Type.UngrabKeyboard, QEvent.Type.Hide):
+            self._cancel_handle_gesture()
+        if (
+            isinstance(event, QKeyEvent)
+            and kind == QEvent.Type.KeyPress
+            and event.key() == Qt.Key.Key_Escape
+        ):
+            self._cancel_handle_gesture()
+            return True
+        if not isinstance(event, QMouseEvent):
+            return False
+        point = event.globalPosition().toPoint()
+        if kind == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            if not self.isCollapsed():
+                return True
+            self._cancel_handle_gesture()
+            frame = self._target.frameGeometry()
+            local = event.position()
+            self._handle_gesture = _HandleGesture(
+                point,
+                QPointF(local.x() / self._handle.width(), local.y() / self._handle.height()),
+                QPointF(
+                    min(1.0, max(0.0, (point.x() - frame.x()) / frame.width())),
+                    min(1.0, max(0.0, (point.y() - frame.y()) / frame.height())),
+                ),
+            )
+            self._handle.grabMouse()
+            self._handle_drag_watch.start()
+            return True
+        if self._handle_gesture is not None:
+            if kind == QEvent.Type.MouseMove:
+                if event.buttons() & Qt.MouseButton.LeftButton:
+                    self._move_handle_gesture(point)
+                else:
+                    self._cancel_handle_gesture()
+                return True
+            if (
+                kind == QEvent.Type.MouseButtonRelease
+                and event.button() == Qt.MouseButton.LeftButton
+            ):
+                self._finish_handle_gesture(point)
+                return True
+        # Suppress stale releases and double-click presses after cancellation.
+        return kind in (QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if not self.isEnabled():
             return False
+        if watched is self._handle and self.handleDraggable():
+            return self._handle_event(event)
         kind = event.type()
         if watched is self._target:
             if kind == QEvent.Type.Close:

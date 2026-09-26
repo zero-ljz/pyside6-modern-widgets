@@ -88,112 +88,122 @@
         <translation>恢复方式</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="93"/>
+        <location filename="../edge_dock_example.py" line="91"/>
+        <source>Drag handle across edges and screens</source>
+        <translation>跨边缘和屏幕拖动把手</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="98"/>
+        <source>Enable handle dragging to move the folded tool. Drop near an edge to keep it folded, or inside a screen to expand. Click to restore; press Escape to cancel a drag.</source>
+        <translation>启用把手拖动后，可移动已折叠的工具。拖到边缘附近松开可保持折叠，拖到屏幕内部松开即可展开。点击恢复，按 Esc 取消拖动。</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="103"/>
         <source>Show / restore tool</source>
         <translation>显示 / 恢复工具</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="95"/>
+        <location filename="../edge_dock_example.py" line="105"/>
         <source>Hide tool and handle</source>
         <translation>隐藏工具和把手</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="102"/>
+        <location filename="../edge_dock_example.py" line="112"/>
         <source>Dock left</source>
         <translation>停靠左侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="103"/>
+        <location filename="../edge_dock_example.py" line="113"/>
         <source>Dock right</source>
         <translation>停靠右侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="104"/>
+        <location filename="../edge_dock_example.py" line="114"/>
         <source>Dock top</source>
         <translation>停靠顶部</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="105"/>
+        <location filename="../edge_dock_example.py" line="115"/>
         <source>Dock bottom</source>
         <translation>停靠底部</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="112"/>
+        <location filename="../edge_dock_example.py" line="122"/>
         <source>Replace drag strip</source>
         <translation>替换拖动区域</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="134"/>
+        <location filename="../edge_dock_example.py" line="145"/>
         <source>Drag here to a screen edge</source>
         <translation>拖动此处至屏幕边缘</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="166"/>
+        <location filename="../edge_dock_example.py" line="177"/>
         <source>New drag strip - drag me</source>
         <translation>新的拖动区域 - 拖动此处</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="186"/>
+        <location filename="../edge_dock_example.py" line="197"/>
         <source>Restore floating tool</source>
         <translation>恢复悬浮工具</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="231"/>
+        <location filename="../edge_dock_example.py" line="251"/>
         <source>Detach docking</source>
         <translation>解绑停靠</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="232"/>
+        <location filename="../edge_dock_example.py" line="252"/>
         <source>Attach docking</source>
         <translation>绑定停靠</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="237"/>
+        <location filename="../edge_dock_example.py" line="257"/>
         <source>Docking detached. Attach again to enable edge docking.</source>
         <translation>停靠已解绑。重新绑定即可启用边缘停靠。</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="239"/>
+        <location filename="../edge_dock_example.py" line="259"/>
         <source>Docking disabled. Enable it to snap and auto-hide again.</source>
         <translation>停靠已禁用。启用后可再次吸附并自动隐藏。</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="242"/>
+        <location filename="../edge_dock_example.py" line="262"/>
         <source>Handle visible</source>
         <translation>把手可见</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="243"/>
+        <location filename="../edge_dock_example.py" line="263"/>
         <source>Handle hidden</source>
         <translation>把手已隐藏</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="245"/>
+        <location filename="../edge_dock_example.py" line="265"/>
         <source>None</source>
         <translation>无</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="246"/>
+        <location filename="../edge_dock_example.py" line="266"/>
         <source>Left</source>
         <translation>左侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="247"/>
+        <location filename="../edge_dock_example.py" line="267"/>
         <source>Right</source>
         <translation>右侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="248"/>
+        <location filename="../edge_dock_example.py" line="268"/>
         <source>Top</source>
         <translation>上方</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="249"/>
+        <location filename="../edge_dock_example.py" line="269"/>
         <source>Bottom</source>
         <translation>下方</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="251"/>
+        <location filename="../edge_dock_example.py" line="271"/>
         <source>Edge: %1 | %2</source>
         <translation>停靠边缘：%1 | %2</translation>
     </message>

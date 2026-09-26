@@ -177,6 +177,43 @@ docking state and do not reopen the target. Changing the trigger takes effect on
 the next entry or click. Matching getters (`handleIcon()`, `handleIconSize()`,
 `handlePadding()`, `handleToolTip()`, `restoreTrigger()`) expose current settings.
 
+Handle dragging is opt-in and works with both icons and strips:
+
+```python
+dock.setHandleDraggable(True)  # Selects click restoration so the handle can be grabbed.
+# Or use DockConfig(handle_draggable=True, handle_icon=your_icon).
+```
+
+A press followed by release restores the window. Movement beyond Qt's system drag
+threshold moves the handle while the target stays hidden. On release, the pointer's
+screen and its available work area determine the result:
+
+- Within `dock_distance` of an enabled edge, keep the tool collapsed and dock to
+  that edge. The handle follows the drop location along the edge; the window's
+  restore position follows it, constrained to the work area.
+- Inside the screen, or beyond a disabled edge, expand and undock the tool. The
+  original fractional grab position determines where the window appears under
+  the pointer, with its frame constrained to the destination work area.
+
+Dragging can cross edges and displays; the icon remains upright. In gaps between
+displays or outside the desktop, use the nearest display. At corners, the nearest
+enabled edge wins; overflow takes priority and `sides` order breaks ties. Handle
+dragging uses the pointer's edge distance, while dragging the expanded window
+uses its frame's edge distance. The controller preserves the window's logical
+size when transferring a hidden target to a display with a different DPI.
+
+Escape or lost mouse capture cancels the gesture and returns the handle to its
+previous position. Changes to screen geometry or handle appearance cancel an
+active gesture before repositioning. Disable, dismiss, detach, external show/close,
+and destruction also clear grabs and pending drag callbacks. Releasing after
+cancellation does not reopen the window. While dragging is enabled, hover
+restoration is unavailable: `setRestoreTrigger("hover")` raises `ValueError`.
+Call `setHandleDraggable(False)` before choosing hover; disabling dragging alone
+retains click restoration. Inspect `handleDraggable()` for the current setting.
+
+The desktop platform must permit global positioning and mouse capture. Wayland
+restrictions also apply to this optional interaction.
+
 `DockConfig` controls the snap distance, margin, handle dimensions and colors, animation
 duration, hide delay, and enabled `sides`. Defaults enable left, right, and top;
 include `DockSide.BOTTOM` to enable the bottom edge. Coordinates and sizes are

@@ -36,7 +36,7 @@ class EdgeDockExample(ModernWindow):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Screen-edge docking controls"))
-        self.resize(460, 570)
+        self.resize(460, 620)
         self.floating_window = ModernWindow(self, Qt.WindowType.Tool)
         self.floating_window.setWindowTitle(self.tr("Floating tool"))
         self.floating_window.resize(400, 240)
@@ -88,6 +88,16 @@ class EdgeDockExample(ModernWindow):
         handle_options.addRow(self.tr("Icon size"), self.handle_icon_size)
         handle_options.addRow(self.tr("Restore action"), self.restore_trigger)
         layout.addLayout(handle_options)
+        self.handle_drag_switch = ModernSwitch(self.tr("Drag handle across edges and screens"))
+        layout.addWidget(self.handle_drag_switch)
+        drag_hint = QLabel(
+            self.tr(
+                "Enable handle dragging to move the folded tool. Drop near an edge to keep it "
+                "folded, or inside a screen to expand. Click to restore; press Escape to cancel a drag."
+            )
+        )
+        drag_hint.setWordWrap(True)
+        layout.addWidget(drag_hint)
 
         actions = QGridLayout()
         show = QPushButton(self.tr("Show / restore tool"))
@@ -128,6 +138,7 @@ class EdgeDockExample(ModernWindow):
         self.handle_style.currentIndexChanged.connect(self.update_handle_options)
         self.handle_icon_size.valueChanged.connect(self.update_handle_options)
         self.restore_trigger.currentIndexChanged.connect(self.update_handle_options)
+        self.handle_drag_switch.toggled.connect(self.update_handle_options)
         self.toggle_attachment()
 
     def _new_drag_strip(self) -> QLabel:
@@ -185,6 +196,7 @@ class EdgeDockExample(ModernWindow):
                     handle_icon_size=self.handle_icon_size.value(),
                     handle_tooltip=self.tr("Restore floating tool"),
                     restore_trigger=self.restore_trigger.currentData(),
+                    handle_draggable=self.handle_drag_switch.isChecked(),
                 ),
                 drag_widget=self.drag_strip,
                 auto_hide=self.auto_hide_switch.isChecked(),
@@ -203,8 +215,15 @@ class EdgeDockExample(ModernWindow):
         return QIcon(paths[self.handle_style.currentIndex()])
 
     def update_handle_options(self) -> None:
+        draggable = self.handle_drag_switch.isChecked()
+        if draggable:
+            # A draggable handle must survive pointer entry so it can be grabbed.
+            blocked = self.restore_trigger.blockSignals(True)
+            self.restore_trigger.setCurrentIndex(1)
+            self.restore_trigger.blockSignals(blocked)
         if self.dock is not None:
             # Works while collapsed; the handle is resized without reopening the tool.
+            self.dock.setHandleDraggable(draggable)
             self.dock.setRestoreTrigger(self.restore_trigger.currentData())
             self.dock.setHandleIcon(self.selected_handle_icon())
             self.dock.setHandleIconSize(self.handle_icon_size.value())
@@ -226,7 +245,8 @@ class EdgeDockExample(ModernWindow):
         self.auto_hide_switch.setEnabled(attached)
         self.handle_style.setEnabled(attached)
         self.handle_icon_size.setEnabled(attached and self.handle_style.currentIndex() != 0)
-        self.restore_trigger.setEnabled(attached)
+        self.handle_drag_switch.setEnabled(attached)
+        self.restore_trigger.setEnabled(attached and not self.handle_drag_switch.isChecked())
         self.attach_button.setText(
             self.tr("Detach docking") if attached else self.tr("Attach docking")
         )

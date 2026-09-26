@@ -75,6 +75,14 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
         assert demo.dock.handleToolTip() == (
             "恢复悬浮工具" if language == "zh_CN" else "Restore floating tool"
         )
+        demo.handle_drag_switch.setChecked(True)
+        assert demo.dock.handleDraggable()
+        assert not demo.restore_trigger.isEnabled()
+        assert demo.handle_drag_switch.text() == (
+            "跨边缘和屏幕拖动把手"
+            if language == "zh_CN"
+            else "Drag handle across edges and screens"
+        )
         launch.click()
         assert window.edge_dock_example is demo
         assert demo.floating_window.isVisible()
@@ -92,6 +100,7 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
         assert demo.dock.restoreTrigger() == DockRestoreTrigger.CLICK
         assert demo.dock.handleIconSize() == 32
         assert not demo.dock.handleIcon().isNull()
+        assert demo.dock.handleDraggable()
         demo.close()
         assert window.isVisible()
         assert not demo.floating_window.isVisible()

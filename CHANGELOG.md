@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add opt-in handle dragging across screen edges and displays. Edge drops remain
+  collapsed; interior drops expand and undock at the pointer's relative grab point.
+  Handle dragging selects click restoration and supports Escape/capture-loss
+  cancellation, display-change recovery, and safe lifecycle cleanup.
+- Add a bilingual handle-dragging control to the standalone and gallery demos.
 - Add optional `QIcon` edge handles with logical icon size, padding, and tooltip;
   keep icons upright on every edge and retain the thin-strip fallback.
 - Add `DockRestoreTrigger` for hover-or-click and click-only restoration, plus
