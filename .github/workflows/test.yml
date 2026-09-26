@@ -54,3 +54,7 @@ jobs:
       - name: Run native platform smoke
         if: runner.os != 'Linux'
         run: uv run python tests/platform_smoke.py
+
+      - name: Run native Windows notification smoke
+        if: runner.os == 'Windows'
+        run: uv run python tests/notification_smoke.py

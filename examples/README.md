@@ -96,7 +96,10 @@ The **Notifications** page demonstrates desktop and in-window delivery, four
 severity levels, all four corners, screen selection, and a queue of eight updates.
 Try a persistent notification, a long scrollable message, or a simulated download
 with a Cancel action and completion update. Hover pauses expiry. The pause switch
-suspends delivery, and Clear all removes visible and queued cards. Native desktop
+suspends delivery without discarding cards, and Clear all cancels displayed and
+pending notifications. The download keeps a `NotificationHandle` and updates
+only its progress/message until completion; actions use `NotificationAction`.
+Native desktop
 notifications stay visible after minimizing the main window; Wayland defaults to
 window delivery. Use the title-bar theme button to see visible cards update immediately.
 

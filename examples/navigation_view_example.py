@@ -40,9 +40,11 @@ from pyside6_modern_widgets import (
     ModernWindow,
     NavigationPosition,
     NavigationView,
+    NotificationAction,
     NotificationKind,
     NotificationManager,
     NotificationPosition,
+    NotificationState,
     ThemeMode,
     theme_manager,
 )
@@ -349,7 +351,7 @@ class ExampleWindow(ModernWindow):
         paused = ModernSwitch(self.tr("Pause notifications"))
         paused.toggled.connect(
             lambda checked: [
-                manager.setEnabled(not checked) for manager in self.notification_managers
+                manager.setDeliveryPaused(checked) for manager in self.notification_managers
             ]
         )
         layout.addWidget(paused)
@@ -358,14 +360,24 @@ class ExampleWindow(ModernWindow):
 
         def update_counts(*_args) -> None:
             manager = current_manager()
+            visible = len(manager.notifications(NotificationState.VISIBLE))
             status.setText(
                 self.tr("%1 showing · %2 waiting")
-                .replace("%1", str(len(manager.visibleIds())))
-                .replace("%2", str(len(manager.queuedIds())))
+                .replace("%1", str(visible))
+                .replace("%2", str(len(manager.notifications()) - visible))
             )
 
         activity = QLabel(self.tr("Action results appear here."))
         activity.setWordWrap(True)
+
+        def notify(title, message="", *, manager=None, **options):
+            manager = manager if manager is not None else current_manager()
+            try:
+                return manager.notify(title, message, **options)
+            except OverflowError:
+                activity.setText(self.tr("Dismiss a notification before showing another."))
+                return None
+
         for manager in self.notification_managers:
             manager.countChanged.connect(update_counts)
             manager.actionTriggered.connect(
@@ -408,13 +420,11 @@ class ExampleWindow(ModernWindow):
         for text, kind, title, message in examples:
             button = QPushButton(text)
             button.clicked.connect(
-                lambda _checked=False, kind=kind, title=title, message=message: (
-                    current_manager().notify(
-                        title,
-                        message,
-                        kind=kind,
-                        actions={"open": self.tr("View details")},
-                    )
+                lambda _checked=False, kind=kind, title=title, message=message: notify(
+                    title,
+                    message,
+                    kind=kind,
+                    actions=[NotificationAction("open", self.tr("View details"))],
                 )
             )
             buttons.addWidget(button)
@@ -424,7 +434,7 @@ class ExampleWindow(ModernWindow):
         burst = QPushButton(self.tr("Queue 8 updates"))
         burst.clicked.connect(
             lambda: [
-                current_manager().notify(
+                notify(
                     self.tr("Task %1 complete").replace("%1", str(i + 1)),
                     self.tr("The next update appears when there is room."),
                 )
@@ -433,20 +443,20 @@ class ExampleWindow(ModernWindow):
         )
         persistent = QPushButton(self.tr("Keep until dismissed"))
         persistent.clicked.connect(
-            lambda: current_manager().notify(
+            lambda: notify(
                 self.tr("Waiting for your review"),
                 self.tr("This notification stays until you dismiss it."),
-                duration=0,
-                actions={"review": self.tr("Review")},
+                timeout_ms=None,
+                actions=[NotificationAction("review", self.tr("Review"))],
             )
         )
         long_text = QPushButton(self.tr("Long message"))
         long_text.clicked.connect(
-            lambda: current_manager().notify(
+            lambda: notify(
                 self.tr("Import summary"),
                 self.tr("Imported records successfully. Review the following details.\n\n") * 25,
-                duration=0,
-                actions={"done": self.tr("Done")},
+                timeout_ms=None,
+                actions=[NotificationAction("done", self.tr("Done"))],
             )
         )
         for button in (burst, persistent, long_text):
@@ -458,43 +468,40 @@ class ExampleWindow(ModernWindow):
         progress_state: dict = {}
 
         def advance_download() -> None:
-            manager, key = progress_state["manager"], progress_state["key"]
-            if manager.notification(key) is None:
+            job = progress_state["handle"]
+            if job.isClosed():
                 progress_timer.stop()
                 return
             progress_state["value"] += 2
             value = progress_state["value"]
             if value >= 100:
                 progress_timer.stop()
-                manager.updateNotification(
-                    key,
+                job.update(
                     title=self.tr("Download complete"),
                     message=self.tr("Your file is ready."),
                     kind=NotificationKind.SUCCESS,
                     progress=None,
-                    actions={"open": self.tr("Open file")},
-                    duration=5000,
+                    actions=[NotificationAction("open", self.tr("Open file"))],
+                    timeout_ms=5000,
                 )
             else:
-                manager.updateNotification(
-                    key,
-                    message=self.tr("Downloading… %1%").replace("%1", str(value)),
-                    progress=value,
+                job.update(
+                    message=self.tr("Downloading… %1%").replace("%1", str(value)), progress=value
                 )
 
         def start_download() -> None:
             if progress_state:
-                progress_state["manager"].dismiss(progress_state["key"])
-            manager = current_manager()
-            key = manager.notify(
+                progress_state["handle"].dismiss()
+            job = notify(
                 self.tr("Downloading"),
                 self.tr("Starting…"),
-                duration=0,
+                timeout_ms=None,
                 progress=0,
-                actions={"cancel": self.tr("Cancel")},
+                actions=[NotificationAction("cancel", self.tr("Cancel"))],
             )
-            progress_state.update(manager=manager, key=key, value=0)
-            progress_timer.start()
+            if job is not None:
+                progress_state.update(handle=job, value=0)
+                progress_timer.start()
 
         progress_timer.timeout.connect(advance_download)
         bottom = QHBoxLayout()
@@ -507,10 +514,11 @@ class ExampleWindow(ModernWindow):
             self.showMinimized()
             QTimer.singleShot(
                 700,
-                lambda: desktop_manager.notify(
+                lambda: notify(
                     self.tr("Background task complete"),
                     self.tr("Notifications remain available while the window is minimized."),
                     kind=NotificationKind.SUCCESS,
+                    manager=desktop_manager,
                 ),
             )
 

@@ -12,7 +12,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
-from pyside6_modern_widgets import NotificationManager, NotificationPosition, theme_manager
+from pyside6_modern_widgets import (
+    NotificationAction,
+    NotificationManager,
+    NotificationPosition,
+    NotificationState,
+    theme_manager,
+)
 
 
 def foreground():
@@ -41,25 +47,27 @@ def main() -> None:
     manager = NotificationManager(host)
     try:
         ids = [
-            manager.notify(f"Update {i}", "Continue typing in the other window.", duration=0)
+            manager.notify(f"Update {i}", "Continue typing in the other window.", timeout_ms=None)
             for i in range(4)
         ]
         QTest.qWait(400)
         assert foreground() == previous
         assert field.hasFocus()
         assert QApplication.activePopupWidget() is None
-        assert len(manager.visibleIds()) == 3
-        assert len(manager.queuedIds()) == 1
+        assert len(manager.notifications(NotificationState.VISIBLE)) == 3
+        assert len(manager.notifications(NotificationState.QUEUED)) == 1
         host.showMinimized()
         QTest.qWait(100)
-        assert all(manager.notification(key).isVisible() for key in manager.visibleIds())
+        assert all(
+            key.widget().isVisible() for key in manager.notifications(NotificationState.VISIBLE)
+        )
         assert foreground() == previous
         QTest.keyClicks(field, "Focus stayed here")
         assert field.text() == "Focus stayed here"
-        manager.dismiss(ids[0])
+        ids[0].dismiss()
         manager.setPosition(NotificationPosition.TOP_RIGHT)
         QTest.qWait(400)
-        cards = [manager.notification(key) for key in manager.visibleIds()]
+        cards = [key.widget() for key in manager.notifications(NotificationState.VISIBLE)]
         assert len(cards) == 3
         assert all(card.screen().availableGeometry().contains(card.geometry()) for card in cards)
         assert all(
@@ -70,14 +78,14 @@ def main() -> None:
         assert foreground() == previous
         action_events = []
         manager.actionTriggered.connect(lambda key, action: action_events.append((key, action)))
-        key = manager.visibleIds()[0]
-        manager.updateNotification(key, actions={"open": "Open"})
+        key = manager.notifications(NotificationState.VISIBLE)[0]
+        key.update(actions=[NotificationAction("open", "Open")])
         QTest.qWait(300)
-        card = manager.notification(key)
+        card = key.widget()
         button = next(b for b in card.findChildren(QPushButton) if b.text() == "Open")
         QTest.mouseClick(button, Qt.MouseButton.LeftButton)
         assert action_events == [(key, "open")]
-        assert manager.notification(key) is None
+        assert key.widget() is None
     finally:
         manager.clear()
         host.close()

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from enum import Enum
-
 from PySide6.QtCore import (
     QByteArray,
     QEasingCurve,
@@ -31,6 +29,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from ._window_chrome import WindowDpiState, uses_windows_window_state
 from ._windows_window import redraw_native_window
@@ -40,6 +39,7 @@ from .modern_menu import (
     _soft_line_color,
     _surface_color,
 )
+from .notification import NotificationKind, NotificationSnapshot
 from .theme import (
     DEFAULT_METRICS,
     ModernMetrics,
@@ -49,13 +49,6 @@ from .theme import (
     theme_manager,
     tinted_icon,
 )
-
-
-class NotificationKind(str, Enum):
-    INFO = "info"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
 
 
 class _TitleLabel(QLabel):
@@ -74,6 +67,8 @@ class ModernNotification(QWidget):
     Text is always plain text. Actions emit their ID before optionally closing.
     Body activation emits activated() without performing an application action.
     Long content scrolls while the close button remains visible.
+    When owned by a manager, use its NotificationHandle to change content;
+    standalone cards retain their ordinary setters and action-button API.
     """
 
     activated = Signal()
@@ -94,6 +89,9 @@ class ModernNotification(QWidget):
     ) -> None:
         kind = NotificationKind(kind)
         super().__init__(parent)
+        self._managed = False
+        self._applying_content = False
+        self._content_dirty = False
         self._theme_override = theme
         self._inherited_theme: ModernTheme | None = None
         self._metrics = metrics
@@ -194,6 +192,7 @@ class ModernNotification(QWidget):
         return self._title.text()
 
     def setTitle(self, title: str) -> None:
+        self._check_content_owner()
         self._title.setText(title)
         self._title.setToolTip(title)
         self._changed()
@@ -202,6 +201,7 @@ class ModernNotification(QWidget):
         return self._message.text()
 
     def setMessage(self, message: str) -> None:
+        self._check_content_owner()
         self._message.setText(message)
         self._changed()
 
@@ -209,21 +209,25 @@ class ModernNotification(QWidget):
         return self._kind
 
     def setKind(self, kind: NotificationKind | str) -> None:
+        self._check_content_owner()
         self._kind = NotificationKind(kind)
         self._sync_icon()
         self._changed()
 
     def setIcon(self, icon: QIcon | None) -> None:
         """Set a custom icon; None restores the severity icon."""
+        self._check_content_owner()
         self._icon_override = QIcon(icon) if icon is not None else None
         self._sync_icon()
+        self._changed()
 
     def progress(self) -> int | None:
         return self._progress
 
     def setProgress(self, value: int | None) -> None:
         """Use 0..100 for progress, -1 for busy, or None to hide the bar."""
-        if value is not None and (not isinstance(value, int) or not -1 <= value <= 100):
+        self._check_content_owner()
+        if value is not None and (type(value) is not int or not -1 <= value <= 100):
             raise ValueError("progress must be None or an integer from -1 to 100")
         self._progress = value
         self._progress_bar.setVisible(value is not None)
@@ -238,6 +242,7 @@ class ModernNotification(QWidget):
         self, action_id: str, text: str, *, close_on_trigger: bool = True
     ) -> QPushButton:
         """Add or update an action and return its ordinary QPushButton."""
+        self._check_content_owner()
         if not action_id:
             raise ValueError("action_id must not be empty")
         button = self._buttons.get(action_id)
@@ -257,6 +262,7 @@ class ModernNotification(QWidget):
         return button
 
     def removeActionButton(self, action_id: str) -> None:
+        self._check_content_owner()
         button = self._buttons.pop(action_id, None)
         self._action_closes.pop(action_id, None)
         if button is not None:
@@ -266,13 +272,14 @@ class ModernNotification(QWidget):
             self._changed()
 
     def clearActionButtons(self) -> None:
+        self._check_content_owner()
         for key in list(self._buttons):
             self.removeActionButton(key)
 
     def _trigger_action(self, action_id: str) -> None:
         close = self._action_closes.get(action_id, False)
         self.actionTriggered.emit(action_id)
-        if close:
+        if close and isValid(self) and not self._dismissed:
             self.dismiss("action")
 
     def dismiss(self, reason: str = "dismissed") -> None:
@@ -353,9 +360,51 @@ class ModernNotification(QWidget):
         self._sync_accessibility()
 
     def _changed(self) -> None:
+        if self._applying_content:
+            self._content_dirty = True
+            return
         self._sync_accessibility()
         self.updateGeometry()
         self.contentChanged.emit()
+
+    def _check_content_owner(self) -> None:
+        if self._managed and not self._applying_content:
+            raise RuntimeError("Use NotificationHandle.update() for managed notification content")
+
+    def _apply_content(self, data: NotificationSnapshot) -> None:
+        """Publish one contentChanged signal after the complete update is applied."""
+        self._applying_content = True
+        try:
+            if self.title() != data.title:
+                self.setTitle(data.title)
+            if self.message() != data.message:
+                self.setMessage(data.message)
+            if self.kind() != data.kind:
+                self.setKind(data.kind)
+            if self.progress() != data.progress:
+                self.setProgress(data.progress)
+            old_icon = self._icon_override.cacheKey() if self._icon_override is not None else None
+            new_icon = data.icon.cacheKey() if data.icon is not None else None
+            if old_icon != new_icon:
+                self.setIcon(data.icon)
+            ids = [action.id for action in data.actions]
+            if list(self._buttons) != ids:
+                self.clearActionButtons()
+            for action in data.actions:
+                button = self._buttons.get(action.id)
+                if (
+                    button is None
+                    or button.text() != action.text
+                    or self._action_closes[action.id] != action.close_on_trigger
+                ):
+                    self.addActionButton(
+                        action.id, action.text, close_on_trigger=action.close_on_trigger
+                    )
+        finally:
+            self._applying_content = False
+        if self._content_dirty and isValid(self):
+            self._content_dirty = False
+            self._changed()
 
     def _configure_desktop(self) -> None:
         self._desktop = True

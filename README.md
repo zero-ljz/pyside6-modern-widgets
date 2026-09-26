@@ -509,13 +509,13 @@ and a long scrollable panel.
 
 ## Notifications
 
-`NotificationManager` delivers custom notification cards without taking keyboard
-focus. Keep one manager for the application; it owns the cards, their timers,
-and their per-screen stacks. Its parent controls lifetime and theme inheritance.
-Desktop cards stay visible when that parent is minimized or hidden.
+`NotificationManager` delivers custom desktop or in-window cards without taking
+keyboard focus. `notify()` and `post()` each create a **new lifetime** and return a
+`NotificationHandle`. Keep the handle to update or dismiss that notification;
+closed handles never revive or affect another notification.
 
 ```python
-from pyside6_modern_widgets import NotificationManager
+from pyside6_modern_widgets import NotificationAction, NotificationManager
 
 notifications = NotificationManager(window)
 notifications.notify("Export complete", "Your report is ready.", kind="success")
@@ -523,112 +523,166 @@ notifications.notify("Export complete", "Your report is ready.", kind="success")
 job = notifications.notify(
     "Downloading",
     "Starting…",
-    notification_id="download-1",
-    duration=0,
+    timeout_ms=None,
     progress=0,
-    actions={"cancel": "Cancel"},
+    actions=[NotificationAction("cancel", "Cancel")],
 )
-notifications.updateNotification(job, message="Downloading… 65%", progress=65)
-notifications.updateNotification(
-    job,
+job.update(message="Downloading… 65%", progress=65)
+job.update(
     title="Download complete",
     message="Your file is ready.",
     kind="success",
     progress=None,
-    actions={"open": "Open file"},
-    duration=5000,
+    actions=[NotificationAction("open", "Open file")],
+    timeout_ms=5000,
 )
-notifications.actionTriggered.connect(
-    lambda notification_id, action_id: print(notification_id, action_id)
-)
+notifications.actionTriggered.connect(lambda handle, action_id: print(handle.id(), action_id))
 ```
+
+`update()` changes only explicitly supplied fields. Omitted fields keep their
+accepted values; `progress=None` hides progress, `icon=None` restores the severity
+icon, and `actions=[]` removes actions. An explicit `timeout_ms` restarts expiry;
+other updates preserve the remaining time. `timeout_ms=None` makes a notification
+persistent, a positive integer specifies milliseconds, and `0` is rejected.
+Creation without `timeout_ms` uses the manager's `default_timeout_ms`.
 
 Kinds accept `"info"`, `"success"`, `"warning"`, `"error"`, or `NotificationKind`.
 Titles and messages are plain text, including text containing markup. Titles
 elide with the full text available in a tooltip; long bodies and action lists
 scroll while the close button stays visible. Progress accepts `0..100`, `-1` for
-busy, or `None` to hide it. An optional `icon=QIcon(...)` replaces the severity icon.
-Cards include accessible names, descriptions, action labels, and progress values.
+busy, or `None` to hide it. Progress reaching 100 does not implicitly dismiss a
+notification. An optional `icon=QIcon(...)` replaces the severity icon.
+
+Actions are immutable `NotificationAction(id, text, close_on_trigger=True)`
+values with unique, non-empty IDs within a notification. Use
+`NotificationAction("retry", "Retry", close_on_trigger=False)` to keep the card
+open after a click. A closing action emits `actionTriggered(handle, id)` before
+closing that same lifetime. Updating unrelated content preserves action behavior
+and keyboard focus. Supplied action lists and icons are copied on acceptance.
 
 | Constructor option | Default / behavior |
 | --- | --- |
-| `position` | `NotificationPosition.BOTTOM_RIGHT`; all four screen corners supported, also as strings such as `"top-left"`. |
+| `position` | `NotificationPosition.BOTTOM_RIGHT`; all four corners supported, also as strings such as `"top-left"`. |
 | `max_visible` | 3 per screen; available height can reduce this further. |
-| `max_queued` | 100 across the manager; overflow dismisses the oldest queued card. |
+| `capacity` | 100 accepted lifetimes across all screens, including pending posts, queued, visible, suspended, and closing notifications awaiting GUI cleanup. Must be positive. |
 | `width`, `margin`, `spacing` | 360, 16, 12 logical pixels. Cards fit the available area and are at most 360 pixels tall. |
-| `default_duration` | 5000 milliseconds. `notify(duration=0)` makes a persistent card. |
+| `default_timeout_ms` | 5000 milliseconds; `None` makes notifications persistent by default. |
 | `desktop` | Automatic desktop delivery on Windows/macOS/X11; in-window delivery on Wayland. `False` explicitly selects in-window delivery. |
 | `theme`, `metrics` | Inherited theme and `ModernMetrics()`; set `animation_duration=0` to disable entry and stack movement animations. |
 
+Full capacity raises `OverflowError` on the submitting caller without discarding
+another notification. Existing handles can still be updated or dismissed. When
+a worker cancels a notification, its capacity slot is released when the GUI
+processes cleanup. This bound covers requests before they reach Qt, and repeated
+updates to one handle are coalesced to its latest content. The gallery handles
+full capacity by asking the user to dismiss a notification before adding another.
+
 Delivery is FIFO within each screen, with the oldest visible card nearest the
 selected corner. Screen placement excludes taskbars/docks through Qt's available
-geometry. `setScreen(screen)` changes the default destination;
-`notify(screen=screen)` pins one notification to that display. Otherwise the
-manager follows its parent window's screen, then the primary screen. Screen
-removal migrates affected cards to the default destination. Geometry and DPI
-changes reflow the stacks. Use `setPosition()` and `setMaxVisible()` for runtime
-changes. Independently created managers do not coordinate their stacks.
+geometry. `setScreen(screen)` changes the default destination; `screen()` returns
+that configured default. `notify(screen=screen)` pins one lifetime to that display.
+Otherwise delivery follows the parent window's screen, then the primary screen.
+Screen removal migrates affected cards to the default destination. Geometry and
+DPI changes reflow the stacks. `setPosition()` and `setMaxVisible()` change layout
+at runtime; reducing space suspends cards without deleting them.
 
-Expiry starts when a queued card becomes visible, pauses while hovered or while
-an in-window action has keyboard focus, and resumes with the remaining time.
-`pause(id)` / `resume(id)` add an independent manual pause. `setEnabled(False)`
-hides cards and pauses delivery/expiry while retaining a bounded queue; enabling
-resumes them. In-window cards also pause while their host is hidden or minimized.
+Expiry starts on first display, pauses while hovered or while an in-window action
+has keyboard focus, and resumes with the remaining time. Handle methods
+`pauseTimeout()` / `resumeTimeout()` control an independent manual pause.
+`setDeliveryPaused(True)` hides the cards and pauses their clocks; `False` resumes
+delivery. Accepted notifications survive suspension, including at full capacity.
+In-window cards also suspend while their host is hidden or minimized. Delivery
+pause does not stop accepting new requests up to capacity.
 
-`notify(notification_id=existing_id, ...)` replaces that notification's contents
-and restarts its timeout without changing FIFO order. `updateNotification()`
-changes only supplied fields and preserves time unless `duration` is provided;
-it returns `False` for an unknown ID. `actions={}` clears the actions, and an
-explicit `progress=None` clears progress. Progress completion does not implicitly
-close a persistent notification: supply a new duration when the task completes.
+`handle.snapshot()` returns a frozen `NotificationSnapshot` containing the latest
+accepted title, message, kind, actions, progress, copied icon, configured timeout,
+manual timeout pause, lifecycle state, and close reason. It remains readable after
+closure or manager destruction. `handle.id()` is a unique logging identifier, not
+a caller-supplied replacement key. `state()`, `isClosed()`, and `closeReason()` are
+convenience queries. The lifecycle states are:
 
-`notification(id)` returns the owned `ModernNotification` while registered;
-`notificationIds()`, `visibleIds()`, and `queuedIds()` return snapshots.
-`dismiss(id)` closes one card; `clear()` closes all registered and queued cards.
-Dismissed cards are deleted with `deleteLater()` and must not be reused. Use the
-manager for delivery, geometry, and visibility instead of reparenting or hiding
-its cards. Deleting the manager deletes its desktop windows too; notification
-windows do not prevent normal application exit. A parent window merely closing
-without being deleted does not destroy a manager—call `clear()` if desired.
+| `NotificationState` | Meaning |
+| --- | --- |
+| `PENDING` | Accepted, awaiting GUI delivery. |
+| `QUEUED` | Waiting for its first display. |
+| `VISIBLE` | Currently displayed. |
+| `SUSPENDED` | Previously displayed, now hidden because delivery or available space prevents display. |
+| `CLOSED` | Terminal; further update/dismiss/pause/resume commands return `False`. |
+
+`notifications()` returns an ordered tuple of all live handles, including pending
+posts; `notifications(NotificationState.VISIBLE)` filters that snapshot.
+`handle.dismiss()` also cancels a pending post. `clear()` atomically marks every
+lifetime accepted before that call closed, including pending posts, and suppresses
+intermediate promotion of cards being cleared. Requests accepted later, including
+from close callbacks, are independent new lifetimes. Clear does not disable future
+submissions. Each accepted lifetime produces at most one close signal.
+
+Create managers and call `notify()`, layout/theme setters, and `handle.widget()`
+on the QApplication GUI thread. Workers may call `post()`, every other handle
+method, `clear()`, and `notifications()`. `post()` uses the default screen and
+accepts the same content fields as `notify()`. Validation runs immediately on the
+caller; accepted data is copied before return. Handle mutations return `True` for
+acceptance, which does not imply Qt has painted the change. GUI callers normally
+apply changes immediately; callback reentry is reconciled afterward. Worker
+updates are asynchronous, and intermediate updates may be coalesced. All manager
+signals are emitted on the GUI thread.
+
+```python
+# This sequence can run entirely in a worker thread.
+job = notifications.post("Working", timeout_ms=None, progress=0)
+job.update(progress=65)  # Works even before first delivery.
+job.dismiss()  # A canceled pending request will never be shown.
+```
 
 | Signal | Meaning |
 | --- | --- |
-| `notificationShown(id)` | First delivery of a card, after it becomes visible. Resuming a hidden card does not emit again. |
-| `notificationClosed(id, reason)` | Card removed; standard reasons are `dismissed`, `expired`, `action`, `cleared`, `overflow`, or `destroyed`. |
-| `actionTriggered(id, action_id)` | An action was clicked. Standard actions close the card after emitting this signal. |
-| `notificationActivated(id)` | The body was clicked; no application action or automatic dismissal is performed. |
-| `countChanged(visible, queued)` | Total counts changed across all screens. |
-| `deliveryFailed(id, message)` | An asynchronous `post()` could not be delivered. |
+| `notificationShown(handle)` | First delivery, after the card becomes visible; resuming does not emit again. |
+| `notificationClosed(handle, reason)` | Terminal lifetime removed; reasons include `dismissed`, `expired`, `action`, `cleared`, `destroyed`, and `failed`. |
+| `actionTriggered(handle, action_id)` | An action was clicked. Its declaration controls automatic closing. |
+| `notificationActivated(handle)` | The body was clicked; no application action or automatic dismissal is performed. |
+| `countChanged(visible, waiting, suspended)` | Counts changed; waiting includes both pending and queued requests. |
+| `deliveryFailed(handle, message)` | Accepted content could not be delivered; the handle closes with reason `failed`. |
 
-The returned card supports `setTitle()`, `setMessage()`, `setKind()`, `setIcon()`,
-`setProgress()`, and `setTheme()`. Add persistent actions with
-`card.addActionButton("retry", "Retry", close_on_trigger=False)`; it returns a
-normal `QPushButton`. `removeActionButton()` and `clearActionButtons()` manage
-these buttons without replacing QWidget's native QAction API. A card-level
-`setTheme()` overrides the manager; `None` resumes inheritance. Global and host
-theme changes update existing cards, including native acrylic on Windows 11.
+`handle.widget()` explicitly borrows the owned `ModernNotification` view, or
+returns `None` before materialization/after closure. It is for GUI inspection and
+visual integration, such as a card-level `setTheme()` override. Managed content
+setters raise `RuntimeError`; use `handle.update()` for content, actions and icons.
+Do not reparent, show, hide or keep using a view after closure. Views are deleted
+with `deleteLater()`. Standalone `ModernNotification` widgets retain their setters,
+`addActionButton()` and QWidget's native QAction API.
 
-Create and operate managers on the QApplication GUI thread. Worker threads may
-call `post(title, message, ...)`, which validates and copies the data, returns
-an ID immediately, and queues delivery on the GUI thread. It accepts `kind`,
-`duration`, `actions`, `progress`, and `notification_id`, and uses the manager's
-default screen. Reposting the same ID updates it. Posts not yet delivered are
-not part of `notificationIds()` or `clear()`; stop producers before clearing
-when shutting down a job.
+Keep one manager per application or independent host; managers do not coordinate
+stacks. Its parent controls lifetime and theme inheritance. Desktop cards stay
+visible when that parent is minimized or hidden. Deleting the manager closes all
+handles and deletes its desktop windows. A parent merely closing without being
+deleted does not destroy a manager—call `clear()` when that is desired.
 
-Custom desktop notifications exist only while the application runs. They do not
-enter the OS notification center or automatically follow its do-not-disturb
-settings. Desktop action buttons accept mouse input without activating the
-notification window; use in-window delivery for Tab/Space/Enter/Escape keyboard
-interaction. Wayland requires a host QWidget and uses the in-window fallback;
-requesting `desktop=True` there raises `ValueError`. Desktop positioning/stacking
-on other platforms remains subject to window-manager policy.
+Custom desktop notifications exist only while the application runs, do not enter
+the OS notification center, and do not automatically follow do-not-disturb settings.
+Desktop action buttons accept mouse input without activating the card; use in-window
+delivery for Tab/Space/Enter/Escape keyboard interaction. Wayland requires a host
+QWidget and uses the in-window fallback; `desktop=True` there raises `ValueError`.
+Desktop positioning/stacking elsewhere remains subject to window-manager policy.
+
+The handle API intentionally replaces the earlier ID API before adoption:
+
+| Earlier API | Handle API |
+| --- | --- |
+| `notify(..., notification_id=...)` / same-ID replacement | Create once and keep the returned handle; call `handle.update(...)`. |
+| `duration=0`, `default_duration` | `timeout_ms=None`, `default_timeout_ms`. |
+| `actions={"open": "Open"}` | `actions=[NotificationAction("open", "Open")]`. |
+| `updateNotification(id, ...)`, `dismiss(id)` | `handle.update(...)`, `handle.dismiss()`. |
+| `pause(id)` / `resume(id)` | `handle.pauseTimeout()` / `handle.resumeTimeout()`. |
+| `setEnabled(False)` | `setDeliveryPaused(True)`. |
+| `notification(id)` | `handle.widget()` for explicit low-level access; `handle.snapshot()` for data. |
+| ID lists and signals | `notifications(state)` returns handles; signals carry those same handle objects. |
+| `max_queued` with oldest-queued eviction | `capacity` bounds all accepted lifetimes and explicitly rejects excess submissions. |
 
 Run `python examples/navigation_view_example.py` and open **Notifications** for
-severity samples, corner/screen selection, queue overflow into waiting delivery,
-persistent cards, long messages, simulated download progress, and delivery after
-minimizing. `python tests/notification_smoke.py` checks native focus and stacking;
-`python tests/windows_appearance_smoke.py` also verifies Windows 11 acrylic.
+severity samples, placement, queued delivery, persistent cards, long messages,
+progress and minimized-host delivery. `python tests/notification_smoke.py` checks
+native focus and stacking and runs in Windows CI; `python tests/windows_appearance_smoke.py`
+also verifies Windows 11 acrylic.
 
 ## Example
 

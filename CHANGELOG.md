@@ -22,6 +22,14 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Replace notification IDs/upserts with stable `NotificationHandle` objects and
+  declarative `NotificationAction` values. Handles support partial updates,
+  cancellation, timeout pause/resume, and immutable snapshots from worker threads,
+  including before GUI delivery. Signals carry handles; `widget()` is the explicit
+  GUI view accessor and managed content must be changed through the handle.
+- Use `timeout_ms=None` for persistent notifications and `setDeliveryPaused()` for
+  display suspension. Replace `max_queued` eviction with a total `capacity` bound
+  covering pending posts and GUI cleanup; excess submissions raise `OverflowError`.
 - Reduce the default edge-docking distance from 50 to 24 logical pixels for
   window snapping and handle drops, reducing accidental docking near an edge.
 - Consolidate edge-handle interaction into `DockHandleMode` / `handle_mode` /
@@ -44,6 +52,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Preserve notifications and their clocks during delivery/host suspension, even
+  at capacity. Cancel pending posts with `clear()`/`dismiss()`, coalesce worker
+  updates, and publish complete content before callbacks. Keep closed handles
+  terminal across reentrant callbacks, Qt deletion, and later notifications.
 - Fix size inflation during native mixed-DPI dragging, including the edge-docking
   controls in both languages. Evaluate `WM_WINDOWPOSCHANGING` layout constraints
   using the target DPI while Qt still reports the old screen, preventing an

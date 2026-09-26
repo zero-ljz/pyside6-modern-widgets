@@ -529,6 +529,10 @@
     </message>
     <message>
         <location filename="../navigation_view_example.py" line="367"/>
+        <source>Dismiss a notification before showing another.</source>
+        <translation>请先关闭一条通知，再显示新的通知。</translation>
+    </message>
+    <message>
         <source>Action results appear here.</source>
         <translation>操作结果将显示在此处。</translation>
     </message>
