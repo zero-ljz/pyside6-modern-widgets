@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add optional `QIcon` edge handles with logical icon size, padding, and tooltip;
+  keep icons upright on every edge and retain the thin-strip fallback.
+- Add `DockRestoreTrigger` for hover-or-click and click-only restoration, plus
+  runtime handle setters and bilingual controls in the edge-docking demo.
 - Add an edge-docking demo launcher to the navigation gallery, reusing the same
   owned demo window and cleaning up its restore handle when the gallery closes.
 - Translate the edge-docking demo into Simplified Chinese and add `--language en`

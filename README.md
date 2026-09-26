@@ -141,6 +141,42 @@ dock.dismiss()  # Hide both the window and its handle, without closing the windo
 dock.setDragWidget(new_drag_strip)  # Rebind after replacing your window content.
 ```
 
+The default handle is a thin strip. Pass a `QIcon` for a square icon handle; its
+size is `handle_icon_size + 2 * handle_padding` in Qt logical pixels. The icon
+keeps its aspect ratio and remains upright on all four edges. Handles are limited
+to the available work area on small displays. For example:
+
+```python
+from PySide6.QtGui import QIcon
+from pyside6_modern_widgets import DockConfig, DockRestoreTrigger, EdgeDockController
+
+dock = EdgeDockController(
+    window,
+    DockConfig(
+        handle_icon=QIcon(":/app/notes.svg"),
+        handle_icon_size=24,
+        handle_padding=6,
+        handle_tooltip="Restore notes",
+        restore_trigger=DockRestoreTrigger.CLICK,
+    ),
+    drag_widget=drag_strip,
+)
+dock.setHandleIcon(QIcon(":/app/unread.svg"))  # Also works while collapsed.
+dock.setHandleIconSize(32)
+dock.setHandlePadding(8)
+dock.setHandleToolTip("Restore unread notes")
+dock.setRestoreTrigger("hover")  # Hover or left click; "click" requires left click.
+dock.setHandleIcon(None)  # Return to the configured thin strip.
+```
+
+Use this configuration when creating the controller, rather than attaching a
+second controller to the same window. A null `QIcon` (including an unavailable
+image) uses the thin-strip fallback. `handle_width` and `handle_length` apply only
+to the strip; colors apply to both backgrounds. Runtime handle updates keep the
+docking state and do not reopen the target. Changing the trigger takes effect on
+the next entry or click. Matching getters (`handleIcon()`, `handleIconSize()`,
+`handlePadding()`, `handleToolTip()`, `restoreTrigger()`) expose current settings.
+
 `DockConfig` controls the snap distance, margin, handle dimensions and colors, animation
 duration, hide delay, and enabled `sides`. Defaults enable left, right, and top;
 include `DockSide.BOTTOM` to enable the bottom edge. Coordinates and sizes are
@@ -155,7 +191,8 @@ window can still move onto a second display.
 
 Auto-hide waits while the pointer is inside, a mouse button is down, an animation
 is running, or a popup/modal dialog is open. Hovering or clicking the gray edge
-handle restores the window. Its default color is RGB (150, 150, 150), with
+handle restores the window by default; `DockRestoreTrigger.CLICK` disables hover
+restoration and requires a left click. Its default color is RGB (150, 150, 150), with
 RGB (200, 200, 200) on hover; override `handle_color` / `handle_hover_color` in
 `DockConfig` to customize it. External `show()` removes the handle. Hiding a visible
 window, accepting a close, minimizing, maximizing, or entering full-screen clears

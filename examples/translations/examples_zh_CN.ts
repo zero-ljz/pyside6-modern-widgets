@@ -4,147 +4,196 @@
 <context>
     <name>EdgeDockExample</name>
     <message>
-        <location filename="../edge_dock_example.py" line="34"/>
+        <location filename="../edge_dock_example.py" line="38"/>
         <source>Screen-edge docking controls</source>
         <translation>屏幕边缘停靠控制</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="37"/>
+        <location filename="../edge_dock_example.py" line="41"/>
         <source>Floating tool</source>
         <translation>悬浮工具</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="43"/>
+        <location filename="../edge_dock_example.py" line="47"/>
         <source>Text selection still works</source>
         <translation>仍可正常选择文本</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="46"/>
+        <location filename="../edge_dock_example.py" line="50"/>
         <source>Use the controls window to hide, reopen, or replace this drag strip.</source>
         <translation>使用控制窗口隐藏、重新打开工具或替换此拖动区域。</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="49"/>
+        <location filename="../edge_dock_example.py" line="53"/>
         <source>Close tool</source>
         <translation>关闭工具</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="62"/>
         <source>Drag the tool&apos;s strip to a screen edge, then move away to auto-hide it. Hover over the edge handle to restore it. This controls window stays available even when the tool and its handle are hidden.</source>
-        <translation>将工具的拖动区域拖至屏幕边缘，移开鼠标即可自动隐藏。将鼠标悬停在边缘把手上即可恢复。即使工具和把手都已隐藏，此控制窗口仍可使用。</translation>
+        <translation type="vanished">将工具的拖动区域拖至屏幕边缘，移开鼠标即可自动隐藏。将鼠标悬停在边缘把手上即可恢复。即使工具和把手都已隐藏，此控制窗口仍可使用。</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="65"/>
+        <location filename="../edge_dock_example.py" line="66"/>
+        <source>Drag the tool&apos;s strip to a screen edge, then move away to auto-hide it. Restore it using the selected hover or click action. This controls window stays available even when the tool and its handle are hidden.</source>
+        <translation>将工具的拖动区域拖至屏幕边缘，移开鼠标即可自动隐藏。按所选方式悬停或点击把手即可恢复。即使工具和把手都已隐藏，此控制窗口仍可使用。</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="69"/>
         <source>Enable docking</source>
         <translation>启用停靠</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="67"/>
+        <location filename="../edge_dock_example.py" line="71"/>
         <source>Hide when the pointer leaves</source>
         <translation>鼠标移开时隐藏</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="73"/>
+        <location filename="../edge_dock_example.py" line="79"/>
+        <source>Thin strip</source>
+        <translation>细条</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="79"/>
+        <source>Application icon</source>
+        <translation>应用图标</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="80"/>
+        <source>Settings icon</source>
+        <translation>设置图标</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="85"/>
+        <source>Hover or click</source>
+        <translation>悬停或点击</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="86"/>
+        <source>Click only</source>
+        <translation>仅点击</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="87"/>
+        <source>Handle appearance</source>
+        <translation>把手外观</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="88"/>
+        <source>Icon size</source>
+        <translation>图标大小</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="89"/>
+        <source>Restore action</source>
+        <translation>恢复方式</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="93"/>
         <source>Show / restore tool</source>
         <translation>显示 / 恢复工具</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="75"/>
+        <location filename="../edge_dock_example.py" line="95"/>
         <source>Hide tool and handle</source>
         <translation>隐藏工具和把手</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="82"/>
+        <location filename="../edge_dock_example.py" line="102"/>
         <source>Dock left</source>
         <translation>停靠左侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="83"/>
+        <location filename="../edge_dock_example.py" line="103"/>
         <source>Dock right</source>
         <translation>停靠右侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="84"/>
+        <location filename="../edge_dock_example.py" line="104"/>
         <source>Dock top</source>
         <translation>停靠顶部</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="85"/>
+        <location filename="../edge_dock_example.py" line="105"/>
         <source>Dock bottom</source>
         <translation>停靠底部</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="92"/>
+        <location filename="../edge_dock_example.py" line="112"/>
         <source>Replace drag strip</source>
         <translation>替换拖动区域</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="111"/>
+        <location filename="../edge_dock_example.py" line="134"/>
         <source>Drag here to a screen edge</source>
         <translation>拖动此处至屏幕边缘</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="143"/>
+        <location filename="../edge_dock_example.py" line="166"/>
         <source>New drag strip - drag me</source>
         <translation>新的拖动区域 - 拖动此处</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="183"/>
+        <location filename="../edge_dock_example.py" line="186"/>
+        <source>Restore floating tool</source>
+        <translation>恢复悬浮工具</translation>
+    </message>
+    <message>
+        <location filename="../edge_dock_example.py" line="231"/>
         <source>Detach docking</source>
         <translation>解绑停靠</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="184"/>
+        <location filename="../edge_dock_example.py" line="232"/>
         <source>Attach docking</source>
         <translation>绑定停靠</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="189"/>
+        <location filename="../edge_dock_example.py" line="237"/>
         <source>Docking detached. Attach again to enable edge docking.</source>
         <translation>停靠已解绑。重新绑定即可启用边缘停靠。</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="191"/>
+        <location filename="../edge_dock_example.py" line="239"/>
         <source>Docking disabled. Enable it to snap and auto-hide again.</source>
         <translation>停靠已禁用。启用后可再次吸附并自动隐藏。</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="194"/>
+        <location filename="../edge_dock_example.py" line="242"/>
         <source>Handle visible</source>
         <translation>把手可见</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="195"/>
+        <location filename="../edge_dock_example.py" line="243"/>
         <source>Handle hidden</source>
         <translation>把手已隐藏</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="197"/>
+        <location filename="../edge_dock_example.py" line="245"/>
         <source>None</source>
         <translation>无</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="198"/>
+        <location filename="../edge_dock_example.py" line="246"/>
         <source>Left</source>
         <translation>左侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="199"/>
+        <location filename="../edge_dock_example.py" line="247"/>
         <source>Right</source>
         <translation>右侧</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="200"/>
+        <location filename="../edge_dock_example.py" line="248"/>
         <source>Top</source>
         <translation>上方</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="201"/>
+        <location filename="../edge_dock_example.py" line="249"/>
         <source>Bottom</source>
         <translation>下方</translation>
     </message>
     <message>
-        <location filename="../edge_dock_example.py" line="203"/>
+        <location filename="../edge_dock_example.py" line="251"/>
         <source>Edge: %1 | %2</source>
         <translation>停靠边缘：%1 | %2</translation>
     </message>

@@ -4,14 +4,14 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QLocale, QPoint, QTranslator
+from PySide6.QtCore import QCoreApplication, QEvent, QLocale, QPoint, QSize, QTranslator
 from PySide6.QtGui import QCursor
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QPushButton
 from shiboken6 import isValid
 
 from examples.navigation_view_example import ExampleWindow
-from pyside6_modern_widgets import DockSide
+from pyside6_modern_widgets import DockRestoreTrigger, DockSide, EdgeDockController
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -26,6 +26,11 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
         assert translator.load(str(catalog))
         assert _APP.installTranslator(translator)
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(100000, 100000)))
+    # Synthetic button clicks should not depend on the user's physical mouse
+    # buttons when this integration test runs on the native Windows desktop.
+    monkeypatch.setattr(
+        EdgeDockController, "_buttons_pressed", staticmethod(lambda **_kwargs: False)
+    )
     window = ExampleWindow()
     try:
         window.show()
@@ -43,8 +48,9 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
         )
         assert demo.windowTitle() == expected_title
         demo.auto_hide_switch.setChecked(False)
+        finished = QSignalSpy(demo.dock._animation.finished)
         demo.edge_buttons[0].click()
-        QTest.qWait(300)
+        assert finished.wait(1000)
         assert demo.dock.dockSide() == DockSide.LEFT
         expected_status = (
             "停靠边缘：左侧 | 把手已隐藏" if language == "zh_CN" else "Edge: Left | Handle hidden"
@@ -53,6 +59,22 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
         demo.auto_hide_switch.setChecked(True)
         demo.dock.collapse()
         assert demo.dock.isCollapsed()
+        demo.restore_trigger.setCurrentIndex(1)
+        demo.handle_style.setCurrentIndex(1)
+        demo.handle_icon_size.setValue(32)
+        assert demo.dock.isCollapsed()
+        assert demo.dock.restoreTrigger() == DockRestoreTrigger.CLICK
+        assert demo.dock._handle.size() == QSize(44, 44)
+        assert not demo.dock.handleIcon().isNull()
+        assert demo.handle_style.currentText() == (
+            "应用图标" if language == "zh_CN" else "Application icon"
+        )
+        assert demo.restore_trigger.currentText() == (
+            "仅点击" if language == "zh_CN" else "Click only"
+        )
+        assert demo.dock.handleToolTip() == (
+            "恢复悬浮工具" if language == "zh_CN" else "Restore floating tool"
+        )
         launch.click()
         assert window.edge_dock_example is demo
         assert demo.floating_window.isVisible()
@@ -67,13 +89,17 @@ def test_gallery_launch_reuse_and_cleanup_in_both_languages(
         )
         demo.toggle_attachment()
         assert demo.dock.isEnabled()
+        assert demo.dock.restoreTrigger() == DockRestoreTrigger.CLICK
+        assert demo.dock.handleIconSize() == 32
+        assert not demo.dock.handleIcon().isNull()
         demo.close()
         assert window.isVisible()
         assert not demo.floating_window.isVisible()
         launch.click()
         assert window.edge_dock_example is demo and demo.isVisible()
+        finished = QSignalSpy(demo.dock._animation.finished)
         demo.dock_to(DockSide.LEFT)
-        QTest.qWait(300)
+        assert finished.wait(1000)
         demo.dock.collapse()
         assert demo.dock.isCollapsed()
         window.close()

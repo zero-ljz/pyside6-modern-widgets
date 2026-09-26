@@ -3,21 +3,25 @@
 import sys
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QFormLayout,
     QGridLayout,
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from pyside6_modern_widgets import (
     DockConfig,
+    DockRestoreTrigger,
     DockSide,
     EdgeDockController,
+    ModernComboBox,
     ModernSwitch,
     ModernWindow,
 )
@@ -32,7 +36,7 @@ class EdgeDockExample(ModernWindow):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Screen-edge docking controls"))
-        self.resize(460, 440)
+        self.resize(460, 570)
         self.floating_window = ModernWindow(self, Qt.WindowType.Tool)
         self.floating_window.setWindowTitle(self.tr("Floating tool"))
         self.floating_window.resize(400, 240)
@@ -56,7 +60,7 @@ class EdgeDockExample(ModernWindow):
         instructions = QLabel(
             self.tr(
                 "Drag the tool's strip to a screen edge, then move away to auto-hide it. "
-                "Hover over the edge handle to restore it. This controls window stays "
+                "Restore it using the selected hover or click action. This controls window stays "
                 "available even when the tool and its handle are hidden."
             )
         )
@@ -68,6 +72,22 @@ class EdgeDockExample(ModernWindow):
         self.auto_hide_switch.setChecked(True)
         layout.addWidget(self.enabled_switch)
         layout.addWidget(self.auto_hide_switch)
+
+        handle_options = QFormLayout()
+        self.handle_style = ModernComboBox()
+        self.handle_style.addItems(
+            [self.tr("Thin strip"), self.tr("Application icon"), self.tr("Settings icon")]
+        )
+        self.handle_icon_size = QSpinBox()
+        self.handle_icon_size.setRange(16, 64)
+        self.handle_icon_size.setValue(24)
+        self.restore_trigger = ModernComboBox()
+        self.restore_trigger.addItem(self.tr("Hover or click"), DockRestoreTrigger.HOVER)
+        self.restore_trigger.addItem(self.tr("Click only"), DockRestoreTrigger.CLICK)
+        handle_options.addRow(self.tr("Handle appearance"), self.handle_style)
+        handle_options.addRow(self.tr("Icon size"), self.handle_icon_size)
+        handle_options.addRow(self.tr("Restore action"), self.restore_trigger)
+        layout.addLayout(handle_options)
 
         actions = QGridLayout()
         show = QPushButton(self.tr("Show / restore tool"))
@@ -105,6 +125,9 @@ class EdgeDockExample(ModernWindow):
         self.dock: EdgeDockController | None = None
         self.enabled_switch.toggled.connect(self.set_docking_enabled)
         self.auto_hide_switch.toggled.connect(self.set_auto_hide)
+        self.handle_style.currentIndexChanged.connect(self.update_handle_options)
+        self.handle_icon_size.valueChanged.connect(self.update_handle_options)
+        self.restore_trigger.currentIndexChanged.connect(self.update_handle_options)
         self.toggle_attachment()
 
     def _new_drag_strip(self) -> QLabel:
@@ -156,13 +179,35 @@ class EdgeDockExample(ModernWindow):
         else:
             self.dock = EdgeDockController(
                 self.floating_window,
-                DockConfig(sides=(DockSide.LEFT, DockSide.RIGHT, DockSide.TOP, DockSide.BOTTOM)),
+                DockConfig(
+                    sides=(DockSide.LEFT, DockSide.RIGHT, DockSide.TOP, DockSide.BOTTOM),
+                    handle_icon=self.selected_handle_icon(),
+                    handle_icon_size=self.handle_icon_size.value(),
+                    handle_tooltip=self.tr("Restore floating tool"),
+                    restore_trigger=self.restore_trigger.currentData(),
+                ),
                 drag_widget=self.drag_strip,
                 auto_hide=self.auto_hide_switch.isChecked(),
             )
             self.dock.setEnabled(self.enabled_switch.isChecked())
             self.dock.dockSideChanged.connect(self.update_status)
             self.dock.collapsedChanged.connect(self.update_status)
+        self.update_status()
+
+    def selected_handle_icon(self) -> QIcon:
+        paths = (
+            "",
+            ":/pyside6_modern_widgets/icons/application.png",
+            ":/pyside6_modern_widgets/icons/settings.png",
+        )
+        return QIcon(paths[self.handle_style.currentIndex()])
+
+    def update_handle_options(self) -> None:
+        if self.dock is not None:
+            # Works while collapsed; the handle is resized without reopening the tool.
+            self.dock.setRestoreTrigger(self.restore_trigger.currentData())
+            self.dock.setHandleIcon(self.selected_handle_icon())
+            self.dock.setHandleIconSize(self.handle_icon_size.value())
         self.update_status()
 
     def set_docking_enabled(self, enabled: bool) -> None:
@@ -179,6 +224,9 @@ class EdgeDockExample(ModernWindow):
         attached = self.dock is not None
         self.enabled_switch.setEnabled(attached)
         self.auto_hide_switch.setEnabled(attached)
+        self.handle_style.setEnabled(attached)
+        self.handle_icon_size.setEnabled(attached and self.handle_style.currentIndex() != 0)
+        self.restore_trigger.setEnabled(attached)
         self.attach_button.setText(
             self.tr("Detach docking") if attached else self.tr("Attach docking")
         )

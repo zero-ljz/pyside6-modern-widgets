@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 from PySide6.QtCore import (
@@ -18,7 +18,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPainter
+from PySide6.QtGui import QColor, QCursor, QIcon, QMouseEvent, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import isValid
 
@@ -43,6 +43,13 @@ class _DockState(Enum):
     DETACHED = "detached"
 
 
+class DockRestoreTrigger(str, Enum):
+    """HOVER restores on entry or left click; CLICK requires a left click."""
+
+    HOVER = "hover"
+    CLICK = "click"
+
+
 @dataclass(frozen=True)
 class DockConfig:
     """Distances are Qt logical pixels; durations are milliseconds."""
@@ -56,13 +63,28 @@ class DockConfig:
     anim_duration: int = 250
     hide_delay: int = 500
     sides: tuple[DockSide, ...] = (DockSide.LEFT, DockSide.RIGHT, DockSide.TOP)
+    handle_icon: QIcon = field(default_factory=QIcon)
+    handle_icon_size: int = 24
+    handle_padding: int = 6
+    handle_tooltip: str = ""
+    restore_trigger: DockRestoreTrigger = DockRestoreTrigger.HOVER
 
     def __post_init__(self) -> None:
-        for name in ("dock_distance", "safe_margin", "anim_duration", "hide_delay"):
+        for name in (
+            "dock_distance",
+            "safe_margin",
+            "anim_duration",
+            "hide_delay",
+            "handle_padding",
+        ):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} must be non-negative")
         if self.handle_width <= 0 or self.handle_length <= 0:
             raise ValueError("handle dimensions must be positive")
+        if self.handle_icon_size <= 0:
+            raise ValueError("handle_icon_size must be positive")
+        object.__setattr__(self, "handle_icon", QIcon(self.handle_icon))
+        object.__setattr__(self, "restore_trigger", DockRestoreTrigger(self.restore_trigger))
         sides = tuple(DockSide(side) for side in self.sides)
         if not sides or DockSide.NONE in sides:
             raise ValueError("sides must contain at least one screen edge")
@@ -101,6 +123,8 @@ class _EdgeHandle(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
         self._config = config
+        self.setToolTip(config.handle_tooltip)
+        self.setAccessibleName(config.handle_tooltip or target.windowTitle())
 
     def paintEvent(self, event) -> None:
         color = self._config.handle_hover_color if self.underMouse() else self._config.handle_color
@@ -108,12 +132,25 @@ class _EdgeHandle(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
-        radius = min(self.width(), self.height()) / 2
+        icon_mode = not self._config.handle_icon.isNull()
+        radius = (
+            min(8, min(self.width(), self.height()) / 2)
+            if icon_mode
+            else min(self.width(), self.height()) / 2
+        )
         painter.drawRoundedRect(self.rect(), radius, radius)
+        if icon_mode:
+            padding = self._config.handle_padding
+            bounds = self.rect().adjusted(padding, padding, -padding, -padding)
+            if not bounds.isEmpty():
+                # QIcon paints at the device's pixel ratio, preserving aspect and
+                # orientation on every edge, including mixed-DPI screens.
+                self._config.handle_icon.paint(painter, bounds, Qt.AlignmentFlag.AlignCenter)
 
     def enterEvent(self, event) -> None:
         self.update()
-        self.restored.emit()
+        if self._config.restore_trigger == DockRestoreTrigger.HOVER:
+            self.restored.emit()
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
@@ -161,7 +198,7 @@ class EdgeDockController(QObject):
         self._surface: QWidget | None = None
         self._surface_connection: QMetaObject.Connection | None = None
         self._connections: list[QMetaObject.Connection] = []
-        self._config = config or DockConfig()
+        self._config = DockConfig() if config is None else replace(config)
         self._state: _DockState = _DockState.FLOATING
         self._auto_hide = bool(auto_hide)
         self._side = DockSide.NONE
@@ -246,6 +283,53 @@ class EdgeDockController(QObject):
 
     def isCollapsed(self) -> bool:
         return self._state == _DockState.COLLAPSED
+
+    def handleIcon(self) -> QIcon:
+        return QIcon(self._config.handle_icon)
+
+    def setHandleIcon(self, icon: QIcon | None) -> None:
+        """Use an upright icon badge; None or a null QIcon restores the thin strip."""
+        self._update_handle(handle_icon=QIcon() if icon is None else QIcon(icon))
+
+    def handleIconSize(self) -> int:
+        return self._config.handle_icon_size
+
+    def setHandleIconSize(self, size: int) -> None:
+        """Set the square icon bounds in logical pixels, excluding padding."""
+        self._update_handle(handle_icon_size=size)
+
+    def handlePadding(self) -> int:
+        return self._config.handle_padding
+
+    def setHandlePadding(self, padding: int) -> None:
+        self._update_handle(handle_padding=padding)
+
+    def handleToolTip(self) -> str:
+        return self._config.handle_tooltip
+
+    def setHandleToolTip(self, text: str) -> None:
+        self._update_handle(handle_tooltip=text)
+
+    def restoreTrigger(self) -> DockRestoreTrigger:
+        return self._config.restore_trigger
+
+    def setRestoreTrigger(self, trigger: DockRestoreTrigger | str) -> None:
+        if self._state != _DockState.DETACHED:
+            self._update_handle(restore_trigger=DockRestoreTrigger(trigger))
+
+    def _update_handle(self, **changes) -> None:
+        if self._state == _DockState.DETACHED:
+            return
+        # Validate before assigning so invalid updates preserve the live handle.
+        self._config = replace(self._config, **changes)
+        self._handle._config = self._config
+        self._handle.setToolTip(self._config.handle_tooltip)
+        self._handle.setAccessibleName(self._config.handle_tooltip or self._target.windowTitle())
+        if self.isCollapsed():
+            screen = self._screen()
+            if screen is not None:
+                self._position_handle(self._target.frameGeometry(), screen.availableGeometry())
+        self._handle.update()
 
     def setDragWidget(self, widget: QWidget | None = None) -> None:
         """Bind a drag surface; None selects the target's empty space.
@@ -466,11 +550,14 @@ class EdgeDockController(QObject):
     def _position_handle(self, frame: QRect, area: QRect) -> None:
         cfg = self._config
         vertical = self._side in (DockSide.LEFT, DockSide.RIGHT)
-        width, height = (
-            (cfg.handle_width, cfg.handle_length)
-            if vertical
-            else (cfg.handle_length, cfg.handle_width)
-        )
+        if cfg.handle_icon.isNull():
+            width, height = (
+                (cfg.handle_width, cfg.handle_length)
+                if vertical
+                else (cfg.handle_length, cfg.handle_width)
+            )
+        else:
+            width = height = cfg.handle_icon_size + 2 * cfg.handle_padding
         width = min(width, max(1, area.width() - 2 * cfg.safe_margin))
         height = min(height, max(1, area.height() - 2 * cfg.safe_margin))
         rect = QRect(0, 0, width, height)

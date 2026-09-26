@@ -1,6 +1,6 @@
 """Public API for pyside6-modern-widgets."""
 
-from .edge_dock import DockConfig, DockSide, EdgeDockController
+from .edge_dock import DockConfig, DockRestoreTrigger, DockSide, EdgeDockController
 from .i18n import load_translator
 from .modern_combo_box import ModernComboBox
 from .modern_dialog import ModernDialog
@@ -36,6 +36,7 @@ __all__ = [
     "DEFAULT_METRICS",
     "LIGHT_THEME",
     "DockConfig",
+    "DockRestoreTrigger",
     "DockSide",
     "EdgeDockController",
     "FlyoutPlacement",

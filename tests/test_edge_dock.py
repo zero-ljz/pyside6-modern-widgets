@@ -3,16 +3,191 @@ from __future__ import annotations
 import sys
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QPointF, QRect, Qt, Signal
-from PySide6.QtGui import QCursor, QEnterEvent, QMouseEvent
-from PySide6.QtTest import QTest
+from PySide6.QtCore import (
+    QCoreApplication,
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
+    QRect,
+    QSize,
+    Qt,
+    Signal,
+)
+from PySide6.QtGui import QColor, QCursor, QEnterEvent, QIcon, QMouseEvent, QPainter, QPixmap
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QMenu, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
-from pyside6_modern_widgets import DockConfig, DockSide, EdgeDockController, ModernWindow
+from pyside6_modern_widgets import (
+    DockConfig,
+    DockRestoreTrigger,
+    DockSide,
+    EdgeDockController,
+    ModernWindow,
+)
 from pyside6_modern_widgets.edge_dock import _edge_rect
 
 _APP = QApplication.instance() or QApplication([])
+
+
+def _two_color_icon():
+    pixmap = QPixmap(24, 24)
+    pixmap.fill(QColor("red"))
+    painter = QPainter(pixmap)
+    painter.fillRect(12, 0, 12, 24, QColor("blue"))
+    painter.end()
+    return QIcon(pixmap)
+
+
+@pytest.mark.parametrize("side", list(DockSide)[1:])
+def test_icon_handle_stays_upright_and_inside_each_edge(docked, side):
+    window, previous, strip, _ = docked
+    previous.detach()
+    controller = EdgeDockController(
+        window,
+        DockConfig(
+            anim_duration=0,
+            sides=tuple(list(DockSide)[1:]),
+            handle_icon=_two_color_icon(),
+            restore_trigger=DockRestoreTrigger.CLICK,
+        ),
+        drag_widget=strip,
+    )
+    controller.dock(side)
+    controller.collapse()
+    handle = controller._handle
+    assert controller.isCollapsed()
+    assert handle.size() == QSize(36, 36)
+    area = window.screen().availableGeometry().adjusted(2, 2, -2, -2)
+    assert area.contains(handle.geometry())
+    assert getattr(handle.geometry(), side.value)() == getattr(area, side.value)()
+    image = handle.grab().toImage()
+    ratio = image.devicePixelRatio()
+    assert image.pixelColor(int(10 * ratio), int(18 * ratio)) == QColor("red")
+    assert image.pixelColor(int(26 * ratio), int(18 * ratio)) == QColor("blue")
+
+
+def test_live_handle_updates_preserve_collapse_and_allow_strip_fallback(docked):
+    window, controller, _, _ = docked
+    controller.setRestoreTrigger("click")
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    position = window.pos()
+    events = []
+    controller.collapsedChanged.connect(events.append)
+    controller.setHandleIcon(_two_color_icon())
+    controller.setHandleIconSize(32)
+    controller.setHandlePadding(8)
+    controller.setHandleToolTip("Restore notes")
+    assert controller.handleIconSize() == 32
+    assert controller.handlePadding() == 8
+    assert controller.handleToolTip() == "Restore notes"
+    assert controller._handle.toolTip() == "Restore notes"
+    assert controller._handle.accessibleName() == "Restore notes"
+    assert controller._handle.size() == QSize(48, 48)
+    # Returned icons are values; caller mutation must not change the live icon.
+    copy = controller.handleIcon()
+    copy.swap(QIcon())
+    assert not controller.handleIcon().isNull()
+    controller.setHandleIcon(None)
+    assert controller.handleIcon().isNull()
+    assert controller._handle.size() == QSize(6, 80)
+    assert controller.isCollapsed() and not window.isVisible()
+    assert controller._handle.isVisible()
+    assert window.pos() == position
+    assert events == []
+
+
+@pytest.mark.parametrize("icon", [False, True])
+@pytest.mark.parametrize("trigger", list(DockRestoreTrigger))
+def test_handle_restore_trigger_controls_hover_and_left_click(docked, trigger, icon):
+    window, controller, _, _ = docked
+    controller.setRestoreTrigger(trigger)
+    if icon:
+        controller.setHandleIcon(_two_color_icon())
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    handle = controller._handle
+    point = QPointF(handle.rect().center())
+    QApplication.sendEvent(handle, QEnterEvent(point, point, point))
+    if trigger == DockRestoreTrigger.HOVER:
+        assert window.isVisible()
+        controller.collapse()
+    else:
+        assert controller.isCollapsed()
+        assert not window.isVisible()
+    QTest.mouseClick(handle, Qt.RightButton)
+    assert controller.isCollapsed()
+    QTest.mouseClick(handle, Qt.LeftButton)
+    assert window.isVisible()
+    assert not controller.isCollapsed()
+    assert not handle.isVisible()
+
+
+def test_switching_trigger_while_collapsed_applies_to_next_entry(docked):
+    _, controller, _, _ = docked
+    controller.setRestoreTrigger("click")
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    controller.setRestoreTrigger("hover")
+    assert controller.restoreTrigger() == DockRestoreTrigger.HOVER
+    point = QPointF(controller._handle.rect().center())
+    QApplication.sendEvent(controller._handle, QEnterEvent(point, point, point))
+    assert not controller.isCollapsed()
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"handle_icon_size": 0}, {"handle_padding": -1}, {"restore_trigger": "invalid"}]
+)
+def test_invalid_handle_config(kwargs):
+    with pytest.raises(ValueError):
+        DockConfig(**kwargs)
+
+
+def test_invalid_handle_updates_are_atomic_and_detach_makes_them_inert(docked):
+    _, controller, _, _ = docked
+    controller.setRestoreTrigger("click")
+    controller.setHandleIcon(_two_color_icon())
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    for setter, value in (
+        (controller.setHandleIconSize, 0),
+        (controller.setHandlePadding, -1),
+        (controller.setRestoreTrigger, "invalid"),
+    ):
+        with pytest.raises(ValueError):
+            setter(value)
+    assert controller._handle.size() == QSize(36, 36)
+    assert controller.restoreTrigger() == DockRestoreTrigger.CLICK
+    controller.detach()
+    controller.setHandleIcon(None)
+    controller.setHandleIconSize(48)
+    controller.setHandlePadding(12)
+    controller.setHandleToolTip("ignored")
+    controller.setRestoreTrigger("hover")
+    assert not controller.handleIcon().isNull()
+    assert controller.handleIconSize() == 24
+    assert controller.handlePadding() == 6
+    assert controller.handleToolTip() == ""
+    assert controller.restoreTrigger() == DockRestoreTrigger.CLICK
+
+
+def test_icon_handle_shrinks_to_small_work_area(docked, monkeypatch):
+    _, controller, _, _ = docked
+    area = QRect(-500, -300, 30, 26)
+
+    class Screen:
+        def availableGeometry(self):
+            return area
+
+    monkeypatch.setattr(controller, "_screen", lambda: Screen())
+    controller.setHandleIcon(_two_color_icon())
+    controller.setRestoreTrigger("click")
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    assert area.adjusted(2, 2, -2, -2).contains(controller._handle.geometry())
+    assert not controller._handle.grab().isNull()
 
 
 @pytest.fixture
@@ -443,9 +618,10 @@ def test_resize_keeps_right_edge_and_animation_is_reused(docked):
     controller = EdgeDockController(window, DockConfig(anim_duration=40), drag_widget=strip)
     controller.setAutoHide(False)
     animation = controller._animation
+    finished = QSignalSpy(animation.finished)
     controller.dock(DockSide.LEFT)
     controller.dock(DockSide.RIGHT)
-    QTest.qWait(70)
+    assert finished.wait(1000)
     assert controller._animation is animation
     assert controller.dockSide() == DockSide.RIGHT
     assert window.frameGeometry().right() == window.screen().availableGeometry().right() - 2

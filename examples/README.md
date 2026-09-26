@@ -42,6 +42,9 @@ all four edges, including the optional bottom edge.
 
 The controls window remains available while the tool is hidden:
 
+- **Handle appearance** switches between the thin strip and application/settings
+  icons, including while collapsed. **Icon size** changes the icon bounds, and
+  **Restore action** selects hover-or-click versus click-only restoration.
 - **Hide tool and handle** uses `dismiss()`, including when the tool is already
   collapsed; **Show / restore tool** uses `expand()`. Closing the tool also leaves
   the controls available to reopen it.
