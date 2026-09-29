@@ -219,6 +219,37 @@ docking state and do not reopen the target. Changing the mode takes effect on
 the next gesture. Matching getters (`handleIcon()`, `handleIconSize()`,
 `handlePadding()`, `handleToolTip()`, `handleMode()`) expose current settings.
 
+Icon handles support `DockHandleShape.ROUNDED_RECT` (the default) and
+`DockHandleShape.CIRCLE` through `handle_shape` in `DockConfig`. Rounded rectangles
+use `handle_corner_radius`, which defaults to `8` logical pixels; `0` gives square
+corners, and larger radii are limited to half the handle size. Circles remain square
+even when constrained by a small work area. Shape and corner radius apply to icon
+handles; the thin-strip fallback keeps its capsule shape.
+
+Icon size and padding remain independent of shape. For a circular badge with more
+breathing room, use a `24` pixel icon and `10` pixel padding for a `44` pixel diameter:
+
+```python
+from pyside6_modern_widgets import DockHandleShape
+
+dock.setHandleShape(DockHandleShape.CIRCLE)
+dock.setHandleIconSize(24)
+dock.setHandlePadding(10)
+# Equivalent DockConfig fields: handle_shape="circle", handle_icon_size=24,
+# handle_padding=10. No image asset changes are needed.
+```
+
+`setHandleShape()` and `setHandleCornerRadius()` also work while collapsed, with
+matching `handleShape()` and `handleCornerRadius()` getters. Icons are clipped inside
+the shape and border when padding is too small to fit all corners.
+
+Set `handle_border_color` and `handle_border_width` in `DockConfig` to outline
+either handle style. The width defaults to `0` (disabled) and accepts finite,
+non-negative values in Qt logical pixels, including fractional widths. The
+outline is inset within the rounded handle and follows the display's DPI.
+For a thin gray border, use `handle_border_color=QColor("#b0b0b0")` and
+`handle_border_width=1`. Apply changes to an existing controller with `setConfig()`.
+
 Handle dragging is opt-in and works with both icons and strips:
 
 ```python

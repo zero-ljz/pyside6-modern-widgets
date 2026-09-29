@@ -16,12 +16,23 @@ from PySide6.QtCore import (
     QPointF,
     QPropertyAnimation,
     QRect,
+    QRectF,
     QSize,
     Qt,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QCursor, QIcon, QKeyEvent, QMouseEvent, QPainter, QScreen
+from PySide6.QtGui import (
+    QColor,
+    QCursor,
+    QIcon,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QScreen,
+)
 from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import isValid
 
@@ -54,6 +65,13 @@ class DockHandleMode(str, Enum):
     DRAG_OR_CLICK = "drag_or_click"
 
 
+class DockHandleShape(str, Enum):
+    """Choose the outline of an icon handle; strips remain capsules."""
+
+    ROUNDED_RECT = "rounded_rect"
+    CIRCLE = "circle"
+
+
 @dataclass(frozen=True)
 class DockConfig:
     """Distances are Qt logical pixels; durations are milliseconds."""
@@ -73,6 +91,10 @@ class DockConfig:
     handle_tooltip: str = ""
     handle_mode: DockHandleMode = DockHandleMode.HOVER_OR_CLICK
     auto_hide: bool = True
+    handle_border_color: QColor = field(default_factory=lambda: QColor(150, 150, 150))
+    handle_border_width: float = 0.0
+    handle_shape: DockHandleShape = DockHandleShape.ROUNDED_RECT
+    handle_corner_radius: float = 8.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -88,10 +110,16 @@ class DockConfig:
             raise ValueError("handle dimensions must be positive")
         if self.handle_icon_size <= 0:
             raise ValueError("handle_icon_size must be positive")
+        if not isfinite(self.handle_border_width) or self.handle_border_width < 0:
+            raise ValueError("handle_border_width must be finite and non-negative")
+        if not isfinite(self.handle_corner_radius) or self.handle_corner_radius < 0:
+            raise ValueError("handle_corner_radius must be finite and non-negative")
         object.__setattr__(self, "handle_icon", QIcon(self.handle_icon))
         object.__setattr__(self, "handle_color", QColor(self.handle_color))
         object.__setattr__(self, "handle_hover_color", QColor(self.handle_hover_color))
+        object.__setattr__(self, "handle_border_color", QColor(self.handle_border_color))
         object.__setattr__(self, "handle_mode", DockHandleMode(self.handle_mode))
+        object.__setattr__(self, "handle_shape", DockHandleShape(self.handle_shape))
         object.__setattr__(self, "auto_hide", bool(self.auto_hide))
         sides = tuple(DockSide(side) for side in self.sides)
         if not sides or DockSide.NONE in sides:
@@ -187,16 +215,43 @@ class _EdgeHandle(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
         icon_mode = not self._config.handle_icon.isNull()
+        circle = icon_mode and self._config.handle_shape == DockHandleShape.CIRCLE
         radius = (
-            min(8, min(self.width(), self.height()) / 2)
+            min(self._config.handle_corner_radius, min(self.width(), self.height()) / 2)
             if icon_mode
             else min(self.width(), self.height()) / 2
         )
-        painter.drawRoundedRect(self.rect(), radius, radius)
+        width = 0.0
+        if self._config.handle_border_width > 0:
+            width = min(self._config.handle_border_width, min(self.width(), self.height()) / 2)
+            inset = width / 2
+            rect = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
+            # Inset the stroke centre so the outline keeps the original bounds
+            # and outer corner radius at every device pixel ratio.
+            painter.setPen(QPen(self._config.handle_border_color, width))
+            if circle:
+                painter.drawEllipse(rect)
+            else:
+                stroke_radius = max(0, radius - inset)
+                painter.drawRoundedRect(rect, stroke_radius, stroke_radius)
+        elif circle:
+            painter.drawEllipse(QRectF(self.rect()))
+        else:
+            painter.drawRoundedRect(self.rect(), radius, radius)
         if icon_mode:
             padding = self._config.handle_padding
             bounds = self.rect().adjusted(padding, padding, -padding, -padding)
-            if not bounds.isEmpty():
+            content_rect = QRectF(self.rect()).adjusted(width, width, -width, -width)
+            if not bounds.isEmpty() and not content_rect.isEmpty():
+                # Keep square icon pixels inside the shape and its outline,
+                # including when the caller chooses little or no padding.
+                clip = QPainterPath()
+                if circle:
+                    clip.addEllipse(content_rect)
+                else:
+                    content_radius = max(0, radius - width)
+                    clip.addRoundedRect(content_rect, content_radius, content_radius)
+                painter.setClipPath(clip)
                 # QIcon paints at the device's pixel ratio, preserving aspect and
                 # orientation on every edge, including mixed-DPI screens.
                 self._config.handle_icon.paint(painter, bounds, Qt.AlignmentFlag.AlignCenter)
@@ -423,6 +478,18 @@ class EdgeDockController(QObject):
 
     def setHandlePadding(self, padding: int) -> None:
         self._update_config(handle_padding=padding)
+
+    def handleShape(self) -> DockHandleShape:
+        return self._config.handle_shape
+
+    def setHandleShape(self, shape: DockHandleShape | str) -> None:
+        self._update_config(handle_shape=shape)
+
+    def handleCornerRadius(self) -> float:
+        return self._config.handle_corner_radius
+
+    def setHandleCornerRadius(self, radius: float) -> None:
+        self._update_config(handle_corner_radius=radius)
 
     def handleToolTip(self) -> str:
         return self._config.handle_tooltip
@@ -826,6 +893,8 @@ class EdgeDockController(QObject):
             width = height = cfg.handle_icon_size + 2 * cfg.handle_padding
         width = min(width, max(1, area.width() - 2 * cfg.safe_margin))
         height = min(height, max(1, area.height() - 2 * cfg.safe_margin))
+        if not cfg.handle_icon.isNull() and cfg.handle_shape == DockHandleShape.CIRCLE:
+            width = height = min(width, height)
         rect = QRect(0, 0, width, height)
         rect.moveCenter(frame.center() if self._handle_anchor is None else self._handle_anchor)
         self._handle.setGeometry(_edge_rect(rect, area, self._side, cfg.safe_margin))

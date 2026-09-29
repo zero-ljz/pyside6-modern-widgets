@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
 import pytest
 from PySide6.QtCore import (
@@ -22,6 +23,7 @@ from shiboken6 import isValid
 from pyside6_modern_widgets import (
     DockConfig,
     DockHandleMode,
+    DockHandleShape,
     DockSide,
     EdgeDockController,
     ModernWindow,
@@ -97,6 +99,142 @@ def test_live_handle_updates_preserve_collapse_and_allow_strip_fallback(docked):
     assert controller._handle.isVisible()
     assert window.pos() == position
     assert events == []
+
+
+@pytest.mark.parametrize("icon", [False, True])
+@pytest.mark.parametrize("width", [0, 0.5, 1, 2])
+def test_handle_border_is_inset_and_live_updates_keep_placement(docked, icon, width):
+    _, controller, _, _ = docked
+    controller.setConfig(replace(
+        controller.config(), handle_mode=DockHandleMode.CLICK,
+        handle_icon=_two_color_icon() if icon else QIcon(),
+        handle_color=QColor("white"), handle_hover_color=QColor("white"),
+    ))
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    size = controller._handle.size()
+    placement = controller.placement()
+    controller.setConfig(replace(
+        controller.config(), handle_border_color=QColor("#808080"), handle_border_width=width,
+    ))
+    assert controller.isCollapsed()
+    assert controller.placement() == placement
+    assert controller._handle.size() == size
+    image = controller._handle.grab().toImage()
+    for x in (0, image.width() - 1):
+        color = image.pixelColor(x, image.height() // 2)
+        if width == 0:
+            assert color.red() == 255
+        elif width < 1:
+            assert 128 < color.red() < 255
+        else:
+            assert color.red() == 128
+    # Narrow strip corners can cover a small fraction of an antialiased pixel.
+    assert image.pixelColor(0, 0).alpha() <= (0 if icon else 8)
+    if icon:
+        ratio = image.devicePixelRatio()
+        assert image.pixelColor(int(10 * ratio), int(18 * ratio)) == QColor("red")
+        assert image.pixelColor(int(26 * ratio), int(18 * ratio)) == QColor("blue")
+
+
+@pytest.mark.parametrize("width", [-1, float("inf"), float("-inf"), float("nan")])
+def test_invalid_border_width_is_rejected(width):
+    with pytest.raises(ValueError, match="handle_border_width"):
+        DockConfig(handle_border_width=width)
+
+
+@pytest.mark.parametrize("side", list(DockSide)[1:])
+@pytest.mark.parametrize("shape, radius, corner_opaque", [
+    (DockHandleShape.ROUNDED_RECT, 0, True),
+    (DockHandleShape.ROUNDED_RECT, 8, True),
+    (DockHandleShape.ROUNDED_RECT, 100, False),
+    (DockHandleShape.CIRCLE, 0, False),
+])
+def test_icon_shapes_keep_padding_and_upright_icons_on_each_edge(
+    docked, side, shape, radius, corner_opaque,
+):
+    window, controller, _, _ = docked
+    controller.setConfig(replace(
+        controller.config(), sides=tuple(list(DockSide)[1:]),
+        handle_icon=_two_color_icon(), handle_mode=DockHandleMode.CLICK,
+        handle_padding=10, handle_shape=shape, handle_corner_radius=radius,
+        handle_color=QColor("white"), handle_hover_color=QColor("white"),
+        handle_border_width=1, handle_border_color=QColor("#808080"),
+    ))
+    controller.dock(side)
+    controller.collapse()
+    handle = controller._handle
+    assert handle.size() == QSize(44, 44)
+    area = window.screen().availableGeometry().adjusted(2, 2, -2, -2)
+    assert area.contains(handle.geometry())
+    assert getattr(handle.geometry(), side.value)() == getattr(area, side.value)()
+    image = handle.grab().toImage()
+    ratio = image.devicePixelRatio()
+    corner = image.pixelColor(int(3 * ratio), int(3 * ratio))
+    assert corner.alpha() == (255 if corner_opaque else 0)
+    for x, y in ((0, image.height() // 2), (image.width() - 1, image.height() // 2),
+                 (image.width() // 2, 0), (image.width() // 2, image.height() - 1)):
+        # Curved antialiased strokes can mix a few levels of the white fill.
+        color = image.pixelColor(x, y)
+        assert 128 <= color.red() <= 132
+        assert color.red() == color.green() == color.blue()
+        assert color.alpha() >= 240
+    assert image.pixelColor(int(14 * ratio), int(22 * ratio)) == QColor("red")
+    assert image.pixelColor(int(30 * ratio), int(22 * ratio)) == QColor("blue")
+
+
+@pytest.mark.parametrize("shape", list(DockHandleShape))
+@pytest.mark.parametrize("border_width", [0, 1])
+def test_unpadded_icons_are_clipped_inside_shape_and_border(docked, shape, border_width):
+    _, controller, _, _ = docked
+    controller.setConfig(replace(
+        controller.config(), handle_icon=_two_color_icon(), handle_padding=0,
+        handle_mode=DockHandleMode.CLICK, handle_shape=shape,
+        handle_border_width=border_width, handle_border_color=QColor("#808080"),
+    ))
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    image = controller._handle.grab().toImage()
+    ratio = image.devicePixelRatio()
+    assert image.pixelColor(0, 0).alpha() == 0
+    assert image.pixelColor(int(8 * ratio), int(12 * ratio)) == QColor("red")
+    assert image.pixelColor(int(16 * ratio), int(12 * ratio)) == QColor("blue")
+    if border_width:
+        for x in (0, image.width() - 1):
+            color = image.pixelColor(x, image.height() // 2)
+            assert 128 <= color.red() <= 132
+            assert color.red() == color.green() == color.blue()
+
+
+@pytest.mark.parametrize("width, height", [(28, 160), (160, 28)])
+def test_circle_stays_square_when_work_area_constrains_one_dimension(docked, width, height):
+    window, controller, _, _ = docked
+    controller.setConfig(replace(
+        controller.config(), handle_icon=_two_color_icon(), handle_padding=10,
+        handle_shape=DockHandleShape.CIRCLE, handle_mode=DockHandleMode.CLICK,
+    ))
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    area = QRect(0, 0, width, height)
+    controller._position_handle(window.frameGeometry(), area)
+    assert controller._handle.size() == QSize(24, 24)
+    assert area.adjusted(2, 2, -2, -2).contains(controller._handle.geometry())
+
+
+def test_icon_shape_settings_preserve_strip_fallback(docked):
+    _, controller, _, _ = docked
+    controller.setHandleMode(DockHandleMode.CLICK)
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    original = controller._handle.grab().toImage()
+    controller.setHandleShape(DockHandleShape.CIRCLE)
+    controller.setHandleCornerRadius(0)
+    controller.setHandlePadding(10)
+    assert controller._handle.size() == QSize(6, 80)
+    assert controller._handle.grab().toImage() == original
+    controller.setHandleIcon(_two_color_icon())
+    assert controller._handle.size() == QSize(44, 44)
+    assert controller.handleShape() == DockHandleShape.CIRCLE
 
 
 @pytest.mark.parametrize("icon", [False, True])

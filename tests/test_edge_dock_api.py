@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 from pyside6_modern_widgets import (
     DockConfig,
     DockHandleMode,
+    DockHandleShape,
     DockPlacement,
     DockSide,
     DockState,
@@ -39,18 +40,23 @@ def dock(monkeypatch):
 def test_config_and_qt_values_are_independent_snapshots(dock):
     _, controller = dock
     color = QColor("red")
-    config = DockConfig(handle_color=color, handle_hover_color=color)
+    config = DockConfig(handle_color=color, handle_hover_color=color, handle_border_color=color)
     color.setRgb(0, 255, 0)
     assert config.handle_color == QColor("red")
+    assert config.handle_border_color == QColor("red")
     controller.setConfig(config)
     config.handle_color.setRgb(0, 0, 255)
     config.handle_hover_color.setRgb(0, 0, 255)
+    config.handle_border_color.setRgb(0, 0, 255)
     snapshot = controller.config()
     assert snapshot.handle_color == QColor("red")
     assert snapshot.handle_hover_color == QColor("red")
+    assert snapshot.handle_border_color == QColor("red")
     snapshot.handle_color.setRgb(0, 255, 0)
+    snapshot.handle_border_color.setRgb(0, 255, 0)
     snapshot.handle_icon.swap(QIcon(":/pyside6_modern_widgets/icons/application.png"))
     assert controller.config().handle_color == QColor("red")
+    assert controller.config().handle_border_color == QColor("red")
     assert controller.handleIcon().isNull()
 
 
@@ -99,6 +105,43 @@ def test_equal_config_does_not_cancel_gesture_or_emit(dock, monkeypatch):
     controller.setHandleMode(controller.handleMode())
     assert changes.count() == 0
     assert cancellations == []
+
+
+def test_live_shape_and_radius_updates_keep_collapsed_placement(dock):
+    window, controller = dock
+    controller.setHandleIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
+    controller.dock(DockSide.LEFT)
+    controller.collapse()
+    placement = controller.placement()
+    size = controller._handle.size()
+    changes = QSignalSpy(controller.configChanged)
+    collapsed = QSignalSpy(controller.collapsedChanged)
+    controller.setHandleShape("circle")
+    assert controller.handleShape() == DockHandleShape.CIRCLE
+    controller.setHandleCornerRadius(3.5)
+    assert controller.handleCornerRadius() == 3.5
+    assert controller.config().handle_shape == DockHandleShape.CIRCLE
+    assert controller.config().handle_corner_radius == 3.5
+    assert controller.isCollapsed() and not window.isVisible()
+    assert controller.placement() == placement
+    assert controller._handle.size() == size
+    assert changes.count() == 2 and collapsed.count() == 0
+    controller.setHandleShape(DockHandleShape.CIRCLE)
+    controller.setHandleCornerRadius(3.5)
+    assert changes.count() == 2
+    with pytest.raises(ValueError):
+        controller.setHandleShape("triangle")
+    with pytest.raises(ValueError, match="handle_corner_radius"):
+        controller.setHandleCornerRadius(-1)
+    assert changes.count() == 2
+    assert controller.handleShape() == DockHandleShape.CIRCLE
+    assert controller.handleCornerRadius() == 3.5
+
+
+@pytest.mark.parametrize("radius", [-1, float("inf"), float("-inf"), float("nan")])
+def test_invalid_corner_radius_is_rejected(radius):
+    with pytest.raises(ValueError, match="handle_corner_radius"):
+        DockConfig(handle_corner_radius=radius)
 
 
 def test_explicit_collapse_ignores_auto_hide_and_pointer_but_auto_timer_does_not(dock, monkeypatch):

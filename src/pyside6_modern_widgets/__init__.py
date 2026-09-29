@@ -3,6 +3,7 @@
 from .edge_dock import (
     DockConfig,
     DockHandleMode,
+    DockHandleShape,
     DockPlacement,
     DockSide,
     DockState,
@@ -51,6 +52,7 @@ __all__ = [
     "LIGHT_THEME",
     "DockConfig",
     "DockHandleMode",
+    "DockHandleShape",
     "DockPlacement",
     "DockSide",
     "DockState",
