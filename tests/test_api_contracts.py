@@ -103,7 +103,7 @@ def test_navigation_sidebar_emits_shifted_index_after_state_is_committed():
     sidebar.currentChanged.connect(
         lambda index: snapshots.append((index, sidebar.currentIndex(), sidebar.itemText(index)))
     )
-    removed = sidebar.removeItem(0)
+    removed = sidebar.takeItem(0)
     assert snapshots == [(1, 1, "C")]
     removed.deleteLater()
     sidebar.deleteLater()

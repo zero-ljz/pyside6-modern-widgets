@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Make `NavigationSidebar.removeItem()` retain Qt ownership and return None.
+  Add `takeItem()` to return the hidden button and transfer ownership to the
+  caller, matching page container removal. See the
+  [next-release migration guide](docs/migration-next.md) for this breaking change.
+
+### Fixed
+
+- Match Qt tab behavior when inserting at a negative index (append) and when
+  programmatically selecting a disabled tab (select without enabling it).
+- Synchronize sidebar selection and `currentChanged` when a borrowed button is
+  checked programmatically; removed buttons no longer trigger sidebar activation.
+
 ## [0.6.0] - 2026-09-26
 
 This release intentionally breaks the APIs listed in the

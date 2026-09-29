@@ -4,14 +4,104 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
+import pytest
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtGui import QFocusEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
+from shiboken6 import isValid
 
-from pyside6_modern_widgets import NavigationSidebar
+from pyside6_modern_widgets import NavigationPosition, NavigationSidebar, NavigationView
 
 _APP = QApplication.instance() or QApplication([])
+
+
+def _flush_deletes():
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_borrowed_button_selection_updates_navigation_and_activation_signals():
+    view = NavigationView()
+    for label in ("A", "B", "C"):
+        view.addPage(QLabel(label), label)
+    sidebar = view.sidebar
+    changes, activations, pages = [], [], []
+    sidebar.currentChanged.connect(
+        lambda index: changes.append(
+            (index, sidebar.currentIndex(), sidebar.button(index).isChecked())
+        )
+    )
+    sidebar.itemActivated.connect(activations.append)
+    view.currentChanged.connect(lambda index: pages.append((index, view.currentWidget().text())))
+    sidebar.button(1).setChecked(True)
+    sidebar.button(1).setChecked(True)
+    sidebar.setCurrentIndex(2)
+    sidebar.setCurrentIndex(2)
+    sidebar.button(2).click()
+    sidebar.button(0).click()
+    assert changes == [(1, 1, True), (2, 2, True), (0, 0, True)]
+    assert pages == [(1, "B"), (2, "C"), (0, "A")]
+    assert activations == [2, 0]
+    view.deleteLater()
+    _flush_deletes()
+
+
+@pytest.mark.parametrize("take", [False, True])
+@pytest.mark.parametrize("position", list(NavigationPosition))
+def test_item_removal_ownership_and_detached_selection(take, position):
+    sidebar = NavigationSidebar()
+    sidebar.addItem("A", position=position)
+    sidebar.addItem("B", position=position)
+    sidebar.setCurrentIndex(0)
+    button = sidebar.button(0)
+    original_parent = button.parent()
+    changes, activations = [], []
+    sidebar.currentChanged.connect(
+        lambda index: changes.append(
+            (index, sidebar.itemText(index), sidebar.button(index).isChecked())
+        )
+    )
+    sidebar.itemActivated.connect(activations.append)
+    operation = sidebar.takeItem if take else sidebar.removeItem
+    result = operation(0)
+    assert sidebar.count() == 1
+    assert changes == [(0, "B", True)]
+    assert button.isHidden()
+    assert result is (button if take else None)
+    assert button.parent() is (None if take else original_parent)
+    assert operation(-1) is None
+    assert operation(100) is None
+    # A removed button no longer participates, even when the caller retains it.
+    button.setChecked(False)
+    button.setChecked(True)
+    button.click()
+    assert changes == [(0, "B", True)]
+    assert activations == []
+    sidebar.addItem("C")
+    sidebar.button(1).setChecked(True)
+    assert changes[-1] == (1, "C", True)
+    sidebar.deleteLater()
+    _flush_deletes()
+    assert isValid(button) == take
+    if take:
+        assert button.text() == "A"
+        button.deleteLater()
+        _flush_deletes()
+
+
+def test_removal_before_selection_keeps_button_indices_current():
+    sidebar = NavigationSidebar()
+    for label in ("A", "B", "C"):
+        sidebar.addItem(label)
+    sidebar.setCurrentIndex(2)
+    sidebar.removeItem(0)
+    changes = []
+    sidebar.currentChanged.connect(changes.append)
+    sidebar.button(0).setChecked(True)
+    sidebar.button(1).setChecked(True)
+    assert changes == [0, 1]
+    sidebar.deleteLater()
+    _flush_deletes()
 
 
 def test_navigation_toggle_only_uses_hover_style_for_keyboard_focus() -> None:

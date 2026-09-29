@@ -209,7 +209,9 @@ class NavigationView(QWidget):
         self._sync_sidebar_minimum_height()
         if item_index != page_index:
             self.stackedWidget.removeWidget(page)
-            self.sidebar.removeItem(item_index)
+            button = self.sidebar.takeItem(item_index)
+            if button is not None:
+                button.deleteLater()
             raise RuntimeError("Navigation item and page indexes are out of sync")
         if selected or self.count() == 1:
             self.setCurrentIndex(page_index)
@@ -237,7 +239,7 @@ class NavigationView(QWidget):
         old_index = self.sidebar.currentIndex()
         new_index = min(index, self.count() - 1) if old_index == index else self.currentIndex()
         with QSignalBlocker(self.sidebar), QSignalBlocker(self.stackedWidget):
-            button = self.sidebar.removeItem(index)
+            button = self.sidebar.takeItem(index)
             if button is not None:
                 button.deleteLater()
             self.sidebar.setCurrentIndex(new_index)

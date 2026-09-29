@@ -9,9 +9,58 @@ from PySide6.QtGui import QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QTabWidget, QVBoxLayout, QWidget
 
-from pyside6_modern_widgets import TabView
+from pyside6_modern_widgets import ModernTabWidget, TabView
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize("index", [-10, -1, 0, 1, 2, 10])
+def test_insert_index_boundaries_match_qt(index):
+    outcomes = []
+    for view_class in (QTabWidget, ModernTabWidget, TabView):
+        view = view_class()
+        for label in ("A", "B"):
+            view.addTab(QLabel(label), label)
+        result = view.insertTab(index, QLabel("New"), "New")
+        outcomes.append(
+            (result, [view.tabText(i) for i in range(view.count())], view.currentWidget().text())
+        )
+        view.deleteLater()
+    assert outcomes[0] == outcomes[1] == outcomes[2]
+
+
+@pytest.mark.parametrize("by_widget", [False, True])
+def test_programmatic_selection_of_disabled_tab_matches_qt(by_widget):
+    outcomes = []
+    for view_class in (QTabWidget, ModernTabWidget, TabView):
+        view = view_class()
+        for label in ("A", "B"):
+            view.addTab(QLabel(label), label)
+        view.setTabEnabled(1, False)
+        changes = []
+        view.currentChanged.connect(changes.append)
+        for _ in range(2):
+            if by_widget:
+                view.setCurrentWidget(view.widget(1))
+            else:
+                view.setCurrentIndex(1)
+        outcomes.append(
+            (view.currentIndex(), view.currentWidget().text(), view.widget(1).isEnabled(), changes)
+        )
+        view.deleteLater()
+    assert outcomes[0] == outcomes[1] == outcomes[2] == (1, "B", False, [1])
+
+
+def test_relative_tab_navigation_still_skips_disabled_tabs():
+    view = TabView()
+    for label in ("A", "B", "C"):
+        view.addTab(QLabel(label), label)
+    view.setTabEnabled(1, False)
+    view.nextTab()
+    assert view.currentIndex() == 2
+    view.previousTab()
+    assert view.currentIndex() == 0
+    view.deleteLater()
 
 
 @pytest.mark.parametrize(

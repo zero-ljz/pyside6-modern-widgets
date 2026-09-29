@@ -584,7 +584,7 @@ class TabView(QWidget):
         existing_index = self.indexOf(widget)
         if existing_index >= 0:
             self.removeTab(existing_index)
-        index = max(0, min(index, self.count()))
+        index = self.count() if index < 0 else min(index, self.count())
         old_widget = self.currentWidget()
         with self._suspend_sync():
             page_index = self._stack.insertWidget(index, widget)
@@ -650,7 +650,7 @@ class TabView(QWidget):
             self.setCurrentIndex(index)
 
     def setCurrentIndex(self, index: int) -> None:
-        if 0 <= index < self.count() and self.isTabEnabled(index):
+        if 0 <= index < self.count():
             self._tab_bar.setCurrentIndex(index)
 
     def tabBar(self) -> QTabBar:

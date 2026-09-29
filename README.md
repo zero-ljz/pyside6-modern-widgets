@@ -65,6 +65,9 @@ reversible title-bar visibility, and typed widget access. This is a breaking
 release: renamed APIs and parameters have no compatibility aliases.
 Read the [0.6.0 migration guide](docs/migration-0.6.md) before upgrading.
 
+Changes after 0.6.0, including the sidebar item ownership API, are described in
+the [next-release migration guide](docs/migration-next.md).
+
 ## Upgrading from 0.4.x
 
 Version 0.5.0 adds modern dialogs, message boxes, menus, and menu bars, plus
@@ -852,6 +855,19 @@ transfer ownership to the caller. Invalid indices are no-ops (take returns
 None). `NavigationView` also supports `indexOf(page)` and
 `setCurrentWidget(page)`.
 
+`NavigationSidebar` follows the same ownership rule: `removeItem(index)` hides
+the button, retains its Qt parent, and returns None; `takeItem(index)` returns
+the hidden button with no parent, transferring ownership to the caller. Invalid
+indices are no-ops and `takeItem()` returns None. Removed buttons no longer
+affect sidebar selection or activation signals.
+
+`sidebar.button(index)` returns a borrowed button. Calling `setChecked(True)`
+updates `currentIndex()` and emits `currentChanged(index)` once when selection
+changes, just like `setCurrentIndex()`. `itemActivated(index)` reports clicks,
+including repeated clicks on the selected item. Do not delete or reparent a
+borrowed button or change its checkable/exclusive structure; use `takeItem()`
+before taking ownership.
+
 `ModernDialog` accepts ordinary Qt layouts directly and retains `exec()`,
 `accept()`, `reject()`, and the standard dialog result codes:
 
@@ -1084,6 +1100,11 @@ widget-level `setTheme()` remains the local-override API.
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
 `addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is
 not supported.
+
+Like `QTabWidget`, `TabView.insertTab()` appends when the index is negative or
+beyond the current count. Programmatic `setCurrentIndex()` / `setCurrentWidget()`
+can select a disabled tab without enabling its page; user navigation and
+`nextTab()` / `previousTab()` continue to skip disabled tabs.
 
 The runnable navigation example includes interactive window, dialog, and message
 box pages. A separate multi-tab example is also available in the

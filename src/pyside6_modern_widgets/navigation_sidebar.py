@@ -265,6 +265,8 @@ class NavigationSidebar(QWidget):
         self._current_index = -1
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
+        self._button_group.buttonToggled.connect(self._on_button_toggled)
+        self._button_group.buttonClicked.connect(self._activate_button)
         self._init_ui()
         self._retranslate_ui()
         self._init_animation()
@@ -357,28 +359,38 @@ class NavigationSidebar(QWidget):
         else:
             self._bottom_layout.addWidget(button)
             self._sync_bottom_container_height()
-        button.clicked.connect(lambda _checked=False, target=button: self._activate_button(target))
         return index
 
-    def removeItem(self, index: int) -> QPushButton | None:
+    def removeItem(self, index: int) -> None:
+        """Remove and hide an item without deleting it or changing its Qt parent."""
         if not 0 <= index < len(self._items):
-            return None
+            return
         button = self._items.pop(index)
         self._button_group.removeButton(button)
         self._top_layout.removeWidget(button)
         self._bottom_layout.removeWidget(button)
-        button.setParent(None)
+        button.hide()
         self._sync_bottom_container_height()
 
         if not self._items:
+            changed = self._current_index != -1
             self._current_index = -1
-            self.currentChanged.emit(-1)
+            if changed:
+                self.currentChanged.emit(-1)
         elif index < self._current_index:
             self._current_index -= 1
             self.currentChanged.emit(self._current_index)
         elif index == self._current_index:
             self._current_index = -1
             self.setCurrentIndex(min(index, len(self._items) - 1))
+
+    def takeItem(self, index: int) -> QPushButton | None:
+        """Remove and hide an item, transferring ownership to the caller."""
+        button = self.button(index)
+        if button is None:
+            return None
+        self.removeItem(index)
+        button.setParent(None)
         return button
 
     def _sync_bottom_container_height(self) -> None:
@@ -392,6 +404,7 @@ class NavigationSidebar(QWidget):
         return len(self._items)
 
     def button(self, index: int) -> QPushButton | None:
+        """Return a borrowed button; setChecked(True) also updates the selection."""
         return self._items[index] if 0 <= index < len(self._items) else None
 
     def itemText(self, index: int) -> str:
@@ -414,11 +427,7 @@ class NavigationSidebar(QWidget):
     def setCurrentIndex(self, index: int) -> None:
         if not 0 <= index < len(self._items):
             return
-        changed = index != self._current_index
-        self._current_index = index
         self._items[index].setChecked(True)
-        if changed:
-            self.currentChanged.emit(index)
 
     def isCollapsed(self) -> bool:
         return self._collapsed
@@ -578,6 +587,17 @@ class NavigationSidebar(QWidget):
                 self._theme.text,
             )
         )
+
+    def _on_button_toggled(self, button: _NavigationItem, checked: bool) -> None:
+        if not checked:
+            return
+        try:
+            index = self._items.index(button)
+        except ValueError:
+            return
+        if index != self._current_index:
+            self._current_index = index
+            self.currentChanged.emit(index)
 
     def _activate_button(self, button: _NavigationItem) -> None:
         try:
