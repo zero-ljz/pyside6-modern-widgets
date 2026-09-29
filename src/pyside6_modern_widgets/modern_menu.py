@@ -67,14 +67,16 @@ def _supports_windows_acrylic() -> bool:
     return get_windows_version is not None and get_windows_version().build >= 22000
 
 
-def _enable_windows_rounded_corners(menu: QWidget, radius: int, *, square: bool = False) -> bool:
+def _enable_windows_rounded_corners(
+    menu: QWidget, radius: int, *, square: bool = False, small: bool = False
+) -> bool:
     if (
         (radius <= 0 and not square)
         or sys.platform != "win32"
         or QApplication.platformName() != "windows"
     ):
         return False
-    return set_window_corner_preference(int(menu.winId()), rounded=not square)
+    return set_window_corner_preference(int(menu.winId()), rounded=not square, small=small)
 
 
 def _windows_acrylic_tint(palette: QPalette, widget: QWidget | None = None) -> QColor:

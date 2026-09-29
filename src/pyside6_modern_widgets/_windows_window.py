@@ -102,10 +102,11 @@ class _MinMaxInfo(ctypes.Structure):
     )
 
 
-def set_window_corner_preference(hwnd: int, *, rounded: bool) -> bool:
+def set_window_corner_preference(hwnd: int, *, rounded: bool, small: bool = False) -> bool:
     """Apply DWM corners consistently for top-level windows and popup surfaces."""
     try:
-        preference = ctypes.c_int(2 if rounded else 1)
+        # DWMWCP_ROUNDSMALL (3) uses 4-DIP corners; DWMWCP_ROUND (2) uses 8 DIP.
+        preference = ctypes.c_int((3 if small else 2) if rounded else 1)
         function = ctypes.windll.dwmapi.DwmSetWindowAttribute
         function.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
         function.restype = ctypes.c_long

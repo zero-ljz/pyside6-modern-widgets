@@ -80,6 +80,12 @@ It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
 `ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**,
 **Notifications**, **Toolbar**, **Tab widget**, and **Edge docking** pages.
 
+The gallery enables `ModernToolTip` globally. The **Tooltips** page demonstrates
+short, long, and formatted text with sliders for first and repeat delays (300 and
+100 ms by default). Hover between buttons, switch the title-bar theme, and move
+the window near a screen edge. Ordinary widget tooltips elsewhere in the gallery
+use the same appearance and timing.
+
 The **Toolbar** page compares native `QToolBar` and `ModernToolBar` side by side,
 using matching actions and icon sizes. The shared width slider, text-beside-icons
 option, and right-to-left toggle update both toolbars. Open each overflow to try

@@ -20,6 +20,7 @@ from .modern_segmented_control import ModernSegmentedControl
 from .modern_switch import ModernSwitch
 from .modern_tab_widget import ModernTabWidget
 from .modern_tool_bar import ModernToolBar
+from .modern_tool_tip import ModernToolTip
 from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar
 from .navigation_view import NavigationView
@@ -68,6 +69,7 @@ __all__ = [
     "ModernTabWidget",
     "ModernTheme",
     "ModernToolBar",
+    "ModernToolTip",
     "ModernWindow",
     "NavigationPosition",
     "NavigationSidebar",

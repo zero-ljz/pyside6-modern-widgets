@@ -234,6 +234,46 @@
 <context>
     <name>ExampleWindow</name>
     <message>
+        <source>Tooltips</source>
+        <translation>工具提示</translation>
+    </message>
+    <message>
+        <source>Hover over the buttons, then move between them to compare delays.</source>
+        <translation>将鼠标悬停在按钮上，再在按钮之间移动以比较显示延迟。</translation>
+    </message>
+    <message>
+        <source>Short tip</source>
+        <translation>简短提示</translation>
+    </message>
+    <message>
+        <source>Save your changes</source>
+        <translation>保存更改</translation>
+    </message>
+    <message>
+        <source>Long tip</source>
+        <translation>长文本提示</translation>
+    </message>
+    <message>
+        <source>Long tooltips wrap automatically and stay within the screen. Move the window near an edge to try it.</source>
+        <translation>长文本工具提示会自动换行，并保持在屏幕范围内。将窗口移到屏幕边缘试试看。</translation>
+    </message>
+    <message>
+        <source>Formatted tip</source>
+        <translation>富文本提示</translation>
+    </message>
+    <message>
+        <source>&lt;b&gt;Quick help&lt;/b&gt;&lt;br&gt;Tooltips follow the owner's theme.</source>
+        <translation>&lt;b&gt;快捷帮助&lt;/b&gt;&lt;br&gt;工具提示跟随所属控件的主题。</translation>
+    </message>
+    <message>
+        <source>First delay (ms)</source>
+        <translation>首次延迟（毫秒）</translation>
+    </message>
+    <message>
+        <source>Repeat delay (ms)</source>
+        <translation>连续查看延迟（毫秒）</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="65"/>
         <location filename="../navigation_view_example.py" line="1072"/>
         <source>Modern Widgets Example</source>

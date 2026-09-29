@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add opt-in `ModernToolTip.install()` for existing widget tooltips, with
+  configurable first/repeat delays, owner theme inheritance, rich-text wrapping,
+  screen-edge placement, and Windows 11 acrylic with an opaque fallback.
+  Add a tooltip gallery page with adjustable delays.
+
 ### Changed
 
 - Make `NavigationSidebar.removeItem()` retain Qt ownership and return None.

@@ -50,9 +50,14 @@ def test_window_position_without_resize_does_not_run_layout_constraints():
     assert (position.cx, position.cy, position.flags) == (0, 0, 0x0015)
 
 
-@pytest.mark.parametrize("rounded", [False, True])
+@pytest.mark.parametrize(
+    "rounded,small,preference",
+    [(False, False, 1), (False, True, 1), (True, False, 2), (True, True, 3)],
+)
 @pytest.mark.parametrize("result", [0, -1, "error"])
-def test_shared_corner_preference_reports_dwm_success(monkeypatch, rounded, result):
+def test_shared_corner_preference_reports_dwm_success(
+    monkeypatch, rounded, small, preference, result
+):
     calls = []
 
     def set_attribute(hwnd, attribute, value, size):
@@ -70,8 +75,10 @@ def test_shared_corner_preference_reports_dwm_success(monkeypatch, rounded, resu
         ),
         raising=False,
     )
-    assert _windows_window.set_window_corner_preference(12345, rounded=rounded) == (result == 0)
-    assert calls == [(12345, 33, 2 if rounded else 1, ctypes.sizeof(ctypes.c_int))]
+    assert _windows_window.set_window_corner_preference(12345, rounded=rounded, small=small) == (
+        result == 0
+    )
+    assert calls == [(12345, 33, preference, ctypes.sizeof(ctypes.c_int))]
 
 
 class _MoveUser32:
