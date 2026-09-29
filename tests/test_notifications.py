@@ -38,6 +38,28 @@ def delete_pending():
     _APP.processEvents()
 
 
+def test_standalone_card_reuse_resets_close_reason():
+    host = QWidget()
+    card = ModernNotification(parent=host)
+    button = card.addActionButton("done", "Done")
+    reasons = []
+    card.dismissed.connect(reasons.append)
+    try:
+        host.show()
+        card.show()
+        button.click()
+        assert reasons == ["action"]
+        card.show()
+        card.close()
+        assert reasons == ["action", "dismissed"]
+        card.show()
+        card.dismiss("custom")
+        assert reasons == ["action", "dismissed", "custom"]
+    finally:
+        host.deleteLater()
+        delete_pending()
+
+
 @pytest.fixture
 def managers(theme_manager_instance):
     host = ModernWindow()

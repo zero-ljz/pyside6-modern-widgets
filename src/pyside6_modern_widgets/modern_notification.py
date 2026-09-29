@@ -549,6 +549,7 @@ class ModernNotification(QWidget):
 
     def showEvent(self, event) -> None:
         self._dismissed = False
+        self._close_reason = "dismissed"
         super().showEvent(event)
         self._connect_screen_change_signal()
         self._native_dpi.sync_window(self)

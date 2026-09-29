@@ -272,7 +272,8 @@ class NavigationView(QWidget):
     def setCurrentIndex(self, index: int) -> None:
         if not 0 <= index < self.count():
             return
-        self.sidebar.setCurrentIndex(index)
+        # The stack change synchronizes the sidebar before publishing. Do not
+        # apply the old index again after a signal callback selects another page.
         self.stackedWidget.setCurrentIndex(index)
 
     def theme(self) -> ModernTheme:
@@ -297,6 +298,9 @@ class NavigationView(QWidget):
             return
         if index >= 0 and self.sidebar.currentIndex() != index:
             self.sidebar.setCurrentIndex(index)
+        if self.currentIndex() != index:
+            # A sidebar observer may have selected a different page while syncing.
+            return
         self._update_automatic_sidebar_overlay()
         self.currentChanged.emit(index)
 

@@ -37,6 +37,32 @@ def _assert_synced(view) -> None:
     assert labels == [view.widget(i).text() for i in range(view.count())]
 
 
+@pytest.mark.parametrize("by_widget", [False, True])
+@pytest.mark.parametrize("signal_source", ["view", "sidebar"])
+def test_navigation_selection_preserves_reentrant_change(by_widget, signal_source):
+    view = NavigationView()
+    for label in ("A", "B", "C"):
+        view.addPage(QLabel(label), label)
+    changes = []
+
+    def redirect(index):
+        if index == 1:
+            view.setCurrentIndex(2)
+
+    source = view if signal_source == "view" else view.sidebar
+    view.currentChanged.connect(lambda index: changes.append((index, view.currentIndex())))
+    source.currentChanged.connect(redirect)
+    if by_widget:
+        view.setCurrentWidget(view.widget(1))
+    else:
+        view.setCurrentIndex(1)
+    assert changes == ([(1, 1), (2, 2)] if signal_source == "view" else [(2, 2)])
+    assert view.currentIndex() == 2
+    _assert_synced(view)
+    view.deleteLater()
+    _flush_deletes()
+
+
 @pytest.mark.parametrize("view_class", [TabView, NavigationView])
 @pytest.mark.parametrize("removed_index", [0, 1, 2])
 @pytest.mark.parametrize("method", ["delete", "reparent", "remove"])

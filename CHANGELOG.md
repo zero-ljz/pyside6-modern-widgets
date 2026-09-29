@@ -17,6 +17,12 @@ All notable changes to this project are documented in this file.
   programmatically selecting a disabled tab (select without enabling it).
 - Synchronize sidebar selection and `currentChanged` when a borrowed button is
   checked programmatically; removed buttons no longer trigger sidebar activation.
+- Keep menus created by `ModernMenuBar` owned by the menu bar, so moving it to
+  another window preserves its menus when the old window is destroyed.
+- Preserve navigation selections made in selection callbacks instead of restoring
+  the outer call's stale index or publishing stale selection notifications.
+- Reset standalone notification close reasons when shown again, so a normal close
+  does not repeat the reason from a previous dismissal.
 
 ## [0.6.0] - 2026-09-26
 

@@ -6,8 +6,8 @@ from dataclasses import replace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPalette, QPixmap
+from PySide6.QtCore import QCoreApplication, QEvent, QRect, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
@@ -17,11 +17,41 @@ from PySide6.QtWidgets import (
     QToolButton,
     QWidget,
 )
+from shiboken6 import isValid
 
 from pyside6_modern_widgets import ModernMenu, ModernMenuBar, ModernWindow
 from pyside6_modern_widgets.theme import DARK_THEME, LIGHT_THEME, ThemeMode
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize("bar_class", [QMenuBar, ModernMenuBar])
+@pytest.mark.parametrize("with_icon", [False, True])
+def test_created_menus_follow_menu_bar_ownership_after_reparenting(bar_class, with_icon):
+    first, second = QWidget(), QWidget()
+    menu_bar = bar_class(first)
+    menu = menu_bar.addMenu(QIcon(), "File") if with_icon else menu_bar.addMenu("File")
+    action = menu.addAction("Open")
+    triggered = []
+    action.triggered.connect(lambda: triggered.append(True))
+    try:
+        assert menu.parentWidget() is menu_bar
+        menu_bar.setParent(second)
+        first.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert isValid(menu)
+        assert menu_bar.actions() == [menu.menuAction()]
+        action.trigger()
+        assert triggered == [True]
+        menu_bar.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert not isValid(menu)
+        assert not isValid(action)
+    finally:
+        if isValid(first):
+            first.deleteLater()
+        second.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.mark.parametrize("mode", [ThemeMode.LIGHT, ThemeMode.DARK])

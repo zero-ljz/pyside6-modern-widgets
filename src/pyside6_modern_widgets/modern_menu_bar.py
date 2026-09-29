@@ -87,13 +87,12 @@ class ModernMenuBar(QMenuBar):
     def addMenu(self, icon: QIcon | QPixmap, title: str, /) -> ModernMenu: ...
 
     def addMenu(self, *args):
-        owner = self.parentWidget() or self
         if len(args) == 1 and isinstance(args[0], str):
-            menu = ModernMenu(args[0], owner, metrics=self._metrics)
+            menu = ModernMenu(args[0], self, metrics=self._metrics)
             super().addMenu(menu)
             return menu
         if len(args) == 2 and isinstance(args[0], (QIcon, QPixmap)) and isinstance(args[1], str):
-            menu = ModernMenu(args[1], owner, metrics=self._metrics)
+            menu = ModernMenu(args[1], self, metrics=self._metrics)
             menu.setIcon(QIcon(args[0]))
             super().addMenu(menu)
             return menu
