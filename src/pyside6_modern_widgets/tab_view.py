@@ -548,6 +548,10 @@ class TabView(QWidget):
         super().changeEvent(event)
         if hasattr(self, "_add_button") and event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
+        if event.type() == QEvent.Type.StyleChange and hasattr(self, "_theme"):
+            palette = palette_for_theme(self.theme(), self.palette())
+            if self.palette() != palette:
+                self.setPalette(palette)
 
     @overload
     def addTab(self, widget: QWidget, text: str, /) -> int: ...

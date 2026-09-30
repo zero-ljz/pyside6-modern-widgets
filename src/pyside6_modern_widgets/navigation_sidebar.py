@@ -566,6 +566,10 @@ class NavigationSidebar(QWidget):
         super().changeEvent(event)
         if event.type() == QEvent.Type.LanguageChange:
             self._retranslate_ui()
+        if event.type() == QEvent.Type.StyleChange and hasattr(self, "_theme"):
+            palette = palette_for_theme(self.theme(), self.palette())
+            if self.palette() != palette:
+                self.setPalette(palette)
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)

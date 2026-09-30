@@ -165,13 +165,13 @@ class ModernToolBar(QToolBar):
         window = self.window()
         return window if window is not self else None
 
-    def _apply_theme(self) -> None:
+    def _apply_theme(self, *, restore_palette: bool = False) -> None:
         if self._applying_theme:
             return
         self._applying_theme = True
         try:
             theme = self.theme()
-            if theme != self._styled_theme:
+            if theme != self._styled_theme or restore_palette:
                 self._styled_theme = theme
                 self.setPalette(palette_for_theme(theme, self.palette()))
             owner = self._menu_owner()
@@ -261,6 +261,8 @@ class ModernToolBar(QToolBar):
                 QEvent.Type.LayoutDirectionChange,
             ):
                 self._apply_theme()
+            if event.type() == QEvent.Type.StyleChange:
+                self._apply_theme(restore_palette=True)
             if event.type() == QEvent.Type.ActionAdded:
                 self._style_buttons()
             if event.type() in (

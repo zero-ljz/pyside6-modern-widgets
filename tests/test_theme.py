@@ -17,6 +17,7 @@ from pyside6_modern_widgets import (
     ModernMenuBar,
     ModernMessageBox,
     ModernTabWidget,
+    ModernToolBar,
     ModernWindow,
     NavigationSidebar,
     NavigationView,
@@ -223,6 +224,40 @@ def test_business_controls_and_open_menus_refresh(theme_manager_instance, monkey
         standalone.close()
         window.close()
         standalone.deleteLater()
+        window.deleteLater()
+        _APP.processEvents()
+
+
+def test_navigation_children_recover_palettes_after_theme_switch(theme_manager_instance):
+    window = ModernWindow()
+    navigation = NavigationView()
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    controls = (TabView(page), ModernTabWidget(page), ModernToolBar("Tools", page))
+    for control in controls:
+        layout.addWidget(control)
+    navigation.addPage(page, "Controls", selected=True)
+    window.setCentralWidget(navigation)
+    try:
+        window.show()
+        for mode, theme in ((ThemeMode.DARK, DARK_THEME), (ThemeMode.LIGHT, LIGHT_THEME)):
+            theme_manager_instance.setMode(mode)
+            _APP.processEvents()
+            for control in (navigation.sidebar, *controls):
+                assert control.theme() == theme
+                assert control.palette().color(QPalette.ColorRole.Text) == QColor(theme.text)
+            for control in controls:
+                assert control.palette().color(QPalette.ColorRole.Base) == QColor(theme.surface)
+            assert controls[-1].overflowMenu().palette().color(QPalette.ColorRole.Text) == QColor(
+                theme.text
+            )
+        palette = QPalette()
+        palette.setColor(QPalette.ColorRole.Text, QColor("#e02080"))
+        for control in (navigation.sidebar, *controls):
+            control.setPalette(palette)
+            assert control.palette().color(QPalette.ColorRole.Text) == QColor("#e02080")
+    finally:
+        window.close()
         window.deleteLater()
         _APP.processEvents()
 

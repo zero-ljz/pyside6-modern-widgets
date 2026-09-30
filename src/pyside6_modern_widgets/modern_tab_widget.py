@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, Signal
+from PySide6.QtCore import QEvent, QRect, Signal
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import QTabBar, QTabWidget, QWidget
 
@@ -94,6 +94,13 @@ class ModernTabWidget(QTabWidget):
             raise TypeError("theme must be a ModernTheme or None")
         self._theme_override = theme
         self._theme_binding.refresh()
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.StyleChange and hasattr(self, "_theme"):
+            palette = palette_for_theme(self.theme(), QPalette())
+            if self.palette() != palette:
+                self.setPalette(palette)
 
     def _apply_theme(self) -> None:
         self._theme = self.theme()
