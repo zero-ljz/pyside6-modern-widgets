@@ -404,6 +404,25 @@ class ModernComboBox(QComboBox):
         self._palette_override = QPalette(palette)
         self._apply_theme()
 
+    def event(self, event: QEvent) -> bool:
+        handled = super().event(event)
+        if (
+            event.type() == QEvent.Type.PaletteChange
+            and getattr(self, "_styled_theme", None) is not None
+            and not self._applying_theme
+            and self.palette() != self._themed_palette(self.theme())
+        ):
+            # Reapplying an ancestor stylesheet can restore Qt's old palette
+            # after the themeChanged callback has already updated this widget.
+            self._apply_theme()
+        return handled
+
+    def _themed_palette(self, theme: ModernTheme) -> QPalette:
+        themed = palette_for_theme(theme, self.palette())
+        palette = self._palette_override.resolve(themed)
+        palette.setResolveMask(self._palette_override.resolveMask() | themed.resolveMask())
+        return palette
+
     def eventFilter(self, watched, event) -> bool:
         # QComboBox may invoke this virtual method from its base constructor.
         if not hasattr(self, "_popup"):
@@ -443,10 +462,7 @@ class ModernComboBox(QComboBox):
         self._applying_theme = True
         try:
             self._styled_theme = self.theme()
-            themed = palette_for_theme(self._styled_theme, self.palette())
-            palette = self._palette_override.resolve(themed)
-            palette.setResolveMask(self._palette_override.resolveMask() | themed.resolveMask())
-            super().setPalette(palette)
+            super().setPalette(self._themed_palette(self._styled_theme))
             self._refresh_editor_surface()
             # Qt snapshots the container palette when opening; keep the owned
             # acrylic surface in sync without assigning a palette to the view.

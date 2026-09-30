@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QStyleFactory,
     QStyleOption,
     QStyleOptionComboBox,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -35,6 +36,7 @@ from pyside6_modern_widgets import (
     LIGHT_THEME,
     ModernComboBox,
     ModernWindow,
+    NavigationView,
     ThemeMode,
     palette_for_theme,
 )
@@ -287,6 +289,38 @@ def test_parent_and_local_theme_overrides(theme_manager_instance):
     assert combo.theme() == LIGHT_THEME
     combo.close()
     window.close()
+
+
+@pytest.mark.parametrize("editable", [False, True])
+def test_navigation_stylesheet_keeps_combo_palette_after_dark_to_light(
+    theme_manager_instance, editable
+):
+    window = ModernWindow()
+    navigation = NavigationView()
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    combo = ModernComboBox(page)
+    combo.setEditable(editable)
+    combo.addItem("Windows 11")
+    layout.addWidget(combo)
+    navigation.addPage(page, "Combo box", selected=True)
+    window.setCentralWidget(navigation)
+    try:
+        window.show()
+        for mode, theme in ((ThemeMode.DARK, DARK_THEME), (ThemeMode.LIGHT, LIGHT_THEME)):
+            theme_manager_instance.setMode(mode)
+            _APP.processEvents()
+            assert combo.theme() == theme
+            for role, color in (
+                (QPalette.ColorRole.Text, theme.text),
+                (QPalette.ColorRole.ButtonText, theme.text),
+                (QPalette.ColorRole.Base, theme.surface),
+            ):
+                assert combo.palette().color(role) == QColor(color)
+    finally:
+        window.close()
+        window.deleteLater()
+        _APP.processEvents()
 
 
 def test_rtl_geometry_and_large_font_do_not_overlap(combos):
