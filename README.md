@@ -14,6 +14,9 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernMenuBar`: a `QMenuBar` that creates `ModernMenu` drop-down menus.
 - `ModernToolBar`: a `QToolBar` with modern controls and an accessible overflow
   button that opens a `ModernMenu` instead of Qt's default toolbar popup.
+- `ModernToolButton`: a `QToolButton` with themed states, Fusion geometry and
+  native action, label, arrow, auto-raise and popup-mode APIs.
+  See [usage and Fusion measurements](docs/modern-tool-button.md).
 - `ModernComboBox`: a modern `QComboBox` with rounded surfaces,
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `ModernLineEdit`: a themed `QLineEdit` surface with Fusion dimensions and

@@ -20,6 +20,10 @@ side by side.
 Select **Buttons** for native Fusion and `ModernPushButton` comparisons: text,
 icons, checked/default/flat states, menus, disabled controls, keyboard focus and RTL.
 
+Select **Tool buttons** for native `QToolButton` / `ModernToolButton` comparisons.
+The **Styles and states** tab covers label layouts, arrows, auto-raise and checked
+or disabled actions; **Menus** covers delayed, split and instant popup behavior.
+
 The navigation, tab, and edge-dock examples support English and Simplified Chinese. English is the source
 language; when the system locale is `zh_CN`, each example installs Qt's standard
 catalog, the component library catalog, and its own `examples_zh_CN` catalog

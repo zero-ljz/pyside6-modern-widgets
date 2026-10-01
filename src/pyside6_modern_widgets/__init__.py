@@ -34,6 +34,7 @@ from .modern_switch import ModernSwitch
 from .modern_tab_widget import ModernTabWidget
 from .modern_text_edit import ModernPlainTextEdit, ModernTextEdit
 from .modern_tool_bar import ModernToolBar
+from .modern_tool_button import ModernToolButton
 from .modern_tool_tip import ModernToolTip
 from .modern_window import ModernWindow
 from .navigation_sidebar import NavigationPosition, NavigationSidebar
@@ -98,6 +99,7 @@ __all__ = [
     "ModernTheme",
     "ModernTimeEdit",
     "ModernToolBar",
+    "ModernToolButton",
     "ModernToolTip",
     "ModernWindow",
     "NavigationPosition",

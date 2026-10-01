@@ -33,7 +33,7 @@ def test_gallery_navigation_groups(language, native_title, custom_title):
     window = ExampleWindow()
     try:
         sidebar = window.navigation.sidebar
-        assert window.navigation.count() == sidebar.count() == 18
+        assert window.navigation.count() == sidebar.count() == 19
         assert list(sidebar._groups) == [
             (NavigationPosition.TOP, native_title),
             (NavigationPosition.TOP, custom_title),
@@ -41,15 +41,13 @@ def test_gallery_navigation_groups(language, native_title, custom_title):
         native_group = sidebar._groups[(NavigationPosition.TOP, native_title)]
         custom_group = sidebar._groups[(NavigationPosition.TOP, custom_title)]
         assert all(
-            sidebar._item_groups[sidebar.button(index)] is native_group
-            for index in range(1, 12)
+            sidebar._item_groups[sidebar.button(index)] is native_group for index in range(1, 13)
         )
         assert all(
-            sidebar._item_groups[sidebar.button(index)] is custom_group
-            for index in range(12, 17)
+            sidebar._item_groups[sidebar.button(index)] is custom_group for index in range(13, 18)
         )
         assert sidebar.button(0) not in sidebar._item_groups
-        assert sidebar.button(17) not in sidebar._item_groups
+        assert sidebar.button(18) not in sidebar._item_groups
         assert sidebar.currentIndex() == window.navigation.currentIndex() == 0
     finally:
         window.deleteLater()

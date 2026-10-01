@@ -2,3 +2,4 @@ include CHANGELOG.md
 include docs/migration-0.6.md
 include docs/migration-next.md
 include docs/modern-push-button.md
+include docs/modern-tool-button.md

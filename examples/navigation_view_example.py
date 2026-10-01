@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QTimeEdit,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -64,6 +65,7 @@ from pyside6_modern_widgets import (
     ModernTextEdit,
     ModernTimeEdit,
     ModernToolBar,
+    ModernToolButton,
     ModernToolTip,
     ModernWindow,
     NavigationPosition,
@@ -147,6 +149,12 @@ class ExampleWindow(ModernWindow):
             group=native_group,
         )
         self.navigation.addPage(
+            self._create_tool_button_page(),
+            self.tr("Tool buttons"),
+            standard_icon(QStyle.StandardPixmap.SP_DialogOpenButton),
+            group=native_group,
+        )
+        self.navigation.addPage(
             self._create_choice_page(),
             self.tr("Choice controls"),
             standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
@@ -215,6 +223,118 @@ class ExampleWindow(ModernWindow):
 
         self._create_actions()
         self._create_menu_bar()
+
+    def _create_tool_button_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("Tool buttons"))
+        hint = QLabel(
+            self.tr(
+                "Compare tool button layouts and states. In Menus, try a short click, "
+                "a long press, or the separate menu arrow. Tab and Space use native keyboard behavior."
+            )
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        tabs = ModernTabWidget(page)
+        layout.addWidget(tabs)
+        status = QLabel(self.tr("Choose an action"))
+        status.setWordWrap(True)
+        panels = []
+        groups = (
+            (
+                self.tr("Styles and states"),
+                (
+                    ("icon", self.tr("Icon only")),
+                    ("text", self.tr("Text only")),
+                    ("beside", self.tr("Text beside icon")),
+                    ("under", self.tr("Text under icon")),
+                    ("follow", self.tr("Follow style")),
+                    ("auto_raise", self.tr("Auto raise")),
+                    ("checked", self.tr("Checkable button")),
+                    ("arrow", self.tr("Arrow button")),
+                    ("disabled", self.tr("Unavailable")),
+                ),
+            ),
+            (
+                self.tr("Menus"),
+                (
+                    ("delayed", "DelayedPopup"),
+                    ("split", "MenuButtonPopup"),
+                    ("instant", "InstantPopup"),
+                ),
+            ),
+        )
+        for title, rows in groups:
+            panel = QWidget(tabs)
+            panels.append(panel)
+            grid = QGridLayout(panel)
+            grid.setContentsMargins(12, 12, 12, 12)
+            grid.setHorizontalSpacing(24)
+            grid.setVerticalSpacing(8)
+            for row, (_kind, label) in enumerate(rows, 1):
+                grid.addWidget(QLabel(label), row, 0)
+            for column, (heading, button_type, menu_type) in enumerate(
+                (
+                    (self.tr("Native QToolButton"), QToolButton, QMenu),
+                    ("ModernToolButton", ModernToolButton, ModernMenu),
+                ),
+                1,
+            ):
+                grid.addWidget(QLabel(heading), 0, column)
+                grid.setColumnStretch(column, 1)
+                for row, (kind, _label) in enumerate(rows, 1):
+                    button = button_type(panel)
+                    action = QAction(
+                        standard_icon(QStyle.StandardPixmap.SP_DialogOpenButton),
+                        self.tr("Open"),
+                        button,
+                    )
+                    button.setDefaultAction(action)
+                    button.setToolButtonStyle(
+                        {
+                            "text": Qt.ToolButtonStyle.ToolButtonTextOnly,
+                            "beside": Qt.ToolButtonStyle.ToolButtonTextBesideIcon,
+                            "under": Qt.ToolButtonStyle.ToolButtonTextUnderIcon,
+                            "follow": Qt.ToolButtonStyle.ToolButtonFollowStyle,
+                        }.get(kind, Qt.ToolButtonStyle.ToolButtonIconOnly)
+                    )
+                    button.setAutoRaise(kind == "auto_raise")
+                    if kind == "checked":
+                        action.setCheckable(True)
+                        action.setChecked(True)
+                    elif kind == "disabled":
+                        action.setEnabled(False)
+                    elif kind == "arrow":
+                        button.setArrowType(Qt.ArrowType.DownArrow)
+                    elif kind in ("delayed", "split", "instant"):
+                        menu = menu_type(button)
+                        menu.addAction(self.tr("Details"))
+                        menu.addAction(self.tr("Unavailable")).setEnabled(False)
+                        button.setMenu(menu)
+                        button.setPopupMode(
+                            {
+                                "delayed": QToolButton.ToolButtonPopupMode.DelayedPopup,
+                                "split": QToolButton.ToolButtonPopupMode.MenuButtonPopup,
+                                "instant": QToolButton.ToolButtonPopupMode.InstantPopup,
+                            }[kind]
+                        )
+                    button.triggered.connect(
+                        lambda action, heading=heading: status.setText(
+                            self.tr("%1: %2").replace("%1", heading).replace("%2", action.text())
+                        )
+                    )
+                    grid.addWidget(button, row, column, Qt.AlignmentFlag.AlignLeft)
+            grid.setRowStretch(len(rows) + 1, 1)
+            tabs.addTab(panel, title)
+        rtl = QCheckBox(self.tr("Right-to-left layout"))
+        for panel in panels:
+            rtl.toggled.connect(
+                lambda checked, panel=panel: panel.setLayoutDirection(
+                    Qt.LayoutDirection.RightToLeft if checked else Qt.LayoutDirection.LeftToRight
+                )
+            )
+        layout.addWidget(rtl)
+        layout.addWidget(status)
+        return page
 
     def _create_button_page(self) -> QWidget:
         page, layout = self._create_page(self.tr("Buttons"))
@@ -1061,11 +1181,19 @@ class ExampleWindow(ModernWindow):
                     decimal_editor.setValue(12.5)
                     editor = decimal_editor
                 elif kind == "date":
-                    date_editor = ModernDateEdit(sample_date.date()) if modern else QDateEdit(sample_date.date())
+                    date_editor = (
+                        ModernDateEdit(sample_date.date())
+                        if modern
+                        else QDateEdit(sample_date.date())
+                    )
                     date_editor.setDisplayFormat("yyyy/M/d")
                     editor = date_editor
                 elif kind == "time":
-                    time_editor = ModernTimeEdit(sample_date.time()) if modern else QTimeEdit(sample_date.time())
+                    time_editor = (
+                        ModernTimeEdit(sample_date.time())
+                        if modern
+                        else QTimeEdit(sample_date.time())
+                    )
                     time_editor.setDisplayFormat("HH:mm")
                     editor = time_editor
                 else:

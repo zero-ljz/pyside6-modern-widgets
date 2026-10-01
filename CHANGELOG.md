@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add `ModernToolButton`, with native Fusion sizing, action synchronization,
+  popup modes and RTL hit regions, plus themed checked, hover, press, focus and
+  disabled states. Add native/modern tool-button comparisons to the gallery.
 - Support named navigation groups in `NavigationSidebar.addItem()` and
   `NavigationView.addPage()`, with headings that hide in collapsed mode.
 - Add `ModernPushButton`, retaining native `QPushButton` behavior and Fusion
