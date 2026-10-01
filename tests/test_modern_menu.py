@@ -8,10 +8,26 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QActionGroup, QColor, QIcon, QImage, QPainter, QPalette, QPixmap
-from PySide6.QtWidgets import QApplication, QStyle, QStyleOption, QStyleOptionMenuItem
+from PySide6.QtWidgets import (
+    QApplication,
+    QStyle,
+    QStyleOption,
+    QStyleOptionButton,
+    QStyleOptionMenuItem,
+)
 
-from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ModernMenu, palette_for_theme
-from pyside6_modern_widgets.modern_menu import _ACRYLIC_INPUT_ALPHA, _windows_acrylic_tint
+from pyside6_modern_widgets import (
+    DARK_THEME,
+    LIGHT_THEME,
+    ModernCheckBox,
+    ModernMenu,
+    palette_for_theme,
+)
+from pyside6_modern_widgets.modern_menu import (
+    _ACRYLIC_INPUT_ALPHA,
+    _CHECKBOX_INDICATOR_SIZE,
+    _windows_acrylic_tint,
+)
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -155,6 +171,76 @@ def test_exclusive_menu_indicator_unchecked_has_no_dot(sunken: bool, selected: b
     # An unchecked exclusive item must never render a native bullet, even when pressed or selected
     assert image.pixelColor(15, 12).alpha() < 50
     assert image.pixelColor(12, 12).alpha() < 50
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+@pytest.mark.parametrize("checked", [False, True])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_nonexclusive_menu_indicator_uses_checkbox_colors(theme, checked, enabled):
+    menu = ModernMenu()
+    menu.setPalette(palette_for_theme(theme))
+    action = menu.addAction("Option")
+    action.setCheckable(True)
+    action.setChecked(checked)
+    action.setEnabled(enabled)
+    option = QStyleOptionMenuItem()
+    menu.initStyleOption(option, action)
+    option.rect = QRect(0, 0, 100, 24)
+    option.text = ""
+    image = QImage(100, 24, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(image)
+    menu.style().drawControl(QStyle.ControlElement.CE_MenuItem, option, painter, menu)
+    painter.end()
+
+    assert option.checkType == QStyleOptionMenuItem.CheckType.NonExclusive
+    assert image.pixelColor(7, 12).alpha() == 0
+    assert image.pixelColor(8, 12).alpha() > 0
+    assert image.pixelColor(21, 12).alpha() > 0
+    assert image.pixelColor(22, 12).alpha() == 0
+    assert image.pixelColor(23, 12).alpha() == 0
+    group = QPalette.ColorGroup.Active if enabled else QPalette.ColorGroup.Disabled
+    if not enabled:
+        expected_role = QPalette.ColorRole.Mid if checked else QPalette.ColorRole.AlternateBase
+    else:
+        expected_role = QPalette.ColorRole.Accent if checked else QPalette.ColorRole.Window
+    assert image.pixelColor(15, 17).toRgb() == option.palette.color(group, expected_role).toRgb()
+    if checked:
+        assert image.pixelColor(18, 9).toRgb() != option.palette.color(group, expected_role).toRgb()
+
+
+def test_nonexclusive_menu_indicator_uses_trailing_column_in_rtl():
+    menu = ModernMenu()
+    action = menu.addAction("Option")
+    action.setCheckable(True)
+    option = QStyleOptionMenuItem()
+    menu.initStyleOption(option, action)
+    option.rect = QRect(0, 0, 100, 24)
+    option.direction = Qt.LayoutDirection.RightToLeft
+    option.text = ""
+    image = QImage(100, 24, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(image)
+    menu.style().drawControl(QStyle.ControlElement.CE_MenuItem, option, painter, menu)
+    painter.end()
+
+    assert image.pixelColor(85, 12).alpha() > 0
+    assert image.pixelColor(15, 12).alpha() == 0
+
+
+def test_menu_indicator_matches_modern_checkbox_size():
+    check_box = ModernCheckBox()
+    check_box.resize(check_box.sizeHint())
+    option = QStyleOptionButton()
+    check_box.initStyleOption(option)
+    indicator = check_box.style().subElementRect(
+        QStyle.SubElement.SE_CheckBoxIndicator, option, check_box
+    )
+
+    assert indicator.width() == _CHECKBOX_INDICATOR_SIZE
+    assert indicator.height() == _CHECKBOX_INDICATOR_SIZE
 
 
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])

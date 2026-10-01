@@ -25,6 +25,7 @@ _WINDOWS_ACRYLIC_MAX_TINT_LIGHTNESS = 240
 _ACRYLIC_INPUT_ALPHA = 1
 _MENU_ITEM_EXTRA_HEIGHT = 4
 _MENU_VERTICAL_MARGIN = 2
+_CHECKBOX_INDICATOR_SIZE = 14
 _OUTLINE_ALPHA = 30
 _SEPARATOR_ALPHA = 20
 
@@ -32,6 +33,7 @@ _SEPARATOR_ALPHA = 20
 class _MenuItemOption(Protocol):
     checked: bool
     checkType: QStyleOptionMenuItem.CheckType
+    icon: QIcon
     menuItemType: QStyleOptionMenuItem.MenuItemType
     palette: QPalette
     rect: QRect
@@ -204,6 +206,62 @@ class _RoundedMenuStyle(QProxyStyle):
         painter.drawPath(path)
         painter.restore()
 
+    def drawNonExclusiveCheck(self, option, painter) -> None:
+        column_width = max(option.maxIconWidth, 20)
+        center_x = option.rect.left() + 5 + column_width / 2
+        if option.direction == Qt.LayoutDirection.RightToLeft:
+            center_x = option.rect.right() - 5 - column_width / 2
+        center = QPointF(center_x, QRectF(option.rect).center().y())
+        half_size = _CHECKBOX_INDICATOR_SIZE / 2
+        indicator = QRectF(
+            center.x() - half_size,
+            center.y() - half_size,
+            _CHECKBOX_INDICATOR_SIZE,
+            _CHECKBOX_INDICATOR_SIZE,
+        ).adjusted(0.5, 0.5, -0.5, -0.5)
+        enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+        group = option.palette.currentColorGroup() if enabled else QPalette.ColorGroup.Disabled
+        palette = option.palette
+        accent = palette.color(group, QPalette.ColorRole.Accent)
+        if not enabled:
+            fill_role = (
+                QPalette.ColorRole.Mid if option.checked else QPalette.ColorRole.AlternateBase
+            )
+            fill = palette.color(group, fill_role)
+            border = palette.color(group, QPalette.ColorRole.Mid)
+        elif option.checked:
+            fill = border = accent
+        else:
+            fill = palette.color(group, QPalette.ColorRole.Window)
+            border = palette.color(group, QPalette.ColorRole.PlaceholderText)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(border, 1))
+        painter.setBrush(fill)
+        painter.drawRoundedRect(indicator, 3, 3)
+        if option.checked:
+            mark = palette.color(group, QPalette.ColorRole.Text)
+            if enabled and palette.isBrushSet(group, QPalette.ColorRole.HighlightedText):
+                mark = palette.color(group, QPalette.ColorRole.HighlightedText)
+            elif enabled:
+                mark = QColor("#FFFFFF" if accent.lightnessF() < 0.6 else "#202020")
+            check = QPainterPath()
+            check.moveTo(QPointF(indicator.left() + 3, indicator.center().y()))
+            check.lineTo(QPointF(indicator.left() + 5.5, indicator.bottom() - 3))
+            check.lineTo(QPointF(indicator.right() - 2.5, indicator.top() + 3))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(
+                QPen(
+                    mark,
+                    1.8,
+                    Qt.PenStyle.SolidLine,
+                    Qt.PenCapStyle.RoundCap,
+                    Qt.PenJoinStyle.RoundJoin,
+                )
+            )
+            painter.drawPath(check)
+        painter.restore()
+
     def sizeFromContents(self, content_type, option, size, widget=None):
         result = super().sizeFromContents(content_type, option, size, widget)
         if content_type == QStyle.ContentsType.CT_MenuItem and isinstance(
@@ -317,8 +375,13 @@ class _RoundedMenuStyle(QProxyStyle):
             menu_option is not None
             and menu_option.checkType == QStyleOptionMenuItem.CheckType.Exclusive
         )
+        is_nonexclusive = bool(
+            menu_option is not None
+            and menu_option.checkType == QStyleOptionMenuItem.CheckType.NonExclusive
+            and menu_option.icon.isNull()
+        )
         exclusive_checked = bool(is_exclusive and menu_option is not None and menu_option.checked)
-        if selected or is_exclusive:
+        if selected or is_exclusive or is_nonexclusive:
             native_option = QStyleOptionMenuItem(option)
         else:
             native_option = None
@@ -326,7 +389,7 @@ class _RoundedMenuStyle(QProxyStyle):
             self.drawSelection(option, painter, widget)
             assert native_option is not None
             native_option.state &= ~QStyle.StateFlag.State_Selected  # type: ignore[attr-defined]
-        if is_exclusive:
+        if is_exclusive or is_nonexclusive:
             assert native_option is not None
             native_option.checkType = QStyleOptionMenuItem.CheckType.NotCheckable  # type: ignore[attr-defined]
             native_option.checked = False  # type: ignore[attr-defined]
@@ -334,6 +397,8 @@ class _RoundedMenuStyle(QProxyStyle):
             super().drawControl(element, native_option, painter, widget)
             if exclusive_checked:
                 self.drawExclusiveCheck(option, painter, widget)
+            if is_nonexclusive:
+                self.drawNonExclusiveCheck(option, painter)
             return
         super().drawControl(element, option, painter, widget)
 
