@@ -69,7 +69,6 @@ from pyside6_modern_widgets import (
     ModernTimeEdit,
     ModernToolBar,
     ModernToolButton,
-    ModernToolTip,
     ModernWindow,
     NavigationPosition,
     NavigationView,
@@ -203,12 +202,6 @@ class ExampleWindow(ModernWindow):
             self._create_flyout_page(),
             self.tr("Flyout"),
             standard_icon(QStyle.StandardPixmap.SP_TitleBarShadeButton),
-            group=custom_group,
-        )
-        self.navigation.addPage(
-            self._create_tooltip_page(),
-            self.tr("Tooltips"),
-            standard_icon(QStyle.StandardPixmap.SP_MessageBoxInformation),
             group=custom_group,
         )
         self.navigation.addPage(
@@ -531,54 +524,6 @@ class ExampleWindow(ModernWindow):
                     radio.setEnabled(False)
                 radios.addWidget(radio, row, column, Qt.AlignmentFlag.AlignLeft)
         layout.addLayout(radios)
-        layout.addStretch()
-        return page
-
-    def _create_tooltip_page(self) -> QWidget:
-        page, layout = self._create_page("ModernToolTip")
-        description = QLabel(
-            self.tr("Hover over the buttons, then move between them to compare delays.")
-        )
-        description.setWordWrap(True)
-        layout.addWidget(description)
-        row = QHBoxLayout()
-        for title, text in (
-            (self.tr("Short tip"), self.tr("Save your changes")),
-            (
-                self.tr("Long tip"),
-                self.tr(
-                    "Long tooltips wrap automatically and stay within the screen. Move the window near an edge to try it."
-                ),
-            ),
-            (
-                self.tr("Formatted tip"),
-                self.tr("<b>Quick help</b><br>Tooltips follow the owner's theme."),
-            ),
-        ):
-            button = QPushButton(title)
-            button.setToolTip(text)
-            row.addWidget(button)
-        layout.addLayout(row)
-        form = QFormLayout()
-        first = ModernSlider(Qt.Orientation.Horizontal)
-        first.setRange(0, 1000)
-        first.setValue(300)
-        repeat = ModernSlider(Qt.Orientation.Horizontal)
-        repeat.setRange(0, 500)
-        repeat.setValue(100)
-        form.addRow(self.tr("First delay (ms)"), first)
-        form.addRow(self.tr("Repeat delay (ms)"), repeat)
-        layout.addLayout(form)
-        status = QLabel()
-        layout.addWidget(status)
-
-        def update_delays() -> None:
-            ModernToolTip.install(delay_ms=first.value(), reshow_delay_ms=repeat.value())
-            status.setText(f"{first.value()} ms / {repeat.value()} ms")
-
-        first.valueChanged.connect(update_delays)
-        repeat.valueChanged.connect(update_delays)
-        status.setText("300 ms / 100 ms")
         layout.addStretch()
         return page
 
@@ -1739,7 +1684,6 @@ class ExampleWindow(ModernWindow):
 def main() -> int:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    ModernToolTip.install()
     locale = example_locale()
     install_translators(app, locale)
     app.setApplicationName(QCoreApplication.translate("ExampleWindow", "Modern Widgets Example"))

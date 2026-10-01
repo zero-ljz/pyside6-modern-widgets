@@ -106,18 +106,10 @@ text, rich text, shortcut, and font editors with native Qt controls.
 The **Choice controls** page compares native and modern check boxes and radio
 buttons, including checked, mixed, disabled, and right-to-left examples.
 
-The **Tooltips** and **Toolbar** pages use `ModernSlider` for delay and width
-settings. Use the theme button to compare its light and dark appearance.
-
-The gallery enables `ModernToolTip` globally. The **Tooltips** page demonstrates
-short, long, and formatted text with sliders for first and repeat delays (300 and
-100 ms by default). Hover between buttons, switch the title-bar theme, and move
-the window near a screen edge. Ordinary widget tooltips elsewhere in the gallery
-use the same appearance and timing.
-
 The **Toolbar** page compares native `QToolBar` and `ModernToolBar` side by side,
-using matching actions and icon sizes. The shared width slider, text-beside-icons
-option, and right-to-left toggle update both toolbars. Open each overflow to try
+using matching actions and icon sizes. The shared `ModernSlider` for width,
+text-beside-icons option, and right-to-left toggle update both toolbars. Use the
+theme button to compare light and dark appearance. Open each overflow to try
 a checkable action, disabled action and native/modern submenu. The status line
 identifies which toolbar triggered an action.
 

@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QLabel,
-    QProxyStyle,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -48,15 +47,7 @@ from .theme import (
     tinted_icon,
 )
 
-_COLLAPSED_TOOLTIP_WAKE_UP_DELAY_MS = 250
 _SIDEBAR_SCROLLBAR_WIDTH = 8
-
-
-class _CollapsedNavigationToolTipStyle(QProxyStyle):
-    def styleHint(self, hint, option=None, widget=None, returnData=None) -> int:
-        if hint == QStyle.StyleHint.SH_ToolTip_WakeUpDelay:
-            return _COLLAPSED_TOOLTIP_WAKE_UP_DELAY_MS
-        return super().styleHint(hint, option, widget, returnData)
 
 
 def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
@@ -213,8 +204,6 @@ class _NavigationItem(_NavigationButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setIcon(_coerce_icon(icon))
         self.setIconSize(QSize(18, 18))
-        self._tooltip_style = _CollapsedNavigationToolTipStyle()
-        self.setStyle(self._tooltip_style)
         self._collapsed = False
         self._unconstrained_minimum_width = self.minimumWidth()
         self._unconstrained_maximum_width = self.maximumWidth()

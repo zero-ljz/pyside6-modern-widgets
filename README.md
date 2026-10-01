@@ -45,8 +45,6 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   `QTabWidget` API without document-tab add, close, or move behaviors.
 - `ModernFlyout`: an anchored popup for arbitrary widgets, with automatic screen
   edge placement, scrollable content, and light dismiss.
-- `ModernToolTip`: opt-in global tooltips with faster configurable hover delays,
-  rounded themed surfaces, and Windows 11 acrylic.
 - `ModernNotification` / `NotificationManager`: custom desktop or in-window
   notifications with actions, progress, bounded queues, and non-activating delivery.
 - `EdgeDockController`: optional screen-edge snapping and hover-to-restore
@@ -167,36 +165,6 @@ pyside6-lupdate -extensions py src/pyside6_modern_widgets \
 pyside6-lrelease src/pyside6_modern_widgets/translations/pyside6_modern_widgets_zh_CN.ts \
   -qm src/pyside6_modern_widgets/translations/pyside6_modern_widgets_zh_CN.qm
 ```
-
-## Modern tooltips
-
-Enable once after creating `QApplication`. Existing `QWidget.setToolTip()` calls
-then use rounded, non-interactive tooltips that inherit their owner's theme:
-
-```python
-from pyside6_modern_widgets import ModernToolTip
-
-ModernToolTip.install(delay_ms=300, reshow_delay_ms=100, max_width=360)
-button.setToolTip("Save your changes")
-```
-
-The first tooltip waits 300 ms after pointer movement. Moving to another control
-within one second of dismissing a visible tooltip uses the 100 ms repeat delay.
-Both delays accept zero. Width is in Qt logical pixels; text wraps and the popup
-is constrained to the cursor screen's available area. Plain text and Qt rich text
-are supported, with no interactive content or focus changes. Windows 11 uses
-system acrylic when available; other environments use an opaque rounded surface.
-
-Mouse presses, keyboard input, scrolling, leaving the control, hiding its owner,
-and window deactivation dismiss the tooltip. `setToolTipDuration()` controls its
-lifetime; the default is ten seconds, extended for long text. Updating tooltip
-text or the owner theme also updates a visible popup.
-
-Call `install()` again to change configuration, or `ModernToolTip.uninstall()` to
-restore native tooltips. Installation does not replace the application's Qt style
-or modify tooltip text. Model-item tooltips (such as `Qt.ToolTipRole`), per-tab
-tooltips, and custom `QToolTip.showText()` calls retain their native behavior;
-the enhancement targets widget-level `setToolTip()` text.
 
 ## Screen-edge docking
 
