@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDateTimeEdit,
+    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QGridLayout,
@@ -19,10 +20,12 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPushButton,
     QRadioButton,
     QSpinBox,
     QStyle,
+    QTabWidget,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -84,6 +87,8 @@ class ExampleWindow(ModernWindow):
 
         self.navigation = NavigationView()
         self.setCentralWidget(self.navigation)
+        native_group = self.tr("PySide6 built-in widgets")
+        custom_group = self.tr("Custom widgets")
 
         self.navigation.addPage(
             self._create_home_page(),
@@ -95,76 +100,91 @@ class ExampleWindow(ModernWindow):
             self._create_dialog_page(),
             self.tr("Dialog"),
             standard_icon(QStyle.StandardPixmap.SP_DialogApplyButton),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_message_box_page(),
             self.tr("Message boxes"),
             standard_icon(QStyle.StandardPixmap.SP_MessageBoxInformation),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_menu_page(),
             self.tr("Menu"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_toolbar_page(),
             self.tr("Toolbar"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogContentsView),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_tab_widget_page(),
             self.tr("Tab widget"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_button_page(),
             self.tr("Buttons"),
             standard_icon(QStyle.StandardPixmap.SP_DialogOkButton),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_choice_page(),
             self.tr("Choice controls"),
             standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_combo_box_page(),
             self.tr("Combo box"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_line_edit_page(),
             self.tr("Line edit"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogContentsView),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_spin_editors_page(),
             self.tr("Spin editors"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
+            group=native_group,
         )
         self.navigation.addPage(
             self._create_switch_page(),
             self.tr("Switch"),
             standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
+            group=custom_group,
         )
         self.navigation.addPage(
             self._create_flyout_page(),
             self.tr("Flyout"),
             standard_icon(QStyle.StandardPixmap.SP_TitleBarShadeButton),
+            group=custom_group,
         )
         self.navigation.addPage(
             self._create_tooltip_page(),
             self.tr("Tooltips"),
             standard_icon(QStyle.StandardPixmap.SP_MessageBoxInformation),
+            group=custom_group,
         )
         self.navigation.addPage(
             self._create_notification_page(),
             self.tr("Notifications"),
             standard_icon(QStyle.StandardPixmap.SP_MessageBoxInformation),
+            group=custom_group,
         )
         self.navigation.addPage(
             self._create_edge_dock_page(),
             self.tr("Edge docking"),
             standard_icon(QStyle.StandardPixmap.SP_TitleBarNormalButton),
+            group=custom_group,
         )
         self.navigation.addPage(
             self._create_settings_page(),
@@ -418,14 +438,24 @@ class ExampleWindow(ModernWindow):
         self.edge_dock_example.show_floating()
 
     def _create_dialog_page(self) -> QWidget:
-        page, layout = self._create_page("ModernDialog")
-        open_button = QPushButton(
-            standard_icon(QStyle.StandardPixmap.SP_DialogOpenButton),
-            self.tr("Open dialog"),
-        )
-        open_button.setFixedWidth(220)
-        open_button.clicked.connect(self._show_dialog)
-        layout.addWidget(open_button, 0, Qt.AlignmentFlag.AlignLeft)
+        page, layout = self._create_page(self.tr("Dialog"))
+        comparison = QGridLayout()
+        comparison.setHorizontalSpacing(24)
+        for column, (heading, dialog_type) in enumerate(
+            (("QDialog", QDialog), ("ModernDialog", ModernDialog))
+        ):
+            comparison.addWidget(QLabel(heading), 0, column)
+            comparison.setColumnStretch(column, 1)
+            open_button = QPushButton(
+                standard_icon(QStyle.StandardPixmap.SP_DialogOpenButton),
+                self.tr("Open dialog"),
+            )
+            open_button.setFixedWidth(220)
+            open_button.clicked.connect(
+                lambda _checked=False, widget_type=dialog_type: self._show_dialog(widget_type)
+            )
+            comparison.addWidget(open_button, 1, column, Qt.AlignmentFlag.AlignLeft)
+        layout.addLayout(comparison)
         layout.addStretch()
         return page
 
@@ -764,7 +794,14 @@ class ExampleWindow(ModernWindow):
                 manager.clear()
 
     def _create_message_box_page(self) -> QWidget:
-        page, layout = self._create_page("ModernMessageBox")
+        page, layout = self._create_page(self.tr("Message boxes"))
+        comparison = QGridLayout()
+        comparison.setHorizontalSpacing(24)
+        comparison.setVerticalSpacing(8)
+        comparison.addWidget(QLabel("QMessageBox"), 0, 0)
+        comparison.addWidget(QLabel("ModernMessageBox"), 0, 1)
+        comparison.setColumnStretch(0, 1)
+        comparison.setColumnStretch(1, 1)
         examples = (
             (
                 self.tr("Information"),
@@ -792,28 +829,44 @@ class ExampleWindow(ModernWindow):
                 self._show_detailed_message,
             ),
         )
-        for text, icon, callback in examples:
-            button = QPushButton(standard_icon(icon), text)
-            button.setFixedWidth(220)
-            button.clicked.connect(callback)
-            layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
+        for row, (text, icon, callback) in enumerate(examples, start=1):
+            for column, box_type in enumerate((QMessageBox, ModernMessageBox)):
+                button = QPushButton(standard_icon(icon), text)
+                button.setFixedWidth(220)
+                button.clicked.connect(
+                    lambda _checked=False, show=callback, widget_type=box_type: show(widget_type)
+                )
+                comparison.addWidget(button, row, column, Qt.AlignmentFlag.AlignLeft)
+        layout.addLayout(comparison)
         layout.addStretch()
         return page
 
     def _create_tab_widget_page(self) -> QWidget:
-        page, layout = self._create_page("ModernTabWidget")
+        page, layout = self._create_page(self.tr("Tab widget"))
         layout.addWidget(QLabel(self.tr("Switch between fixed sections using the tabs.")))
+        comparison = QGridLayout()
+        comparison.setHorizontalSpacing(24)
+        self.native_tab_widget = QTabWidget(page)
         self.tab_widget = ModernTabWidget(page)
-        for title, description in (
-            (self.tr("General"), self.tr("General settings for this section.")),
-            (self.tr("Details"), self.tr("More details in a separate section.")),
+        for column, (heading, tabs) in enumerate(
+            (("QTabWidget", self.native_tab_widget), ("ModernTabWidget", self.tab_widget))
         ):
-            section = QWidget()
-            section_layout = QVBoxLayout(section)
-            section_layout.addWidget(QLabel(description))
-            section_layout.addStretch()
-            self.tab_widget.addTab(section, title)
-        layout.addWidget(self.tab_widget)
+            comparison.addWidget(QLabel(heading), 0, column)
+            comparison.setColumnStretch(column, 1)
+            tabs.setFixedHeight(220)
+            for title, description in (
+                (self.tr("General"), self.tr("General settings for this section.")),
+                (self.tr("Details"), self.tr("More details in a separate section.")),
+            ):
+                section = QWidget()
+                section_layout = QVBoxLayout(section)
+                description_label = QLabel(description)
+                description_label.setWordWrap(True)
+                section_layout.addWidget(description_label)
+                section_layout.addStretch()
+                tabs.addTab(section, title)
+            comparison.addWidget(tabs, 1, column)
+        layout.addLayout(comparison)
         layout.addWidget(QLabel("ModernSegmentedControl"))
         self.segmented_control = ModernSegmentedControl(
             [self.tr("General"), self.tr("Details")], page
@@ -831,6 +884,7 @@ class ExampleWindow(ModernWindow):
         disabled_segments = ModernSegmentedControl([self.tr("General"), self.tr("Disabled")], page)
         disabled_segments.setItemEnabled(1, False)
         layout.addWidget(disabled_segments, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addStretch()
         return page
 
     def _create_combo_box_page(self) -> QWidget:
@@ -1250,8 +1304,8 @@ class ExampleWindow(ModernWindow):
         position = self.native_menu_button.mapToGlobal(self.native_menu_button.rect().bottomLeft())
         self.native_menu.popup(position)
 
-    def _show_dialog(self) -> None:
-        dialog = ModernDialog(self)
+    def _show_dialog(self, dialog_type: type[QDialog]) -> None:
+        dialog = dialog_type(self)
         dialog.setWindowTitle(self.tr("Save changes"))
 
         layout = QVBoxLayout(dialog)
@@ -1265,48 +1319,48 @@ class ExampleWindow(ModernWindow):
 
         dialog.exec()
 
-    def _show_information(self) -> None:
-        ModernMessageBox.information(
+    def _show_information(self, box_type: type[QMessageBox]) -> None:
+        box_type.information(
             self,
             self.tr("Update complete"),
             self.tr("The application is up to date."),
         )
 
-    def _show_question(self) -> None:
-        ModernMessageBox.question(
+    def _show_question(self, box_type: type[QMessageBox]) -> None:
+        box_type.question(
             self,
             self.tr("Replace file"),
             self.tr("A file with this name already exists. Replace it?"),
-            ModernMessageBox.StandardButton.Yes | ModernMessageBox.StandardButton.No,
-            ModernMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
-    def _show_warning(self) -> None:
-        ModernMessageBox.warning(
+    def _show_warning(self, box_type: type[QMessageBox]) -> None:
+        box_type.warning(
             self,
             self.tr("Unsaved changes"),
             self.tr("Closing now will discard your changes."),
-            ModernMessageBox.StandardButton.Save
-            | ModernMessageBox.StandardButton.Discard
-            | ModernMessageBox.StandardButton.Cancel,
-            ModernMessageBox.StandardButton.Save,
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
         )
 
-    def _show_critical(self) -> None:
-        ModernMessageBox.critical(
+    def _show_critical(self, box_type: type[QMessageBox]) -> None:
+        box_type.critical(
             self,
             self.tr("Connection failed"),
             self.tr("The server could not be reached."),
-            ModernMessageBox.StandardButton.Retry | ModernMessageBox.StandardButton.Cancel,
-            ModernMessageBox.StandardButton.Retry,
+            QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Retry,
         )
 
-    def _show_detailed_message(self) -> None:
-        message_box = ModernMessageBox(
-            ModernMessageBox.Icon.Warning,
+    def _show_detailed_message(self, box_type: type[QMessageBox]) -> None:
+        message_box = box_type(
+            QMessageBox.Icon.Warning,
             self.tr("Import completed with warnings"),
             self.tr("Some records could not be imported."),
-            ModernMessageBox.StandardButton.Ok,
+            QMessageBox.StandardButton.Ok,
             self,
         )
         message_box.setInformativeText(self.tr("Open the details to review the skipped records."))

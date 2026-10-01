@@ -12,6 +12,11 @@ Run the window and navigation example:
 python examples/navigation_view_example.py
 ```
 
+Its sidebar groups native PySide6 comparison pages and custom-widget pages.
+Home and Settings remain outside the two component groups.
+The Dialog, Message boxes, and Tab widget pages show native and modern controls
+side by side.
+
 Select **Buttons** for native Fusion and `ModernPushButton` comparisons: text,
 icons, checked/default/flat states, menus, disabled controls, keyboard focus and RTL.
 

@@ -296,6 +296,16 @@
     </message>
     <message>
         <location filename="../navigation_view_example.py" line="87"/>
+        <source>PySide6 built-in widgets</source>
+        <translation>PySide6 原生组件</translation>
+    </message>
+    <message>
+        <location filename="../navigation_view_example.py" line="88"/>
+        <source>Custom widgets</source>
+        <translation>自定义组件</translation>
+    </message>
+    <message>
+        <location filename="../navigation_view_example.py" line="87"/>
         <source>Dialog</source>
         <translation>对话框</translation>
     </message>

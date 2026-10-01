@@ -35,6 +35,8 @@ def test_example_catalog_is_complete_and_loadable() -> None:
     assert _APP.installTranslator(translator)
     try:
         assert QCoreApplication.translate("ExampleWindow", "Home") == "主页"
+        assert QCoreApplication.translate("ExampleWindow", "PySide6 built-in widgets") == "PySide6 原生组件"
+        assert QCoreApplication.translate("ExampleWindow", "Custom widgets") == "自定义组件"
         assert QCoreApplication.translate("ExampleWindow", "Line edit") == "输入框"
         assert QCoreApplication.translate("ExampleWindow", "Spin editors") == "步进输入框"
         assert QCoreApplication.translate("ExampleWindow", "Open dialog") == "打开对话框"
