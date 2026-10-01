@@ -96,6 +96,7 @@ class ModernScrollBar(QScrollBar):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
 
+        thumb_center: QPointF | None = None
         if self.maximum() > self.minimum():
             handle = style.subControlRect(control, option, part.SC_ScrollBarSlider, self)
             if handle.isValid():
@@ -132,6 +133,7 @@ class ModernScrollBar(QScrollBar):
                 painter.drawRoundedRect(
                     rect, min(rect.width(), rect.height()) / 2, min(rect.width(), rect.height()) / 2
                 )
+                thumb_center = rect.center()
 
         if not enabled or self.maximum() == self.minimum() or self._hover_progress <= 0:
             return
@@ -159,6 +161,12 @@ class ModernScrollBar(QScrollBar):
             )
             painter.setBrush(Qt.BrushStyle.NoBrush)
             center = QRectF(button_rect).center()
+            if thumb_center is not None:
+                center = (
+                    QPointF(center.x(), thumb_center.y())
+                    if horizontal
+                    else QPointF(thumb_center.x(), center.y())
+                )
             direction = 1 if forward else -1
             if horizontal:
                 if option.direction == Qt.LayoutDirection.RightToLeft:

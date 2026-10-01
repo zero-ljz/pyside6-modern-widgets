@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -112,3 +112,44 @@ def test_scroll_area_can_install_both_orientations():
     assert area.verticalScrollBar() is vertical
     assert area.horizontalScrollBar() is horizontal
     area.close()
+
+
+@pytest.mark.parametrize("orientation", [Qt.Orientation.Vertical, Qt.Orientation.Horizontal])
+@pytest.mark.parametrize(
+    "direction", [Qt.LayoutDirection.LeftToRight, Qt.LayoutDirection.RightToLeft]
+)
+def test_arrow_glyphs_align_with_expanded_thumb(orientation, direction):
+    bar = ModernScrollBar(
+        orientation,
+        theme=replace(
+            LIGHT_THEME,
+            scrollbar="#00B000",
+            scrollbar_hover="#00B000",
+            text_muted="#F00000",
+        ),
+    )
+    bar.setLayoutDirection(direction)
+    bar.setRange(0, 100)
+    bar.setPageStep(20)
+    bar.resize(QSize(72, 240) if orientation == Qt.Orientation.Vertical else QSize(240, 36))
+    bar.show()
+    _APP.processEvents()
+    bar._set_hover_progress(1.0)
+    image = bar.grab().toImage()
+    horizontal = orientation == Qt.Orientation.Horizontal
+
+    arrows = []
+    thumb = []
+    for x in range(image.width()):
+        for y in range(image.height()):
+            color = image.pixelColor(x, y)
+            position = y if horizontal else x
+            if color.red() > 160 and color.green() < 100 and color.blue() < 100:
+                arrows.append(position)
+            if color.green() > 120 and color.red() < 100 and color.blue() < 100:
+                thumb.append(position)
+    assert arrows and thumb
+    assert abs(sum(arrows) / len(arrows) - sum(thumb) / len(thumb)) <= (
+        1.5 * image.devicePixelRatio()
+    )
+    bar.close()
