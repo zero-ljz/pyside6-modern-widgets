@@ -32,6 +32,7 @@ from pyside6_modern_widgets import (
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
+    ModernPushButton,
     ModernSegmentedControl,
     ModernSlider,
     ModernSwitch,
@@ -107,6 +108,11 @@ class ExampleWindow(ModernWindow):
             standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
         )
         self.navigation.addPage(
+            self._create_button_page(),
+            self.tr("Buttons"),
+            standard_icon(QStyle.StandardPixmap.SP_DialogOkButton),
+        )
+        self.navigation.addPage(
             self._create_combo_box_page(),
             self.tr("Combo box"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
@@ -145,6 +151,90 @@ class ExampleWindow(ModernWindow):
 
         self._create_actions()
         self._create_menu_bar()
+
+    def _create_button_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("Buttons"))
+        hint = QLabel(
+            self.tr(
+                "Compare native and modern buttons. Use Tab and Space to try keyboard focus, "
+                "or hover and press to compare states."
+            )
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        panel = QWidget(page)
+        comparison = QGridLayout(panel)
+        comparison.setContentsMargins(0, 0, 0, 0)
+        comparison.setHorizontalSpacing(24)
+        comparison.setVerticalSpacing(10)
+        layout.addWidget(panel)
+        status = QLabel(self.tr("Choose an action"))
+        status.setWordWrap(True)
+        for column, (heading, button_type, menu_type) in enumerate(
+            (
+                (self.tr("Native QPushButton"), QPushButton, QMenu),
+                ("ModernPushButton", ModernPushButton, ModernMenu),
+            )
+        ):
+            comparison.addWidget(QLabel(heading), 0, column)
+            comparison.setColumnStretch(column, 1)
+            for row, (kind, text) in enumerate(
+                (
+                    ("normal", self.tr("&Save")),
+                    ("icon", self.tr("Open")),
+                    ("icon_only", ""),
+                    ("checked", self.tr("Checkable button")),
+                    ("default", self.tr("Default button")),
+                    ("flat", self.tr("Flat button")),
+                    ("menu", self.tr("More actions")),
+                    ("disabled", self.tr("Unavailable")),
+                ),
+                start=1,
+            ):
+                button = button_type(text, panel)
+                if kind in ("icon", "icon_only"):
+                    button.setIcon(standard_icon(QStyle.StandardPixmap.SP_DialogOpenButton))
+                if kind == "icon_only":
+                    button.setToolTip(self.tr("Open"))
+                    button.setAccessibleName(self.tr("Open"))
+                elif kind == "checked":
+                    button.setCheckable(True)
+                    button.setChecked(True)
+                elif kind == "default":
+                    button.setDefault(True)
+                elif kind == "flat":
+                    button.setFlat(True)
+                elif kind == "disabled":
+                    button.setEnabled(False)
+                elif kind == "menu":
+                    menu = menu_type(button)
+                    menu.addAction(self.tr("Open"))
+                    menu.addAction(self.tr("Details"))
+                    menu.triggered.connect(
+                        lambda action, heading=heading: status.setText(
+                            self.tr("%1: %2").replace("%1", heading).replace("%2", action.text())
+                        )
+                    )
+                    button.setMenu(menu)
+                button.clicked.connect(
+                    lambda checked=False, button=button, heading=heading: status.setText(
+                        self.tr("%1: %2")
+                        .replace("%1", heading)
+                        .replace("%2", button.text() or button.accessibleName())
+                        + (f" ({checked})" if button.isCheckable() else "")
+                    )
+                )
+                comparison.addWidget(button, row, column, Qt.AlignmentFlag.AlignLeft)
+        rtl = QCheckBox(self.tr("Right-to-left layout"))
+        rtl.toggled.connect(
+            lambda checked: panel.setLayoutDirection(
+                Qt.LayoutDirection.RightToLeft if checked else Qt.LayoutDirection.LeftToRight
+            )
+        )
+        layout.addWidget(rtl)
+        layout.addWidget(status)
+        layout.addStretch()
+        return page
 
     def _create_tooltip_page(self) -> QWidget:
         page, layout = self._create_page("ModernToolTip")

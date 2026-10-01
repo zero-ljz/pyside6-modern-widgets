@@ -12,6 +12,9 @@ Run the window and navigation example:
 python examples/navigation_view_example.py
 ```
 
+Select **Buttons** for native Fusion and `ModernPushButton` comparisons: text,
+icons, checked/default/flat states, menus, disabled controls, keyboard focus and RTL.
+
 The navigation, tab, and edge-dock examples support English and Simplified Chinese. English is the source
 language; when the system locale is `zh_CN`, each example installs Qt's standard
 catalog, the component library catalog, and its own `examples_zh_CN` catalog

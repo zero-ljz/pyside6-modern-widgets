@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add `ModernPushButton`, retaining native `QPushButton` behavior and Fusion
+  geometry with themed hover, press, focus, disabled, default and checked states.
+  Add a native/modern comparison page to the navigation example.
 - Add opt-in `ModernToolTip.install()` for existing widget tooltips, with
   configurable first/repeat delays, owner theme inheritance, rich-text wrapping,
   screen-edge placement, and Windows 11 acrylic with an opaque fallback.

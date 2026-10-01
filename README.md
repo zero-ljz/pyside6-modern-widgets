@@ -16,6 +16,9 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   button that opens a `ModernMenu` instead of Qt's default toolbar popup.
 - `ModernComboBox`: a modern `QComboBox` with rounded surfaces,
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
+- `ModernPushButton`: a `QPushButton` with Fusion sizing, rounded themed surfaces,
+  system-accent default/checked states, and native shortcuts, menus and signals.
+  See [usage and Fusion measurements](docs/modern-push-button.md).
 - `ModernSwitch`: an animated switch with system accent colors and native
   checkbox interaction, sized to sit alongside combo boxes and line edits.
 - `ModernSlider`: a compact accent-filled slider with native Qt range, step,
