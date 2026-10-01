@@ -551,11 +551,13 @@ class BackgroundFrame(QFrame):
         theme: ModernTheme,
         corner_radius: int,
         opaque_surface: bool = False,
+        solid_surface: bool = False,
     ) -> None:
         super().__init__(parent)
         self._theme = theme
         self._corner_radius = corner_radius
         self._opaque_surface = opaque_surface
+        self._solid_surface = solid_surface
         self._watercolor_cache: QPixmap | None = None
         self._watercolor_cache_signature: tuple[int, int, float, ModernTheme] | None = None
         self._live_resize = False
@@ -638,6 +640,9 @@ class BackgroundFrame(QFrame):
             path = QPainterPath()
             path.addRoundedRect(border_rect, self._corner_radius, self._corner_radius)
             painter.setClipPath(path)
+        if self._solid_surface:
+            painter.fillRect(self.rect(), QColor(self._theme.surface_alternate))
+            return
         opacity = self._activation_transition.opacity
         if opacity > 0:
             painter.drawPixmap(self.rect(), self._ensure_watercolor_cache())

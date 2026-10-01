@@ -6,10 +6,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox
 
-from pyside6_modern_widgets import ModernMessageBox
+from pyside6_modern_widgets import LIGHT_THEME, ModernMessageBox
 
 _APP = QApplication.instance() or QApplication([])
 Button = QMessageBox.StandardButton
@@ -29,6 +30,21 @@ def _dispose(box):
     box.blockSignals(True)
     box.done(0)
     box.deleteLater()
+
+
+def test_translucent_message_box_keeps_its_background_painted():
+    box = ModernMessageBox(text="Pixel test", buttons=Button.Ok, theme=LIGHT_THEME)
+    box.show()
+    _APP.processEvents()
+    try:
+        if box._surface_policy.opaque_surface:
+            pytest.skip("This platform uses an opaque message-box surface")
+        assert box.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        assert box._background_frame.isVisible()
+        pixel = box.grab().toImage().pixelColor(box.width() - 10, box.height() - 10)
+        assert pixel == QColor(LIGHT_THEME.surface_alternate)
+    finally:
+        _dispose(box)
 
 
 @pytest.mark.parametrize(

@@ -87,6 +87,7 @@ class ModernMessageBox(QMessageBox):
             theme=self._theme,
             corner_radius=paint_radius,
             opaque_surface=self._surface_policy.opaque_surface,
+            solid_surface=True,
         )
         self._background_frame.setObjectName("backgroundFrame")
         self._background_frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -165,8 +166,8 @@ class ModernMessageBox(QMessageBox):
             )
 
     def _refresh_native_surface(self) -> None:
-        """Apply Windows 11 acrylic and rounded corners when the native handle exists."""
-        if not self.isWindow():
+        """Apply native corners while keeping translucent surfaces painted."""
+        if not self.isWindow() or not self._surface_policy.opaque_surface:
             return
         # Message boxes use a clean surface; the watercolor background belongs to
         # the main window.
