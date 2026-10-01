@@ -7,7 +7,7 @@ from enum import Enum
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
-from PySide6.QtWidgets import QApplication, QFrame, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 from shiboken6 import isValid
 
 from ._theme_binding import ThemeBinding
@@ -120,6 +120,8 @@ class ModernFlyout(QWidget):
         self._scroll = QScrollArea(self)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setWidgetResizable(True)
+        # QScrollArea's minimum hint is taller than compact flyout content.
+        self._scroll.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self._scroll.setAutoFillBackground(False)
         self._scroll.viewport().setAutoFillBackground(False)
         self._scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)

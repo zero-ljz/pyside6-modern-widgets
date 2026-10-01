@@ -246,6 +246,17 @@ def test_large_content_scrolls_and_replacement_can_shrink(panel):
     taken.deleteLater()
 
 
+def test_short_content_uses_its_own_height(panel):
+    _, anchor, flyout, *_ = panel
+    content = QWidget()
+    content.setFixedSize(198, 20)
+    flyout.setContentWidget(content)
+    flyout.popup(anchor)
+    _APP.processEvents()
+    assert flyout.size() == flyout.sizeHint()
+    assert flyout.height() == 44
+
+
 def test_invalid_arguments_leave_panel_usable(panel):
     _, anchor, flyout, field, *_ = panel
     for placement, gap in [("invalid", 8), ("top", -1)]:
