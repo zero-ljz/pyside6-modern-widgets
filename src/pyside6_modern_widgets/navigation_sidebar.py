@@ -24,6 +24,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
+    QLabel,
     QProxyStyle,
     QPushButton,
     QScrollArea,
@@ -114,6 +115,13 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
             }}
             QScrollArea {{ border: none; background-color: transparent; }}
             QWidget#NavigationScrollContent {{ background-color: transparent; }}
+            QLabel[class="NavigationGroupHeader"] {{
+                color: {theme.text_disabled};
+                background-color: transparent;
+                font-size: 10px;
+                font-weight: 600;
+                padding-left: 6px;
+            }}
             QScrollBar:vertical {{
                 width: {_SIDEBAR_SCROLLBAR_WIDTH}px;
                 background: transparent;
@@ -223,6 +231,22 @@ class _NavigationItem(_NavigationButton):
             self.setFixedWidth(width)
 
 
+class _NavigationGroup(QWidget):
+    def __init__(self, title: str, parent: QWidget) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        self.header = QLabel(title, self)
+        self.header.setProperty("class", "NavigationGroupHeader")
+        self.header.setFixedHeight(20)
+        layout.addWidget(self.header)
+        self.itemLayout = layout
+
+    def setCollapsed(self, collapsed: bool) -> None:
+        self.header.setVisible(not collapsed)
+
+
 def _coerce_icon(icon: QIcon | QStyle.StandardPixmap | None) -> QIcon:
     if isinstance(icon, QIcon):
         return icon
@@ -262,6 +286,8 @@ class NavigationSidebar(QWidget):
         self._compact_item_width = max(1, self._collapsed_width - 12)
         self._collapsed = False
         self._items: list[_NavigationItem] = []
+        self._groups: dict[tuple[NavigationPosition, str], _NavigationGroup] = {}
+        self._item_groups: dict[_NavigationItem, _NavigationGroup] = {}
         self._current_index = -1
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
@@ -347,17 +373,37 @@ class NavigationSidebar(QWidget):
         text: str,
         icon: QIcon | QStyle.StandardPixmap | None = None,
         position: NavigationPosition = NavigationPosition.TOP,
+        *,
+        group: str | None = None,
     ) -> int:
+        if group is not None and (not isinstance(group, str) or not group.strip()):
+            raise ValueError("group must be a non-empty string or None")
         button = _NavigationItem(text, icon, self._metrics, self)
         button.setCollapsed(self._collapsed)
         button._set_compact_width(self._compact_item_width if self._collapsed else None)
         index = len(self._items)
         self._items.append(button)
         self._button_group.addButton(button, index)
-        if position is NavigationPosition.TOP:
+        if group is not None:
+            key = (position, group)
+            section = self._groups.get(key)
+            if section is None:
+                container = self.scrollContent if position is NavigationPosition.TOP else self._bottom_container
+                section = _NavigationGroup(group, container)
+                section.setCollapsed(self._collapsed)
+                self._groups[key] = section
+                if position is NavigationPosition.TOP:
+                    self._top_layout.insertWidget(self._top_layout.count() - 1, section)
+                else:
+                    self._bottom_layout.addWidget(section)
+            section.show()
+            section.itemLayout.addWidget(button)
+            self._item_groups[button] = section
+        elif position is NavigationPosition.TOP:
             self._top_layout.insertWidget(self._top_layout.count() - 1, button)
         else:
             self._bottom_layout.addWidget(button)
+        if position is NavigationPosition.BOTTOM:
             self._sync_bottom_container_height()
         return index
 
@@ -367,8 +413,14 @@ class NavigationSidebar(QWidget):
             return
         button = self._items.pop(index)
         self._button_group.removeButton(button)
-        self._top_layout.removeWidget(button)
-        self._bottom_layout.removeWidget(button)
+        section = self._item_groups.pop(button, None)
+        if section is not None:
+            section.itemLayout.removeWidget(button)
+            if section not in self._item_groups.values():
+                section.hide()
+        else:
+            self._top_layout.removeWidget(button)
+            self._bottom_layout.removeWidget(button)
         button.hide()
         self._sync_bottom_container_height()
 
@@ -394,7 +446,11 @@ class NavigationSidebar(QWidget):
         return button
 
     def _sync_bottom_container_height(self) -> None:
-        has_items = self._bottom_layout.count() > 0
+        has_items = any(
+            (widget := self._bottom_layout.itemAt(index).widget()) is not None
+            and not widget.isHidden()
+            for index in range(self._bottom_layout.count())
+        )
         self._bottom_container.setFixedHeight(
             self._bottom_layout.sizeHint().height() if has_items else 0
         )
@@ -541,6 +597,9 @@ class NavigationSidebar(QWidget):
         for item in self._items:
             item.setCollapsed(collapsed)
             item._set_compact_width(self._compact_item_width if collapsed else None)
+        for section in self._groups.values():
+            section.setCollapsed(collapsed)
+        self._sync_bottom_container_height()
         if not animated:
             for animation in animations:
                 animation.stop()

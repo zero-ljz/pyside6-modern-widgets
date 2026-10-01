@@ -45,6 +45,19 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `NavigationView`: a sidebar and synchronized page stack in one widget.
 - `TabView`: a WinUI-inspired document tab view with add, close, and move behaviors.
 
+Navigation entries can share a named group. Pass `group` to `NavigationView.addPage()`
+or `NavigationSidebar.addItem()`; the heading appears once for each group and
+position, and does not occupy an item or page index. Headings hide when the
+sidebar is collapsed or the group becomes empty.
+
+```python
+navigation.addPage(home_page, "Home")
+navigation.addPage(editor_page, "Editor", group="Workspace")
+navigation.addPage(files_page, "Files", group="Workspace")
+navigation.addPage(settings_page, "Settings", position=NavigationPosition.BOTTOM,
+                   group="System")
+```
+
 ## Supported environment
 
 Supports Windows, macOS, and Linux with Python 3.10-3.12, PySide6 6.8.3, and

@@ -203,9 +203,13 @@ class NavigationView(QWidget):
         icon: QIcon | QStyle.StandardPixmap | None = None,
         position: NavigationPosition = NavigationPosition.TOP,
         selected: bool = False,
+        *,
+        group: str | None = None,
     ) -> int:
+        if group is not None and (not isinstance(group, str) or not group.strip()):
+            raise ValueError("group must be a non-empty string or None")
         page_index = self.stackedWidget.addWidget(page)
-        item_index = self.sidebar.addItem(text, icon, position)
+        item_index = self.sidebar.addItem(text, icon, position, group=group)
         self._sync_sidebar_minimum_height()
         if item_index != page_index:
             self.stackedWidget.removeWidget(page)

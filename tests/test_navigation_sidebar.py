@@ -104,6 +104,77 @@ def test_removal_before_selection_keeps_button_indices_current():
     _flush_deletes()
 
 
+def test_grouped_pages_keep_page_indices_and_selection_in_sync():
+    view = NavigationView()
+    view.addPage(QLabel("Home"), "Home")
+    view.addPage(QLabel("One"), "One", group="Tools")
+    view.addPage(QLabel("Settings"), "Settings", position=NavigationPosition.BOTTOM, group="Tools")
+    view.addPage(QLabel("Two"), "Two", group="Tools")
+    sidebar = view.sidebar
+    top = sidebar._groups[(NavigationPosition.TOP, "Tools")]
+    bottom = sidebar._groups[(NavigationPosition.BOTTOM, "Tools")]
+
+    assert view.count() == sidebar.count() == 4
+    assert [top.itemLayout.itemAt(i).widget() for i in (1, 2)] == [
+        sidebar.button(1), sidebar.button(3)
+    ]
+    assert top.header.text() == bottom.header.text() == "Tools"
+    sidebar.button(3).click()
+    assert view.currentIndex() == sidebar.currentIndex() == 3
+    assert view.currentWidget().text() == "Two"
+
+    sidebar.setCollapsed(True, animated=False)
+    assert top.header.isHidden() and bottom.header.isHidden()
+    sidebar.setCollapsed(False, animated=False)
+    assert not top.header.isHidden() and not bottom.header.isHidden()
+
+    view.removePage(1)
+    _flush_deletes()
+    assert view.count() == sidebar.count() == 3
+    assert view.currentIndex() == sidebar.currentIndex() == 2
+    assert not top.isHidden()
+    view.removePage(2)
+    _flush_deletes()
+    assert top.isHidden()
+    assert not bottom.isHidden()
+    view.deleteLater()
+    _flush_deletes()
+
+
+def test_empty_bottom_group_hides_and_can_be_reused():
+    sidebar = NavigationSidebar()
+    index = sidebar.addItem("Settings", position=NavigationPosition.BOTTOM, group="More")
+    group = sidebar._groups[(NavigationPosition.BOTTOM, "More")]
+    assert not group.isHidden()
+    assert not sidebar._bottom_container.isHidden()
+
+    button = sidebar.button(index)
+    sidebar.removeItem(index)
+    assert group.isHidden()
+    assert sidebar._bottom_container.isHidden()
+    assert button.parent() is group
+    assert sidebar.addItem("About", position=NavigationPosition.BOTTOM, group="More") == 0
+    assert sidebar._groups[(NavigationPosition.BOTTOM, "More")] is group
+    assert not group.isHidden()
+    assert not sidebar._bottom_container.isHidden()
+    sidebar.deleteLater()
+    _flush_deletes()
+
+
+def test_invalid_group_does_not_add_page_or_item():
+    view = NavigationView()
+    page = QLabel("Page")
+    with pytest.raises(ValueError):
+        view.addPage(page, "Page", group=" ")
+    with pytest.raises(ValueError):
+        view.sidebar.addItem("Item", group="")
+    assert view.count() == view.sidebar.count() == 0
+    assert page.parent() is None
+    view.deleteLater()
+    page.deleteLater()
+    _flush_deletes()
+
+
 def test_navigation_toggle_only_uses_hover_style_for_keyboard_focus() -> None:
     sidebar = NavigationSidebar()
     button = sidebar.toggleButton

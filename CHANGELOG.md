@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Support named navigation groups in `NavigationSidebar.addItem()` and
+  `NavigationView.addPage()`, with headings that hide in collapsed mode.
 - Add `ModernPushButton`, retaining native `QPushButton` behavior and Fusion
   geometry with themed hover, press, focus, disabled, default and checked states.
   Add a native/modern comparison page to the navigation example.
