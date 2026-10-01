@@ -28,6 +28,8 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Paint `ModernToolButton` direction and menu arrows as outlined, round-ended
+  chevrons consistent with the other modern controls, retaining native geometry.
 - Match Qt tab behavior when inserting at a negative index (append) and when
   programmatically selecting a disabled tab (select without enabling it).
 - Synchronize sidebar selection and `currentChanged` when a borrowed button is

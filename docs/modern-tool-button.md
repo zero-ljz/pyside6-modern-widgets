@@ -1,9 +1,11 @@
 # ModernToolButton
 
 `ModernToolButton` subclasses `QToolButton`. It paints rounded surfaces and state
-colors while retaining Fusion's sizes, hit regions, label layout and menu
-indicators. Qt owns mouse, keyboard, wheel, shortcuts, action synchronization,
-auto-repeat and popup timing. No additional keyboard shortcuts are introduced.
+colors while retaining Fusion's sizes, hit regions, label layout and arrow
+positions. Directional and menu arrows use outlined, round-ended chevrons,
+matching the other modern controls. Qt owns mouse, keyboard, wheel, shortcuts,
+action synchronization, auto-repeat and popup timing. No additional keyboard
+shortcuts are introduced.
 
 ```python
 from PySide6.QtCore import Qt
@@ -56,7 +58,7 @@ the same suggested and minimum sizes:
 | Text under icon | 55×43 | 55×43 | — |
 | Directional arrow | 24×23 | 24×23 | — |
 | Icon, MenuButtonPopup | 36×23 | 24×23 | 12×23 |
-| Icon, DelayedPopup / InstantPopup | 24×23 | 24×23 | Native corner indicator |
+| Icon, DelayedPopup / InstantPopup | 24×23 | 24×23 | Chevron in native corner region |
 
 These are measurements, not fixed dimensions. Fonts, icons, action priority,
 toolbar icon size and text determine the native size hints. Text beside/below
@@ -68,7 +70,7 @@ default). The focus outline sits inside the main region, including under RTL.
 Qt handles device scaling; callers should not multiply sizes by DPR.
 
 Tests compare native suggested/minimum sizes, subcontrol hit regions, visible
-icon bounds and directional arrows at actual DPR 1, 1.25, 1.5 and 2. Native
+icon bounds and modern directional arrows at actual DPR 1, 1.25, 1.5 and 2. Native
 input/action/popup comparisons, inherited themes, state rendering and parent
 stylesheet compatibility are covered separately.
 

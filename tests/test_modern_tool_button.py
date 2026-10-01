@@ -107,12 +107,25 @@ def test_fusion_geometry_hit_regions_and_visible_icons(widgets, style, popup, rt
                         if image.pixelColor(x, y) == QColor("#ED178D")
                     }
                 )
-            assert pixels[0] and pixels[0] == pixels[1]
+            # The corner menu chevron can cover different icon pixels from
+            # Fusion's triangle, but must not move or resize the visible icon.
+            assert all(pixels)
+            bounds = [
+                (
+                    min(x for x, y in mask),
+                    min(y for x, y in mask),
+                    max(x for x, y in mask),
+                    max(y for x, y in mask),
+                )
+                for mask in pixels
+            ]
+            assert bounds[0] == bounds[1]
 
 
 @pytest.mark.parametrize("arrow", [Qt.UpArrow, Qt.DownArrow, Qt.LeftArrow, Qt.RightArrow])
-def test_native_arrow_glyphs_keep_their_bounds(widgets, arrow):
+def test_modern_arrow_glyphs_replace_native_triangles(widgets, arrow):
     masks = []
+    sizes = []
     for cls in (QToolButton, ModernToolButton):
         button = widgets(cls)
         if cls is ModernToolButton:
@@ -123,6 +136,7 @@ def test_native_arrow_glyphs_keep_their_bounds(widgets, arrow):
         button.setPalette(palette)
         button.setArrowType(arrow)
         button.resize(button.sizeHint())
+        sizes.append((button.sizeHint(), button.minimumSizeHint()))
         image = button.grab().toImage()
         masks.append(
             {
@@ -133,7 +147,8 @@ def test_native_arrow_glyphs_keep_their_bounds(widgets, arrow):
                 and image.pixelColor(x, y).blue() - image.pixelColor(x, y).green() > 20
             }
         )
-    assert masks[0] and masks[0] == masks[1]
+    assert sizes[0] == sizes[1]
+    assert all(masks) and masks[0] != masks[1]
 
 
 def trace_button(button):

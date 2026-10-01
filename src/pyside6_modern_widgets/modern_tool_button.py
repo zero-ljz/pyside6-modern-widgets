@@ -35,6 +35,47 @@ class _ToolButtonStyle(QProxyStyle):
         self._button = button
 
     def drawPrimitive(self, element, option, painter, widget=None) -> None:
+        arrow_rotations = {
+            QStyle.PrimitiveElement.PE_IndicatorArrowDown: 0,
+            QStyle.PrimitiveElement.PE_IndicatorArrowUp: 180,
+            QStyle.PrimitiveElement.PE_IndicatorArrowLeft: 90,
+            QStyle.PrimitiveElement.PE_IndicatorArrowRight: -90,
+        }
+        if widget is self._button and element in arrow_rotations:
+            # Match the outlined, round-ended chevrons in ModernComboBox and
+            # ModernPushButton, inside Fusion's existing arrow rectangles.
+            rect = QRectF(option.rect)
+            extent = min(rect.width(), rect.height())
+            if extent <= 1:
+                return
+            line_width = 1.5 if extent >= 10 else 1.2
+            scale = min(1.0, max(0.0, (extent - line_width) / 8))
+            group = (
+                option.palette.currentColorGroup()
+                if option.state & QStyle.StateFlag.State_Enabled
+                else QPalette.ColorGroup.Disabled
+            )
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setClipRect(rect, Qt.ClipOperation.IntersectClip)
+            painter.translate(rect.center())
+            painter.rotate(arrow_rotations[element])
+            painter.setPen(
+                QPen(
+                    option.palette.color(group, QPalette.ColorRole.ButtonText),
+                    line_width,
+                    Qt.PenStyle.SolidLine,
+                    Qt.PenCapStyle.RoundCap,
+                    Qt.PenJoinStyle.RoundJoin,
+                )
+            )
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            path = QPainterPath(QPointF(-4 * scale, -2 * scale))
+            path.lineTo(0, 2 * scale)
+            path.lineTo(4 * scale, -2 * scale)
+            painter.drawPath(path)
+            painter.restore()
+            return
         if widget is self._button and element in (
             QStyle.PrimitiveElement.PE_PanelButtonTool,
             QStyle.PrimitiveElement.PE_PanelButtonCommand,
@@ -127,10 +168,9 @@ class _ToolButtonStyle(QProxyStyle):
             painter.drawLine(QPointF(edge, rect.top() + 3), QPointF(edge, rect.bottom() - 3))
         painter.restore()
 
-        # Native painting retains all label modes, arrowType, icon modes/states,
-        # QAction priority, elision, mnemonic visibility, and menu indicators.
-        # Only the panel/focus primitives above are suppressed; geometry and
-        # hitTestComplexControl remain entirely Fusion-owned.
+        # Native painting retains label modes, icon modes/states, QAction
+        # priority, elision, mnemonics and all arrow positions. Arrow primitives
+        # use modern chevrons; geometry and hit testing remain Fusion-owned.
         super().drawComplexControl(control, modern, painter, widget)
 
         if (
