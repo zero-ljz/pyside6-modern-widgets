@@ -18,6 +18,7 @@ from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
 from .modern_notification import ModernNotification
 from .modern_segmented_control import ModernSegmentedControl
+from .modern_slider import ModernSlider
 from .modern_switch import ModernSwitch
 from .modern_tab_widget import ModernTabWidget
 from .modern_tool_bar import ModernToolBar
@@ -67,6 +68,7 @@ __all__ = [
     "ModernMetrics",
     "ModernNotification",
     "ModernSegmentedControl",
+    "ModernSlider",
     "ModernSwitch",
     "ModernTabWidget",
     "ModernTheme",

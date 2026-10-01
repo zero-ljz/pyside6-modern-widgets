@@ -80,6 +80,9 @@ It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
 `ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**,
 **Notifications**, **Toolbar**, **Tab widget**, and **Edge docking** pages.
 
+The **Tooltips** and **Toolbar** pages use `ModernSlider` for delay and width
+settings. Use the theme button to compare its light and dark appearance.
+
 The gallery enables `ModernToolTip` globally. The **Tooltips** page demonstrates
 short, long, and formatted text with sliders for first and repeat delays (300 and
 100 ms by default). Hover between buttons, switch the title-bar theme, and move

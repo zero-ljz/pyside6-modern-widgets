@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPushButton,
-    QSlider,
     QStyle,
     QToolBar,
     QVBoxLayout,
@@ -34,6 +33,7 @@ from pyside6_modern_widgets import (
     ModernMenuBar,
     ModernMessageBox,
     ModernSegmentedControl,
+    ModernSlider,
     ModernSwitch,
     ModernTabWidget,
     ModernToolBar,
@@ -172,10 +172,10 @@ class ExampleWindow(ModernWindow):
             row.addWidget(button)
         layout.addLayout(row)
         form = QFormLayout()
-        first = QSlider(Qt.Orientation.Horizontal)
+        first = ModernSlider(Qt.Orientation.Horizontal)
         first.setRange(0, 1000)
         first.setValue(300)
-        repeat = QSlider(Qt.Orientation.Horizontal)
+        repeat = ModernSlider(Qt.Orientation.Horizontal)
         repeat.setRange(0, 500)
         repeat.setValue(100)
         form.addRow(self.tr("First delay (ms)"), first)
@@ -870,7 +870,7 @@ class ExampleWindow(ModernWindow):
             toolbars.append(toolbar)
         width_label = QLabel(self.tr("Width of each toolbar: %1 px").replace("%1", "260"))
         layout.addWidget(width_label)
-        width = QSlider(Qt.Orientation.Horizontal)
+        width = ModernSlider(Qt.Orientation.Horizontal)
         width.setRange(100, 320)
         width.setValue(260)
         width.valueChanged.connect(

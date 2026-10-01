@@ -18,6 +18,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `ModernSwitch`: an animated switch with system accent colors and native
   checkbox interaction, sized to sit alongside combo boxes and line edits.
+- `ModernSlider`: a compact accent-filled slider with native Qt range, step,
+  keyboard, wheel, and value-change APIs.
 - `ModernSegmentedControl`: compact exclusive choices with themed selected,
   hover, and disabled states and native Qt button signals.
 - `ModernTabWidget`: compact themed tabs for fixed pages, preserving the native
@@ -499,6 +501,30 @@ colors. Optional `metrics=ModernMetrics(...)` controls animation duration.
 Run `python examples/navigation_view_example.py` and open **Switch** to compare
 the default heights with native form controls and try System/Light/Dark appearance
 and enabled/disabled switches.
+
+## Modern slider
+
+`ModernSlider` subclasses `QSlider` and accepts `(orientation, parent=None, *,
+theme=None)`. It keeps Qt's range, step, keyboard, wheel, tracking, and value
+signal APIs. Clicking the track moves directly to that value; dragging the thumb
+updates it continuously.
+
+```python
+from PySide6.QtCore import Qt
+from pyside6_modern_widgets import ModernSlider
+
+slider = ModernSlider(Qt.Orientation.Horizontal)
+slider.setRange(0, 100)
+slider.setValue(35)
+slider.valueChanged.connect(lambda value: print("Value:", value))
+```
+
+The 4-pixel track and circular thumb are painted with the current theme and active Qt
+`QPalette.Accent` color. `setTheme(DARK_THEME)` overrides the theme locally;
+`setTheme(None)` resumes inheritance. Horizontal and vertical, hover, pressed,
+focus, and disabled appearances are supported. Set an accessible name when no
+visible label is associated with the slider. The navigation example uses it
+for tooltip delays and toolbar width.
 
 ## Modern segmented control
 
