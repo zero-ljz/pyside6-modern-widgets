@@ -234,6 +234,18 @@
 <context>
     <name>ExampleWindow</name>
     <message>
+        <source>Scroll bars</source>
+        <translation>滚动条</translation>
+    </message>
+    <message>
+        <source>Document %1</source>
+        <translation>文档 %1</translation>
+    </message>
+    <message>
+        <source>Ready</source>
+        <translation>就绪</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="201"/>
         <source>Tooltips</source>
         <translation>工具提示</translation>

@@ -49,7 +49,7 @@ from .theme import (
 )
 
 _COLLAPSED_TOOLTIP_WAKE_UP_DELAY_MS = 250
-_SIDEBAR_SCROLLBAR_WIDTH = 4
+_SIDEBAR_SCROLLBAR_WIDTH = 8
 
 
 class _CollapsedNavigationToolTipStyle(QProxyStyle):
@@ -130,8 +130,15 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
                 background: {theme.scrollbar};
                 min-height: 20px;
                 border-radius: 2px;
+                margin-left: 2px;
+                margin-right: 2px;
             }}
-            QScrollBar::handle:vertical:hover {{ background: {theme.scrollbar_hover}; }}
+            QScrollBar::handle:vertical:hover {{
+                background: {theme.scrollbar_hover};
+                margin-left: 0px;
+                margin-right: 0px;
+                border-radius: 4px;
+            }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """
 

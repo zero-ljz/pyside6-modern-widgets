@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFontComboBox,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QKeySequenceEdit,
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QSpinBox,
     QStyle,
     QTabWidget,
@@ -57,6 +59,7 @@ from pyside6_modern_widgets import (
     ModernPlainTextEdit,
     ModernPushButton,
     ModernRadioButton,
+    ModernScrollBar,
     ModernSegmentedControl,
     ModernSlider,
     ModernSpinBox,
@@ -188,6 +191,12 @@ class ExampleWindow(ModernWindow):
             self._create_switch_page(),
             self.tr("Switch"),
             standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
+            group=custom_group,
+        )
+        self.navigation.addPage(
+            self._create_scroll_bar_page(),
+            self.tr("Scroll bars"),
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
             group=custom_group,
         )
         self.navigation.addPage(
@@ -597,6 +606,45 @@ class ExampleWindow(ModernWindow):
         )
         description.setWordWrap(True)
         layout.addWidget(description)
+        layout.addStretch()
+        return page
+
+    def _create_scroll_bar_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("Scroll bars"))
+        scroll = QScrollArea(page)
+        scroll.setObjectName("ScrollBarExampleArea")
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet(
+            "QScrollArea#ScrollBarExampleArea, "
+            "QScrollArea#ScrollBarExampleArea > QWidget, "
+            "QWidget#ScrollBarExampleContent { background: transparent; border: none; }"
+        )
+        scroll.setWidgetResizable(False)
+        scroll.setFixedHeight(250)
+        scroll.setVerticalScrollBar(ModernScrollBar(Qt.Orientation.Vertical))
+        scroll.setHorizontalScrollBar(ModernScrollBar(Qt.Orientation.Horizontal))
+        scroll.setCornerWidget(QWidget(scroll))
+        content = QWidget()
+        content.setObjectName("ScrollBarExampleContent")
+        content.setFixedSize(1100, 720)
+        content_layout = QVBoxLayout(content)
+        for index in range(24):
+            row = QWidget(content)
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(QLabel(self.tr("Document %1").replace("%1", str(index + 1))))
+            row_layout.addStretch()
+            row_layout.addWidget(QLabel(self.tr("Ready")))
+            content_layout.addWidget(row)
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        rtl = QCheckBox(self.tr("Right-to-left layout"))
+        rtl.toggled.connect(
+            lambda checked: scroll.setLayoutDirection(
+                Qt.LayoutDirection.RightToLeft if checked else Qt.LayoutDirection.LeftToRight
+            )
+        )
+        layout.addWidget(rtl)
         layout.addStretch()
         return page
 

@@ -37,6 +37,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   checkbox interaction, sized to sit alongside combo boxes and line edits.
 - `ModernSlider`: a compact accent-filled slider with native Qt range, step,
   keyboard, wheel, and value-change APIs.
+- `ModernScrollBar`: a Fusion-sized horizontal or vertical scroll bar with themed
+  colors, a briefly thicker handle on hover, and native Qt scrolling behavior.
 - `ModernSegmentedControl`: compact exclusive choices with themed selected,
   hover, and disabled states and native Qt button signals.
 - `ModernTabWidget`: compact themed tabs for fixed pages, preserving the native
@@ -642,6 +644,27 @@ The 4-pixel track and circular thumb are painted with the current theme and acti
 focus, and disabled appearances are supported. Set an accessible name when no
 visible label is associated with the slider. The navigation example uses it
 for tooltip delays and toolbar width.
+
+## Modern scroll bar
+
+`ModernScrollBar` subclasses `QScrollBar` and accepts `(orientation, parent=None,
+*, theme=None)`. It uses Fusion's scroll bar geometry and native Qt range,
+mouse, wheel, keyboard, and signal behavior. The handle grows within its fixed
+transparent track during a short hover animation, so surrounding content does
+not move. Arrow glyphs appear only while the bar is hovered.
+
+```python
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QScrollArea
+from pyside6_modern_widgets import ModernScrollBar
+
+area = QScrollArea()
+area.setVerticalScrollBar(ModernScrollBar(Qt.Orientation.Vertical))
+area.setHorizontalScrollBar(ModernScrollBar(Qt.Orientation.Horizontal))
+```
+
+The bar inherits the nearest modern theme, or accepts a local `setTheme(...)`
+override. The navigation example includes both orientations and an RTL toggle.
 
 ## Modern segmented control
 

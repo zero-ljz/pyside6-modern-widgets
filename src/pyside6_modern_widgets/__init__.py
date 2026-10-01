@@ -21,6 +21,7 @@ from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
 from .modern_notification import ModernNotification
 from .modern_push_button import ModernPushButton
+from .modern_scroll_bar import ModernScrollBar
 from .modern_segmented_control import ModernSegmentedControl
 from .modern_slider import ModernSlider
 from .modern_spin_box import (
@@ -90,6 +91,7 @@ __all__ = [
     "ModernPlainTextEdit",
     "ModernPushButton",
     "ModernRadioButton",
+    "ModernScrollBar",
     "ModernSegmentedControl",
     "ModernSlider",
     "ModernSpinBox",
