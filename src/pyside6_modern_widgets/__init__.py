@@ -10,6 +10,7 @@ from .edge_dock import (
     EdgeDockController,
 )
 from .i18n import load_translator
+from .modern_choice import ModernCheckBox, ModernRadioButton
 from .modern_combo_box import ModernComboBox
 from .modern_dialog import ModernDialog
 from .modern_flyout import FlyoutPlacement, ModernFlyout
@@ -60,6 +61,7 @@ __all__ = [
     "DockState",
     "EdgeDockController",
     "FlyoutPlacement",
+    "ModernCheckBox",
     "ModernComboBox",
     "ModernDialog",
     "ModernFlyout",
@@ -69,6 +71,7 @@ __all__ = [
     "ModernMetrics",
     "ModernNotification",
     "ModernPushButton",
+    "ModernRadioButton",
     "ModernSegmentedControl",
     "ModernSlider",
     "ModernSwitch",

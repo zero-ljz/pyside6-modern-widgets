@@ -19,6 +19,8 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernPushButton`: a `QPushButton` with Fusion sizing, rounded themed surfaces,
   system-accent default/checked states, and native shortcuts, menus and signals.
   See [usage and Fusion measurements](docs/modern-push-button.md).
+- `ModernCheckBox` / `ModernRadioButton`: Fusion-sized choice controls with themed
+  indicators and native Qt selection behavior.
 - `ModernSwitch`: an animated switch with system accent colors and native
   checkbox interaction, sized to sit alongside combo boxes and line edits.
 - `ModernSlider`: a compact accent-filled slider with native Qt range, step,
@@ -472,6 +474,27 @@ and right-to-left examples.
 
 The closed control follows the current native Qt combo-box height. Popup rows
 retain the roomier modern menu spacing.
+
+## Modern check box and radio button
+
+`ModernCheckBox` and `ModernRadioButton` inherit `QCheckBox` and `QRadioButton`.
+They keep Fusion's 14-pixel indicators, size hints, label layout, and native
+mouse, keyboard, shortcut, and signal behavior. Check boxes support Qt's
+three-state mode; radio buttons retain parent/group exclusivity.
+
+```python
+from pyside6_modern_widgets import ModernCheckBox, ModernRadioButton
+
+check = ModernCheckBox("Enable notifications")
+check.setChecked(True)
+radio = ModernRadioButton("General")
+radio.setChecked(True)
+```
+
+The indicators use the inherited theme and active system accent, including
+light/dark, hover, pressed, disabled, focus, and right-to-left states. Pass
+`theme=` or call `setTheme()` for a local override. The **Choice controls** page
+in the navigation example compares native and modern versions side by side.
 
 ## Modern switch
 

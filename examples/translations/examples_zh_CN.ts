@@ -596,6 +596,17 @@
         <translation>按钮</translation>
     </message>
     <message>
+        <location filename="../navigation_view_example.py" line="121"/>
+        <location filename="../navigation_view_example.py" line="249"/>
+        <source>Choice controls</source>
+        <translation>选择控件</translation>
+    </message>
+    <message>
+        <location filename="../navigation_view_example.py" line="261"/>
+        <source>Partially checked</source>
+        <translation>部分选中</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="162"/>
         <source>Compare native and modern buttons. Use Tab and Space to try keyboard focus, or hover and press to compare states.</source>
         <translation>对比原生按钮与现代按钮。使用 Tab 和空格键体验键盘焦点，或悬停、按下以比较不同状态。</translation>

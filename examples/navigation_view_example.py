@@ -8,6 +8,7 @@ from PySide6.QtCore import QCoreApplication, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialogButtonBox,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPushButton,
+    QRadioButton,
     QStyle,
     QToolBar,
     QVBoxLayout,
@@ -26,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from pyside6_modern_widgets import (
     FlyoutPlacement,
+    ModernCheckBox,
     ModernComboBox,
     ModernDialog,
     ModernFlyout,
@@ -33,6 +36,7 @@ from pyside6_modern_widgets import (
     ModernMenuBar,
     ModernMessageBox,
     ModernPushButton,
+    ModernRadioButton,
     ModernSegmentedControl,
     ModernSlider,
     ModernSwitch,
@@ -111,6 +115,11 @@ class ExampleWindow(ModernWindow):
             self._create_button_page(),
             self.tr("Buttons"),
             standard_icon(QStyle.StandardPixmap.SP_DialogOkButton),
+        )
+        self.navigation.addPage(
+            self._create_choice_page(),
+            self.tr("Choice controls"),
+            standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
         )
         self.navigation.addPage(
             self._create_combo_box_page(),
@@ -233,6 +242,60 @@ class ExampleWindow(ModernWindow):
         )
         layout.addWidget(rtl)
         layout.addWidget(status)
+        layout.addStretch()
+        return page
+
+    def _create_choice_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("Choice controls"))
+        checks = QGridLayout()
+        checks.setHorizontalSpacing(32)
+        checks.setVerticalSpacing(10)
+        for column, (heading, widget_type) in enumerate(
+            (("QCheckBox", QCheckBox), ("ModernCheckBox", ModernCheckBox))
+        ):
+            checks.addWidget(QLabel(heading), 0, column)
+            for row, text in enumerate(
+                (
+                    self.tr("General"),
+                    self.tr("Details"),
+                    self.tr("Partially checked"),
+                    self.tr("Disabled"),
+                    self.tr("Right to left"),
+                ),
+                start=1,
+            ):
+                check = widget_type(text, page)
+                if row == 2 or row >= 4:
+                    check.setChecked(True)
+                if row == 3:
+                    check.setTristate(True)
+                    check.setCheckState(Qt.CheckState.PartiallyChecked)
+                if row == 4:
+                    check.setEnabled(False)
+                if row == 5:
+                    check.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+                checks.addWidget(check, row, column, Qt.AlignmentFlag.AlignLeft)
+        layout.addLayout(checks)
+
+        radios = QGridLayout()
+        radios.setHorizontalSpacing(32)
+        radios.setVerticalSpacing(10)
+        for column, (heading, widget_type) in enumerate(
+            (("QRadioButton", QRadioButton), ("ModernRadioButton", ModernRadioButton))
+        ):
+            radios.addWidget(QLabel(heading), 0, column)
+            group = QButtonGroup(page)
+            for row, text in enumerate(
+                (self.tr("General"), self.tr("Details"), self.tr("Disabled")), start=1
+            ):
+                radio = widget_type(text, page)
+                group.addButton(radio)
+                if row == 2:
+                    radio.setChecked(True)
+                if row == 3:
+                    radio.setEnabled(False)
+                radios.addWidget(radio, row, column, Qt.AlignmentFlag.AlignLeft)
+        layout.addLayout(radios)
         layout.addStretch()
         return page
 

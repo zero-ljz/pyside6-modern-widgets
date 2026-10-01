@@ -81,7 +81,10 @@ pyside6-lrelease examples/translations/examples_zh_CN.ts \
 
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
 `ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**,
-**Notifications**, **Toolbar**, **Tab widget**, and **Edge docking** pages.
+**Choice controls**, **Notifications**, **Toolbar**, **Tab widget**, and **Edge docking** pages.
+
+The **Choice controls** page compares native and modern check boxes and radio
+buttons, including checked, mixed, disabled, and right-to-left examples.
 
 The **Tooltips** and **Toolbar** pages use `ModernSlider` for delay and width
 settings. Use the theme button to compare its light and dark appearance.
