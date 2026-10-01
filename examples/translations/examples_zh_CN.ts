@@ -325,6 +325,66 @@
         <translation>组合框</translation>
     </message>
     <message>
+        <source>Line edit</source>
+        <translation>输入框</translation>
+    </message>
+    <message>
+        <source>Spin editors</source>
+        <translation>步进输入框</translation>
+    </message>
+    <message>
+        <source>Native Qt</source>
+        <translation>原生 Qt</translation>
+    </message>
+    <message>
+        <source>Modern</source>
+        <translation>现代</translation>
+    </message>
+    <message>
+        <source>Number</source>
+        <translation>数字</translation>
+    </message>
+    <message>
+        <source>Range and suffix</source>
+        <translation>范围与后缀</translation>
+    </message>
+    <message>
+        <source>Date and time</source>
+        <translation>日期和时间</translation>
+    </message>
+    <message>
+        <source>Date only</source>
+        <translation>仅日期</translation>
+    </message>
+    <message>
+        <source>Time only</source>
+        <translation>仅时间</translation>
+    </message>
+    <message>
+        <source>Calendar popup</source>
+        <translation>日历弹窗</translation>
+    </message>
+    <message>
+        <source>Native QLineEdit</source>
+        <translation>原生 QLineEdit</translation>
+    </message>
+    <message>
+        <source>Clear button</source>
+        <translation>清除按钮</translation>
+    </message>
+    <message>
+        <source>Read-only</source>
+        <translation>只读</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>密码</translation>
+    </message>
+    <message>
+        <source>Enter a name</source>
+        <translation>输入名称</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="122"/>
         <source>Switch</source>
         <translation>开关</translation>

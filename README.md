@@ -16,6 +16,10 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   button that opens a `ModernMenu` instead of Qt's default toolbar popup.
 - `ModernComboBox`: a modern `QComboBox` with rounded surfaces,
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
+- `ModernLineEdit`: a themed `QLineEdit` surface with Fusion dimensions and
+  native text editing, selection, validation, and signals.
+- `ModernSpinBox` / `ModernDateTimeEdit`: themed spin editors with Fusion height,
+  adjacent step arrows, and native numeric/date editing behavior.
 - `ModernPushButton`: a `QPushButton` with Fusion sizing, rounded themed surfaces,
   system-accent default/checked states, and native shortcuts, menus and signals.
   See [usage and Fusion measurements](docs/modern-push-button.md).
@@ -474,6 +478,46 @@ and right-to-left examples.
 
 The closed control follows the current native Qt combo-box height. Popup rows
 retain the roomier modern menu spacing.
+
+## Modern line edit
+
+`ModernLineEdit` keeps `QLineEdit`'s constructor forms and text API:
+
+```python
+from pyside6_modern_widgets import ModernLineEdit
+
+editor = ModernLineEdit("Workspace name")
+editor.setClearButtonEnabled(True)
+editor.textChanged.connect(print)
+```
+
+Only the frame surface is drawn by the component. Qt still handles text,
+selection, cursor, undo, validators, input methods, clear buttons, and signals.
+It uses Fusion's size hints, follows the inherited theme and system accent,
+and supports hover, focus, disabled, read-only, and right-to-left states.
+`setTheme(DARK_THEME)` overrides the theme locally; `setTheme(None)` restores
+inheritance. The **Line edit** page in the navigation example compares it with
+native `QLineEdit` across common states.
+
+## Modern spin editors
+
+`ModernSpinBox` and `ModernDateTimeEdit` retain Qt's range, validation,
+step, date-section, calendar-popup, and signal behavior. Their Fusion-sized
+field uses the same themed fill as `ModernLineEdit`; adjacent up/down arrows
+use Qt's spin-box hit testing. The extra button column adds 18 pixels to the
+default Fusion width while preserving its height.
+
+```python
+from pyside6_modern_widgets import ModernDateTimeEdit, ModernSpinBox
+
+number = ModernSpinBox()
+number.setRange(0, 100)
+date_time = ModernDateTimeEdit()
+date_time.setDisplayFormat("yyyy/M/d HH:mm")
+```
+
+The **Spin editors** page in the navigation example compares native and modern
+controls in light and dark themes.
 
 ## Modern check box and radio button
 

@@ -14,6 +14,7 @@ from .modern_choice import ModernCheckBox, ModernRadioButton
 from .modern_combo_box import ModernComboBox
 from .modern_dialog import ModernDialog
 from .modern_flyout import FlyoutPlacement, ModernFlyout
+from .modern_line_edit import ModernLineEdit
 from .modern_menu import ModernMenu
 from .modern_menu_bar import ModernMenuBar
 from .modern_message_box import ModernMessageBox
@@ -21,6 +22,7 @@ from .modern_notification import ModernNotification
 from .modern_push_button import ModernPushButton
 from .modern_segmented_control import ModernSegmentedControl
 from .modern_slider import ModernSlider
+from .modern_spin_box import ModernDateTimeEdit, ModernSpinBox
 from .modern_switch import ModernSwitch
 from .modern_tab_widget import ModernTabWidget
 from .modern_tool_bar import ModernToolBar
@@ -63,8 +65,10 @@ __all__ = [
     "FlyoutPlacement",
     "ModernCheckBox",
     "ModernComboBox",
+    "ModernDateTimeEdit",
     "ModernDialog",
     "ModernFlyout",
+    "ModernLineEdit",
     "ModernMenu",
     "ModernMenuBar",
     "ModernMessageBox",
@@ -74,6 +78,7 @@ __all__ = [
     "ModernRadioButton",
     "ModernSegmentedControl",
     "ModernSlider",
+    "ModernSpinBox",
     "ModernSwitch",
     "ModernTabWidget",
     "ModernTheme",

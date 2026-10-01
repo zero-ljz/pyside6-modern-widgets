@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QCoreApplication, QSize, Qt, QTimer
+from PySide6.QtCore import QCoreApplication, QDate, QDateTime, QSize, Qt, QTime, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QCheckBox,
     QComboBox,
+    QDateTimeEdit,
     QDialogButtonBox,
     QFormLayout,
     QGridLayout,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QPushButton,
     QRadioButton,
+    QSpinBox,
     QStyle,
     QToolBar,
     QVBoxLayout,
@@ -30,8 +32,10 @@ from pyside6_modern_widgets import (
     FlyoutPlacement,
     ModernCheckBox,
     ModernComboBox,
+    ModernDateTimeEdit,
     ModernDialog,
     ModernFlyout,
+    ModernLineEdit,
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
@@ -39,6 +43,7 @@ from pyside6_modern_widgets import (
     ModernRadioButton,
     ModernSegmentedControl,
     ModernSlider,
+    ModernSpinBox,
     ModernSwitch,
     ModernTabWidget,
     ModernToolBar,
@@ -124,6 +129,16 @@ class ExampleWindow(ModernWindow):
         self.navigation.addPage(
             self._create_combo_box_page(),
             self.tr("Combo box"),
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
+        )
+        self.navigation.addPage(
+            self._create_line_edit_page(),
+            self.tr("Line edit"),
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogContentsView),
+        )
+        self.navigation.addPage(
+            self._create_spin_editors_page(),
+            self.tr("Spin editors"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
         )
         self.navigation.addPage(
@@ -883,6 +898,102 @@ class ExampleWindow(ModernWindow):
                 grid.addWidget(combo, row, column)
         layout.addStretch()
         layout.addWidget(status)
+        return page
+
+    def _create_line_edit_page(self) -> QWidget:
+        page, layout = self._create_page("ModernLineEdit")
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(16)
+        grid.addWidget(QLabel(self.tr("Native QLineEdit")), 0, 1)
+        grid.addWidget(QLabel("ModernLineEdit"), 0, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        for row, (label, state) in enumerate(
+            (
+                (self.tr("Standard"), "standard"),
+                (self.tr("Placeholder"), "placeholder"),
+                (self.tr("Clear button"), "clear"),
+                (self.tr("Read-only"), "read-only"),
+                (self.tr("Password"), "password"),
+                (self.tr("Disabled"), "disabled"),
+                (self.tr("Right to left"), "rtl"),
+            ),
+            start=1,
+        ):
+            grid.addWidget(QLabel(label), row, 0)
+            for column, widget_type in enumerate((QLineEdit, ModernLineEdit), start=1):
+                editor = widget_type()
+                editor.setMinimumWidth(230)
+                editor.setAccessibleName(f"{label} {widget_type.__name__}")
+                if state == "placeholder":
+                    editor.setPlaceholderText(self.tr("Enter a name"))
+                else:
+                    editor.setText(self.tr("Workspace name"))
+                if state == "clear":
+                    editor.setClearButtonEnabled(True)
+                elif state == "read-only":
+                    editor.setReadOnly(True)
+                elif state == "password":
+                    editor.setEchoMode(QLineEdit.EchoMode.Password)
+                elif state == "disabled":
+                    editor.setEnabled(False)
+                elif state == "rtl":
+                    editor.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+                grid.addWidget(editor, row, column)
+        layout.addLayout(grid)
+        layout.addStretch()
+        return page
+
+    def _create_spin_editors_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("Spin editors"))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(14)
+        grid.addWidget(QLabel(self.tr("Native Qt")), 0, 1)
+        grid.addWidget(QLabel(self.tr("Modern")), 0, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        sample_date = QDateTime(QDate(2026, 10, 1), QTime(12, 21))
+        for row, (label, kind) in enumerate(
+            (
+                (self.tr("Number"), "number"),
+                (self.tr("Range and suffix"), "range"),
+                (self.tr("Disabled"), "disabled-number"),
+                (self.tr("Date and time"), "datetime"),
+                (self.tr("Date only"), "date"),
+                (self.tr("Time only"), "time"),
+                (self.tr("Calendar popup"), "calendar"),
+            ),
+            start=1,
+        ):
+            grid.addWidget(QLabel(label), row, 0)
+            for column, modern in enumerate((False, True), start=1):
+                if kind in ("number", "range", "disabled-number"):
+                    editor = ModernSpinBox() if modern else QSpinBox()
+                    editor.setRange(0, 100)
+                    editor.setValue(50)
+                    if kind == "range":
+                        editor.setRange(10, 60)
+                        editor.setSuffix(" %")
+                    elif kind == "disabled-number":
+                        editor.setEnabled(False)
+                else:
+                    editor = (
+                        ModernDateTimeEdit(sample_date) if modern else QDateTimeEdit(sample_date)
+                    )
+                    editor.setDisplayFormat("yyyy/M/d HH:mm")
+                    if kind == "date":
+                        editor.setDisplayFormat("yyyy/M/d")
+                    elif kind == "time":
+                        editor.setDisplayFormat("HH:mm")
+                    elif kind == "calendar":
+                        editor.setCalendarPopup(True)
+                editor.setMinimumWidth(235)
+                editor.setAccessibleName(f"{label} {type(editor).__name__}")
+                grid.addWidget(editor, row, column)
+        layout.addLayout(grid)
+        layout.addStretch()
         return page
 
     def _create_switch_page(self) -> QWidget:
