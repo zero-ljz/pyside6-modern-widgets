@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QColor, QKeySequence, QPalette
 from PySide6.QtWidgets import QKeySequenceEdit, QLineEdit, QWidget
 
@@ -52,6 +52,7 @@ class ModernKeySequenceEdit(QKeySequenceEdit):
         self._modern_style = _LineEditStyle(self._editor, self)
         self._editor.setStyle(self._modern_style)
         self._editor.setAttribute(Qt.WidgetAttribute.WA_Hover)
+        self._editor.installEventFilter(self)
         self._apply_theme()
         self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
         self._theme_binding.changed.connect(self.themeChanged.emit)
@@ -101,3 +102,14 @@ class ModernKeySequenceEdit(QKeySequenceEdit):
         ):
             self._apply_theme()
         return handled
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        # Qt can reset the internal editor after the owner applies a new theme.
+        if (
+            watched is getattr(self, "_editor", None)
+            and event.type() == QEvent.Type.PaletteChange
+            and not self._applying_theme
+            and self._editor.palette() != self.palette()
+        ):
+            self._editor.setPalette(self.palette())
+        return super().eventFilter(watched, event)

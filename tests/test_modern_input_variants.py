@@ -12,12 +12,14 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFontComboBox,
     QKeySequenceEdit,
+    QLineEdit,
     QPlainTextEdit,
     QTextEdit,
     QTimeEdit,
     QWidget,
 )
 
+from examples.navigation_view_example import ExampleWindow
 from pyside6_modern_widgets import (
     DARK_THEME,
     LIGHT_THEME,
@@ -29,6 +31,7 @@ from pyside6_modern_widgets import (
     ModernPlainTextEdit,
     ModernTextEdit,
     ModernTimeEdit,
+    ThemeMode,
 )
 
 _APP = QApplication.instance() or QApplication([])
@@ -163,3 +166,23 @@ def test_shortcut_and_font_variants_keep_specialized_api(theme_manager_instance)
         shortcut.close()
         fonts.close()
         native_fonts.close()
+
+
+def test_shortcut_editor_palette_tracks_gallery_theme_switch(theme_manager_instance):
+    theme_manager_instance.setMode(ThemeMode.DARK)
+    window = ExampleWindow()
+    try:
+        window.show()
+        _APP.processEvents()
+        shortcut = window.findChild(ModernKeySequenceEdit)
+        assert shortcut is not None
+        editor = shortcut.findChild(QLineEdit)
+        assert editor is not None
+
+        theme_manager_instance.setMode(ThemeMode.LIGHT)
+        _APP.processEvents()
+        assert shortcut.theme() == LIGHT_THEME
+        assert editor.palette().color(QPalette.ColorRole.Text) == QColor(LIGHT_THEME.text)
+        assert editor.palette().color(QPalette.ColorRole.Mid) == QColor(LIGHT_THEME.border)
+    finally:
+        window.close()
