@@ -18,8 +18,13 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
   a `ModernMenu`-style acrylic popup, and native Qt selection and editing behavior.
 - `ModernLineEdit`: a themed `QLineEdit` surface with Fusion dimensions and
   native text editing, selection, validation, and signals.
-- `ModernSpinBox` / `ModernDateTimeEdit`: themed spin editors with Fusion height,
+- `ModernSpinBox` / `ModernDoubleSpinBox` / `ModernDateEdit` /
+  `ModernTimeEdit` / `ModernDateTimeEdit`: themed spin editors with Fusion height,
   adjacent step arrows, and native numeric/date editing behavior.
+- `ModernPlainTextEdit` / `ModernTextEdit`: themed multiline editors retaining
+  Qt's native plain-text and rich-text document APIs.
+- `ModernKeySequenceEdit`: a themed shortcut recorder with native key capture.
+- `ModernFontComboBox`: a font picker using the modern combo surface and popup.
 - `ModernPushButton`: a `QPushButton` with Fusion sizing, rounded themed surfaces,
   system-accent default/checked states, and native shortcuts, menus and signals.
   See [usage and Fusion measurements](docs/modern-push-button.md).
@@ -514,23 +519,49 @@ native `QLineEdit` across common states.
 
 ## Modern spin editors
 
-`ModernSpinBox` and `ModernDateTimeEdit` retain Qt's range, validation,
+`ModernSpinBox`, `ModernDoubleSpinBox`, `ModernDateEdit`, `ModernTimeEdit`, and
+`ModernDateTimeEdit` retain Qt's range, validation,
 step, date-section, calendar-popup, and signal behavior. Their Fusion-sized
 field uses the same themed fill as `ModernLineEdit`; adjacent up/down arrows
 use Qt's spin-box hit testing. The extra button column adds 18 pixels to the
 default Fusion width while preserving its height.
 
 ```python
-from pyside6_modern_widgets import ModernDateTimeEdit, ModernSpinBox
+from pyside6_modern_widgets import ModernDateEdit, ModernDateTimeEdit, ModernDoubleSpinBox, ModernSpinBox
 
 number = ModernSpinBox()
 number.setRange(0, 100)
+decimal = ModernDoubleSpinBox()
+decimal.setDecimals(3)
+date = ModernDateEdit()
 date_time = ModernDateTimeEdit()
 date_time.setDisplayFormat("yyyy/M/d HH:mm")
 ```
 
 The **Spin editors** page in the navigation example compares native and modern
 controls in light and dark themes.
+
+## More text and specialized inputs
+
+`ModernPlainTextEdit` and `ModernTextEdit` preserve Qt's document, cursor,
+selection, scrolling, undo, and input-method behavior. `ModernKeySequenceEdit`
+keeps Qt's shortcut-capture API, while `ModernFontComboBox` keeps the font model,
+filters, previews, and `currentFontChanged` signal. All four follow inherited
+themes and accept `theme` and `metrics` like the other modern inputs.
+
+```python
+from pyside6_modern_widgets import (
+    ModernFontComboBox, ModernKeySequenceEdit, ModernPlainTextEdit, ModernTextEdit,
+)
+
+notes = ModernPlainTextEdit("Notes")
+description = ModernTextEdit("<b>Formatted text</b>")
+shortcut = ModernKeySequenceEdit()
+font = ModernFontComboBox()
+```
+
+The **More inputs** page in the navigation example compares each with its native
+Qt counterpart.
 
 ## Modern check box and radio button
 

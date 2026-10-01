@@ -343,6 +343,10 @@
         <translation>步进输入框</translation>
     </message>
     <message>
+        <source>More inputs</source>
+        <translation>更多输入控件</translation>
+    </message>
+    <message>
         <source>Native Qt</source>
         <translation>原生 Qt</translation>
     </message>
@@ -353,6 +357,30 @@
     <message>
         <source>Number</source>
         <translation>数字</translation>
+    </message>
+    <message>
+        <source>Decimal</source>
+        <translation>小数</translation>
+    </message>
+    <message>
+        <source>Plain text</source>
+        <translation>纯文本</translation>
+    </message>
+    <message>
+        <source>Rich text</source>
+        <translation>富文本</translation>
+    </message>
+    <message>
+        <source>Shortcut</source>
+        <translation>快捷键</translation>
+    </message>
+    <message>
+        <source>Font</source>
+        <translation>字体</translation>
+    </message>
+    <message>
+        <source>Sample text</source>
+        <translation>示例文本</translation>
     </message>
     <message>
         <source>Range and suffix</source>

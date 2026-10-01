@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QEvent, QMargins, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFontComboBox,
     QFrame,
     QLineEdit,
     QProxyStyle,
@@ -46,7 +47,7 @@ _CONTROL_FILLS_DARK = ("#0FFFFFFF", "#15FFFFFF", "#08FFFFFF", "#0BFFFFFF")
 class _ComboBoxStyle(_RoundedMenuStyle):
     """Change presentation without replacing Qt's popup, delegate or input handling."""
 
-    def __init__(self, combo: ModernComboBox) -> None:
+    def __init__(self, combo: _ComboAppearance) -> None:
         # Own a separate style; passing QApplication.style() transfers ownership.
         super().__init__(combo._metrics.control_radius, "Fusion")
         # Match the acrylic popup's Qt surface to DWMWCP_ROUND's 8-DIP
@@ -251,7 +252,7 @@ class _ComboBoxStyle(_RoundedMenuStyle):
 class _ComboBoxScrollerStyle(QProxyStyle):
     """Keep native scroller geometry while replacing only its solid arrow."""
 
-    def __init__(self, combo: ModernComboBox, combo_style: _ComboBoxStyle) -> None:
+    def __init__(self, combo: _ComboAppearance, combo_style: _ComboBoxStyle) -> None:
         super().__init__(_base_style_name(combo))
         self.setParent(combo)
         self._combo_style = combo_style
@@ -318,15 +319,27 @@ class _ComboBoxDelegate(QStyledItemDelegate):
         super().paint(painter, option, index)
 
 
-class ModernComboBox(QComboBox):
-    """A ``QComboBox`` with rounded surfaces and native Qt semantics.
+class _FontComboBoxDelegate(_ComboBoxDelegate):
+    def initStyleOption(self, option, index) -> None:
+        super().initStyleOption(option, index)
+        family = index.data(Qt.ItemDataRole.DisplayRole)
+        if family:
+            option.font = QFont(family, option.font.pointSize())
+
+
+if TYPE_CHECKING:
+    _ComboBase = QComboBox
+else:
+    _ComboBase = object
+
+
+class _ComboAppearance(_ComboBase):
+    """Shared combo presentation while Qt retains the model and popup behavior.
 
     Models, delegates, signals, editing, completion and popup input remain owned
     by Qt. ``setTheme(None)`` restores the containing modern widget's theme, or
     the global theme when there is no themed ancestor.
     """
-
-    themeChanged = Signal(object)
 
     def __init__(
         self,
@@ -358,11 +371,15 @@ class ModernComboBox(QComboBox):
         view_palette = QPalette()
         view_palette.setColor(QPalette.ColorRole.Window, Qt.GlobalColor.transparent)
         view.setPalette(view_palette)
-        self.setItemDelegate(_ComboBoxDelegate(self))
+        self.setItemDelegate(
+            _FontComboBoxDelegate(self) if isinstance(self, QFontComboBox) else _ComboBoxDelegate(self)
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self._apply_theme()
         self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
-        self._theme_binding.changed.connect(self.themeChanged.emit)
+        self._theme_binding.changed.connect(
+            cast(ModernComboBox | ModernFontComboBox, self).themeChanged.emit
+        )
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
@@ -510,3 +527,15 @@ class ModernComboBox(QComboBox):
         finally:
             if animate:
                 QApplication.setEffectEnabled(Qt.UIEffect.UI_AnimateCombo, True)
+
+
+class ModernComboBox(_ComboAppearance, QComboBox):
+    """A modern ``QComboBox`` with native selection and editing behavior."""
+
+    themeChanged = Signal(object)
+
+
+class ModernFontComboBox(_ComboAppearance, QFontComboBox):
+    """A modern ``QFontComboBox`` with Qt's font model and selection API."""
+
+    themeChanged = Signal(object)

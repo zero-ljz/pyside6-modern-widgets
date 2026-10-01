@@ -55,10 +55,11 @@ class _LineEditOption(QStyleOptionFrame):
 
 
 class _LineEditStyle(QProxyStyle):
-    def __init__(self, editor: ModernLineEdit) -> None:
+    def __init__(self, editor: QLineEdit, theme_owner: QWidget | None = None) -> None:
         super().__init__("Fusion")
         self.setParent(editor)
         self._editor = editor
+        self._theme_owner = theme_owner or editor
 
     def drawPrimitive(self, element, option, painter, widget=None) -> None:
         if (
@@ -72,7 +73,8 @@ class _LineEditStyle(QProxyStyle):
 
         option = cast(_LineEditOption, option)
         editor = self._editor
-        theme = editor.theme()
+        owner = cast(ModernLineEdit, self._theme_owner)
+        theme = owner.theme()
         enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
         focused = enabled and bool(option.state & QStyle.StateFlag.State_HasFocus)
@@ -83,13 +85,13 @@ class _LineEditStyle(QProxyStyle):
             2 if not enabled or editor.isReadOnly() else 1 if hovered and not focused else 0
         )
         surface = QBrush(QColor(fills[fill_index]))
-        if editor._palette_override.isBrushSet(
+        if owner._palette_override.isBrushSet(
             option.palette.currentColorGroup(), QPalette.ColorRole.Base
         ):
             surface = option.palette.brush(QPalette.ColorRole.Base)
         border = option.palette.color(QPalette.ColorRole.Mid)
         rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)
-        radius = min(editor._metrics.control_radius, rect.width() / 2, rect.height() / 2)
+        radius = min(owner._metrics.control_radius, rect.width() / 2, rect.height() / 2)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(border, 1))

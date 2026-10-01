@@ -87,14 +87,15 @@ pyside6-lrelease examples/translations/examples_zh_CN.ts \
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
 `ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**,
 **Choice controls**, **Line edit**, **Notifications**, **Toolbar**, **Tab widget**, and
-**Spin editors**, **Edge docking** pages.
+**Spin editors**, **More inputs**, and **Edge docking** pages.
 
 The **Line edit** page compares native `QLineEdit` and `ModernLineEdit` with
 placeholder, clear button, read-only, password, disabled, and RTL states.
 
-The **Spin editors** page compares native `QSpinBox` and `QDateTimeEdit` with
-their modern counterparts, including numeric ranges, date and time sections,
-and a calendar popup.
+The **Spin editors** page compares native integer, decimal, date, time, and
+date-time controls with their modern counterparts, including numeric ranges,
+date and time sections, and a calendar popup. **More inputs** compares plain
+text, rich text, shortcut, and font editors with native Qt controls.
 
 The **Choice controls** page compares native and modern check boxes and radio
 buttons, including checked, mixed, disabled, and right-to-left examples.

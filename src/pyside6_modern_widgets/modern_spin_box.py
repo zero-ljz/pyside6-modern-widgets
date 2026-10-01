@@ -19,13 +19,16 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
+    QDateEdit,
     QDateTimeEdit,
+    QDoubleSpinBox,
     QLineEdit,
     QProxyStyle,
     QSpinBox,
     QStyle,
     QStyleOptionComboBox,
     QStyleOptionSpinBox,
+    QTimeEdit,
     QWidget,
 )
 
@@ -273,7 +276,10 @@ class _SpinAppearance:
         self._apply_theme()
         self._theme_binding = ThemeBinding(owner, self.theme, self._apply_theme)
         self._theme_binding.changed.connect(
-            cast(ModernSpinBox | ModernDateTimeEdit, owner).themeChanged.emit
+            cast(
+                ModernSpinBox | ModernDoubleSpinBox | ModernDateTimeEdit | ModernDateEdit | ModernTimeEdit,
+                owner,
+            ).themeChanged.emit
         )
 
     def theme(self) -> ModernTheme:
@@ -376,6 +382,22 @@ class ModernSpinBox(_SpinAppearance, QSpinBox):
         self._init_appearance(theme, metrics)
 
 
+class ModernDoubleSpinBox(_SpinAppearance, QDoubleSpinBox):
+    """A themed ``QDoubleSpinBox`` with native floating-point editing."""
+
+    themeChanged = Signal(object)
+
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        theme: ModernTheme | None = None,
+        metrics: ModernMetrics = DEFAULT_METRICS,
+    ) -> None:
+        QDoubleSpinBox.__init__(self, parent)
+        self._init_appearance(theme, metrics)
+
+
 class ModernDateTimeEdit(_SpinAppearance, QDateTimeEdit):
     """A themed ``QDateTimeEdit`` with native date sections and calendar popup."""
 
@@ -397,4 +419,52 @@ class ModernDateTimeEdit(_SpinAppearance, QDateTimeEdit):
             QDateTimeEdit.__init__(self, parent)
         else:
             QDateTimeEdit.__init__(self, value, parent)
+        self._init_appearance(theme, metrics)
+
+
+class ModernDateEdit(_SpinAppearance, QDateEdit):
+    """A themed ``QDateEdit`` retaining date-only sections and signals."""
+
+    themeChanged = Signal(object)
+
+    def __init__(
+        self,
+        value: QDate | QWidget | None = None,
+        parent: QWidget | None = None,
+        *,
+        theme: ModernTheme | None = None,
+        metrics: ModernMetrics = DEFAULT_METRICS,
+    ) -> None:
+        if isinstance(value, QWidget):
+            if parent is not None:
+                raise TypeError("parent specified twice")
+            parent, value = value, None
+        if value is None:
+            QDateEdit.__init__(self, parent)
+        else:
+            QDateEdit.__init__(self, value, parent)
+        self._init_appearance(theme, metrics)
+
+
+class ModernTimeEdit(_SpinAppearance, QTimeEdit):
+    """A themed ``QTimeEdit`` retaining time-only sections and signals."""
+
+    themeChanged = Signal(object)
+
+    def __init__(
+        self,
+        value: QTime | QWidget | None = None,
+        parent: QWidget | None = None,
+        *,
+        theme: ModernTheme | None = None,
+        metrics: ModernMetrics = DEFAULT_METRICS,
+    ) -> None:
+        if isinstance(value, QWidget):
+            if parent is not None:
+                raise TypeError("parent specified twice")
+            parent, value = value, None
+        if value is None:
+            QTimeEdit.__init__(self, parent)
+        else:
+            QTimeEdit.__init__(self, value, parent)
         self._init_appearance(theme, metrics)

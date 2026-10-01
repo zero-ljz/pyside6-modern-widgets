@@ -11,21 +11,28 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
+    QDateEdit,
     QDateTimeEdit,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
+    QFontComboBox,
     QFormLayout,
     QGridLayout,
     QHBoxLayout,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QSpinBox,
     QStyle,
     QTabWidget,
+    QTextEdit,
+    QTimeEdit,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -35,13 +42,18 @@ from pyside6_modern_widgets import (
     FlyoutPlacement,
     ModernCheckBox,
     ModernComboBox,
+    ModernDateEdit,
     ModernDateTimeEdit,
     ModernDialog,
+    ModernDoubleSpinBox,
     ModernFlyout,
+    ModernFontComboBox,
+    ModernKeySequenceEdit,
     ModernLineEdit,
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
+    ModernPlainTextEdit,
     ModernPushButton,
     ModernRadioButton,
     ModernSegmentedControl,
@@ -49,6 +61,8 @@ from pyside6_modern_widgets import (
     ModernSpinBox,
     ModernSwitch,
     ModernTabWidget,
+    ModernTextEdit,
+    ModernTimeEdit,
     ModernToolBar,
     ModernToolTip,
     ModernWindow,
@@ -153,6 +167,12 @@ class ExampleWindow(ModernWindow):
         self.navigation.addPage(
             self._create_spin_editors_page(),
             self.tr("Spin editors"),
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
+            group=native_group,
+        )
+        self.navigation.addPage(
+            self._create_more_inputs_page(),
+            self.tr("More inputs"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
             group=native_group,
         )
@@ -1012,6 +1032,7 @@ class ExampleWindow(ModernWindow):
         for row, (label, kind) in enumerate(
             (
                 (self.tr("Number"), "number"),
+                (self.tr("Decimal"), "decimal"),
                 (self.tr("Range and suffix"), "range"),
                 (self.tr("Disabled"), "disabled-number"),
                 (self.tr("Date and time"), "datetime"),
@@ -1023,28 +1044,72 @@ class ExampleWindow(ModernWindow):
         ):
             grid.addWidget(QLabel(label), row, 0)
             for column, modern in enumerate((False, True), start=1):
+                editor: QWidget
                 if kind in ("number", "range", "disabled-number"):
-                    editor = ModernSpinBox() if modern else QSpinBox()
-                    editor.setRange(0, 100)
-                    editor.setValue(50)
+                    number_editor = ModernSpinBox() if modern else QSpinBox()
+                    number_editor.setRange(0, 100)
+                    number_editor.setValue(50)
                     if kind == "range":
-                        editor.setRange(10, 60)
-                        editor.setSuffix(" %")
+                        number_editor.setRange(10, 60)
+                        number_editor.setSuffix(" %")
                     elif kind == "disabled-number":
-                        editor.setEnabled(False)
+                        number_editor.setEnabled(False)
+                    editor = number_editor
+                elif kind == "decimal":
+                    decimal_editor = ModernDoubleSpinBox() if modern else QDoubleSpinBox()
+                    decimal_editor.setRange(0.0, 100.0)
+                    decimal_editor.setValue(12.5)
+                    editor = decimal_editor
+                elif kind == "date":
+                    date_editor = ModernDateEdit(sample_date.date()) if modern else QDateEdit(sample_date.date())
+                    date_editor.setDisplayFormat("yyyy/M/d")
+                    editor = date_editor
+                elif kind == "time":
+                    time_editor = ModernTimeEdit(sample_date.time()) if modern else QTimeEdit(sample_date.time())
+                    time_editor.setDisplayFormat("HH:mm")
+                    editor = time_editor
                 else:
-                    editor = (
+                    datetime_editor = (
                         ModernDateTimeEdit(sample_date) if modern else QDateTimeEdit(sample_date)
                     )
-                    editor.setDisplayFormat("yyyy/M/d HH:mm")
-                    if kind == "date":
-                        editor.setDisplayFormat("yyyy/M/d")
-                    elif kind == "time":
-                        editor.setDisplayFormat("HH:mm")
-                    elif kind == "calendar":
-                        editor.setCalendarPopup(True)
+                    datetime_editor.setDisplayFormat("yyyy/M/d HH:mm")
+                    if kind == "calendar":
+                        datetime_editor.setCalendarPopup(True)
+                    editor = datetime_editor
                 editor.setMinimumWidth(235)
                 editor.setAccessibleName(f"{label} {type(editor).__name__}")
+                grid.addWidget(editor, row, column)
+        layout.addLayout(grid)
+        layout.addStretch()
+        return page
+
+    def _create_more_inputs_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("More inputs"))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(24)
+        grid.setVerticalSpacing(12)
+        grid.addWidget(QLabel(self.tr("Native Qt")), 0, 1)
+        grid.addWidget(QLabel(self.tr("Modern")), 0, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        for row, (label, native_type, modern_type) in enumerate(
+            (
+                (self.tr("Plain text"), QPlainTextEdit, ModernPlainTextEdit),
+                (self.tr("Rich text"), QTextEdit, ModernTextEdit),
+                (self.tr("Shortcut"), QKeySequenceEdit, ModernKeySequenceEdit),
+                (self.tr("Font"), QFontComboBox, ModernFontComboBox),
+            ),
+            start=1,
+        ):
+            grid.addWidget(QLabel(label), row, 0)
+            for column, widget_type in enumerate((native_type, modern_type), start=1):
+                editor = widget_type()
+                editor.setAccessibleName(f"{label} {widget_type.__name__}")
+                if row in (1, 2):
+                    editor.setPlainText(self.tr("Sample text"))
+                    editor.setFixedHeight(100)
+                elif row == 3:
+                    editor.setKeySequence(QKeySequence("Ctrl+K"))
                 grid.addWidget(editor, row, column)
         layout.addLayout(grid)
         layout.addStretch()
