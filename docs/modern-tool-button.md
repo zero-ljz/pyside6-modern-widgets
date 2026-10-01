@@ -75,5 +75,7 @@ input/action/popup comparisons, inherited themes, state rendering and parent
 stylesheet compatibility are covered separately.
 
 Run `python examples/navigation_view_example.py` and select **Tool buttons**.
-The **Styles and states** and **Menus** tabs include native/modern pairs, an RTL
-toggle and action feedback. The example supports English and Simplified Chinese.
+The **Styles and states**, **Arrows** and **Menus** tabs include native/modern
+pairs, an RTL toggle and action feedback. **Arrows** shows all four directions
+in normal, checked and disabled states. The example supports English and
+Simplified Chinese.

@@ -357,11 +357,12 @@ def test_gallery_contains_all_styles_and_popup_modes(widgets):
     page = window._create_tool_button_page()
     page.setParent(window)
     buttons = page.findChildren(ModernToolButton)
-    assert len(buttons) == 12
+    assert len(buttons) == 24
     assert {b.toolButtonStyle() for b in buttons} == set(_STYLES)
     assert {b.popupMode() for b in buttons} == set(_POPUPS)
     assert any(b.autoRaise() for b in buttons)
     assert all(b.defaultAction() for b in buttons)
+    assert {b.arrowType() for b in buttons} == set(Qt.ArrowType)
 
 
 @pytest.mark.parametrize(

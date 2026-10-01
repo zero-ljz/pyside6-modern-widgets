@@ -23,6 +23,8 @@ icons, checked/default/flat states, menus, disabled controls, keyboard focus and
 Select **Tool buttons** for native `QToolButton` / `ModernToolButton` comparisons.
 The **Styles and states** tab covers label layouts, arrows, auto-raise and checked
 or disabled actions; **Menus** covers delayed, split and instant popup behavior.
+The **Arrows** tab compares up/down/left/right arrows in normal, checked and
+disabled states, pairing each native button with its modern equivalent.
 
 The navigation, tab, and edge-dock examples support English and Simplified Chinese. English is the source
 language; when the system locale is `zh_CN`, each example installs Qt's standard

@@ -325,6 +325,57 @@ class ExampleWindow(ModernWindow):
                     grid.addWidget(button, row, column, Qt.AlignmentFlag.AlignLeft)
             grid.setRowStretch(len(rows) + 1, 1)
             tabs.addTab(panel, title)
+
+        arrows = QWidget(tabs)
+        panels.append(arrows)
+        arrow_grid = QGridLayout(arrows)
+        arrow_grid.setContentsMargins(12, 12, 12, 12)
+        arrow_grid.setHorizontalSpacing(20)
+        arrow_grid.setVerticalSpacing(12)
+        directions = (
+            (self.tr("Up"), Qt.ArrowType.UpArrow),
+            (self.tr("Down"), Qt.ArrowType.DownArrow),
+            (self.tr("Left"), Qt.ArrowType.LeftArrow),
+            (self.tr("Right"), Qt.ArrowType.RightArrow),
+        )
+        for column, (label, _arrow) in enumerate(directions, 2):
+            arrow_grid.addWidget(QLabel(label), 0, column, Qt.AlignmentFlag.AlignHCenter)
+            arrow_grid.setColumnStretch(column, 1)
+        for state_index, (kind, label) in enumerate(
+            (
+                ("normal", self.tr("Normal")),
+                ("checked", self.tr("Checked")),
+                ("disabled", self.tr("Disabled")),
+            )
+        ):
+            row = state_index * 2 + 1
+            arrow_grid.addWidget(QLabel(label), row, 0, 2, 1)
+            for offset, (heading, button_type) in enumerate(
+                (
+                    (self.tr("Native QToolButton"), QToolButton),
+                    ("ModernToolButton", ModernToolButton),
+                )
+            ):
+                arrow_grid.addWidget(QLabel(heading), row + offset, 1)
+                for column, (direction, arrow) in enumerate(directions, 2):
+                    button = button_type(arrows)
+                    action = QAction(direction, button)
+                    action.setCheckable(kind == "checked")
+                    action.setChecked(kind == "checked")
+                    action.setEnabled(kind != "disabled")
+                    button.setDefaultAction(action)
+                    button.setArrowType(arrow)
+                    button.setAccessibleName(direction)
+                    button.triggered.connect(
+                        lambda action, heading=heading: status.setText(
+                            self.tr("%1: %2").replace("%1", heading).replace("%2", action.text())
+                        )
+                    )
+                    arrow_grid.addWidget(
+                        button, row + offset, column, Qt.AlignmentFlag.AlignHCenter
+                    )
+        arrow_grid.setRowStretch(7, 1)
+        tabs.insertTab(1, arrows, self.tr("Arrows"))
         rtl = QCheckBox(self.tr("Right-to-left layout"))
         for panel in panels:
             rtl.toggled.connect(
