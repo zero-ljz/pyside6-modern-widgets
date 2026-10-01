@@ -4,12 +4,13 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QTranslator
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QPushButton, QTabWidget
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton, QTabWidget
 
 from examples.navigation_view_example import ExampleWindow
 from pyside6_modern_widgets import (
     ModernDialog,
     ModernMessageBox,
+    ModernSegmentedControl,
     ModernTabWidget,
     NavigationPosition,
 )
@@ -18,13 +19,13 @@ _APP = QApplication.instance() or QApplication([])
 
 
 @pytest.mark.parametrize(
-    ("language", "native_title", "custom_title"),
+    ("language", "native_title", "custom_title", "segmented_title"),
     [
-        ("en", "PySide6 built-in widgets", "Custom widgets"),
-        ("zh_CN", "PySide6 原生组件", "自定义组件"),
+        ("en", "PySide6 built-in widgets", "Custom widgets", "Segmented control"),
+        ("zh_CN", "PySide6 原生组件", "自定义组件", "分段控件"),
     ],
 )
-def test_gallery_navigation_groups(language, native_title, custom_title):
+def test_gallery_navigation_groups(language, native_title, custom_title, segmented_title):
     translator = QTranslator()
     if language == "zh_CN":
         catalog = Path(__file__).parents[1] / "examples/translations/examples_zh_CN.qm"
@@ -33,7 +34,7 @@ def test_gallery_navigation_groups(language, native_title, custom_title):
     window = ExampleWindow()
     try:
         sidebar = window.navigation.sidebar
-        assert window.navigation.count() == sidebar.count() == 19
+        assert window.navigation.count() == sidebar.count() == 20
         assert list(sidebar._groups) == [
             (NavigationPosition.TOP, native_title),
             (NavigationPosition.TOP, custom_title),
@@ -44,10 +45,11 @@ def test_gallery_navigation_groups(language, native_title, custom_title):
             sidebar._item_groups[sidebar.button(index)] is native_group for index in range(1, 13)
         )
         assert all(
-            sidebar._item_groups[sidebar.button(index)] is custom_group for index in range(13, 18)
+            sidebar._item_groups[sidebar.button(index)] is custom_group for index in range(13, 19)
         )
         assert sidebar.button(0) not in sidebar._item_groups
-        assert sidebar.button(18) not in sidebar._item_groups
+        assert sidebar.button(19) not in sidebar._item_groups
+        assert sidebar.button(14).text() == segmented_title
         assert sidebar.currentIndex() == window.navigation.currentIndex() == 0
     finally:
         window.deleteLater()
@@ -96,6 +98,16 @@ def test_gallery_native_comparison_pages_have_both_working_controls(monkeypatch)
             window.tab_widget.tabText(i) for i in range(2)
         ]
         assert window.native_tab_widget.count() == window.tab_widget.count() == 2
+
+        segmented_page = window.navigation.widget(14)
+        segments = segmented_page.findChildren(ModernSegmentedControl)
+        assert len(segments) == 2
+        assert not segments[1].isItemEnabled(1)
+        window.segmented_control.setCurrentIndex(1)
+        assert any(
+            label.text() == "More details in a separate section."
+            for label in segmented_page.findChildren(QLabel)
+        )
     finally:
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

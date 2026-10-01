@@ -109,7 +109,7 @@ def _sidebar_style(theme: ModernTheme, metrics: ModernMetrics) -> str:
             QLabel[class="NavigationGroupHeader"] {{
                 color: {theme.text_disabled};
                 background-color: transparent;
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 600;
                 padding-left: 6px;
             }}

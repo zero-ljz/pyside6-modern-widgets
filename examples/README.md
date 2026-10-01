@@ -91,7 +91,8 @@ pyside6-lrelease examples/translations/examples_zh_CN.ts \
 ```
 
 It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
-`ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**, **Flyout**,
+`ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**,
+**Segmented control**, **Flyout**,
 **Choice controls**, **Line edit**, **Notifications**, **Toolbar**, **Tab widget**, and
 **Spin editors**, **More inputs**, and **Edge docking** pages.
 
@@ -115,9 +116,9 @@ identifies which toolbar triggered an action.
 
 The **Tab widget** page demonstrates `ModernTabWidget` with two fixed sections.
 Select a tab to switch content; unlike the standalone `TabView` example, these
-tabs cannot be added, closed, or dragged. It also shows `ModernSegmentedControl`:
-choose a segment to update the status text, compare its disabled state, and use
-the title-bar theme button to see its light/dark colors change.
+tabs cannot be added, closed, or dragged.
+
+The **Segmented control** page shows selectable sections and a disabled segment.
 
 The **Notifications** page demonstrates desktop and in-window delivery, four
 severity levels, all four corners, screen selection, and a queue of eight updates.
@@ -144,10 +145,9 @@ on Windows 11, with an opaque fallback elsewhere. Editable controls and popups
 have four square corners; non-editable combos remain rounded. The status line
 displays Qt's `activated` signal.
 
-The **Switch** page compares `ModernSwitch` with `QLineEdit`, `QComboBox`, and
-`ModernComboBox` without fixed heights. Try the title-bar theme button, system
-accent colors, clicking the label, Tab/Space input, disabled states, and
-right-to-left layout. The switch focus outline appears for keyboard interaction
+The **Switch** page shows enabled, disabled, and right-to-left `ModernSwitch`
+states. Try the title-bar theme button, system accent colors, clicking the label,
+and Tab/Space input. The switch focus outline appears for keyboard interaction
 and hides on mouse clicks.
 
 The example places a `ModernMenuBar` in the title bar's left custom-widget area,

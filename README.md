@@ -585,9 +585,8 @@ theme; `setTheme(DARK_THEME)` overrides it locally and `setTheme(None)` restores
 inheritance. Explicit theme `accent` / `on_accent` tokens override the track/thumb
 colors. Optional `metrics=ModernMetrics(...)` controls animation duration.
 
-Run `python examples/navigation_view_example.py` and open **Switch** to compare
-the default heights with native form controls and try System/Light/Dark appearance
-and enabled/disabled switches.
+Run `python examples/navigation_view_example.py` and open **Switch** to try
+System/Light/Dark appearance and enabled/disabled switches.
 
 ## Modern slider
 
@@ -661,8 +660,8 @@ remain keyboard accessible and can be disabled individually. Colors use the
 current theme's surface, border, text, and tab-state tokens for light/dark,
 hover, checked, and disabled appearances. The control follows its nearest
 themed ancestor or the global theme; `setTheme(DARK_THEME)` overrides locally
-and `setTheme(None)` restores inheritance. Open **Tab widget** in the navigation
-example to try enabled and disabled segments alongside fixed-section tabs.
+and `setTheme(None)` restores inheritance. Open **Segmented control** in the
+navigation example to try enabled and disabled segments.
 
 ## Modern flyout
 

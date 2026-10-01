@@ -193,6 +193,12 @@ class ExampleWindow(ModernWindow):
             group=custom_group,
         )
         self.navigation.addPage(
+            self._create_segmented_control_page(),
+            self.tr("Segmented control"),
+            standard_icon(QStyle.StandardPixmap.SP_DialogApplyButton),
+            group=custom_group,
+        )
+        self.navigation.addPage(
             self._create_scroll_bar_page(),
             self.tr("Scroll bars"),
             standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
@@ -1051,23 +1057,6 @@ class ExampleWindow(ModernWindow):
                 tabs.addTab(section, title)
             comparison.addWidget(tabs, 1, column)
         layout.addLayout(comparison)
-        layout.addWidget(QLabel("ModernSegmentedControl"))
-        self.segmented_control = ModernSegmentedControl(
-            [self.tr("General"), self.tr("Details")], page
-        )
-        layout.addWidget(self.segmented_control, 0, Qt.AlignmentFlag.AlignLeft)
-        segment_status = QLabel(self.tr("General settings for this section."))
-        descriptions = (
-            self.tr("General settings for this section."),
-            self.tr("More details in a separate section."),
-        )
-        self.segmented_control.currentChanged.connect(
-            lambda index: segment_status.setText(descriptions[index])
-        )
-        layout.addWidget(segment_status)
-        disabled_segments = ModernSegmentedControl([self.tr("General"), self.tr("Disabled")], page)
-        disabled_segments.setItemEnabled(1, False)
-        layout.addWidget(disabled_segments, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addStretch()
         return page
 
@@ -1296,11 +1285,6 @@ class ExampleWindow(ModernWindow):
         layout.addWidget(hint)
         form = QFormLayout()
         form.setVerticalSpacing(14)
-        form.addRow("QLineEdit", QLineEdit(self.tr("Native text field")))
-        for widget_type in (QComboBox, ModernComboBox):
-            combo = widget_type()
-            combo.addItems([self.tr("Default size"), self.tr("No fixed height")])
-            form.addRow(widget_type.__name__, combo)
         switch = ModernSwitch(self.tr("Enable notifications"))
         switch.setChecked(True)
         form.addRow("ModernSwitch", switch)
@@ -1323,6 +1307,27 @@ class ExampleWindow(ModernWindow):
             )
         )
         layout.addWidget(status)
+        layout.addStretch()
+        return page
+
+    def _create_segmented_control_page(self) -> QWidget:
+        page, layout = self._create_page(self.tr("Segmented control"))
+        self.segmented_control = ModernSegmentedControl(
+            [self.tr("General"), self.tr("Details")], page
+        )
+        layout.addWidget(self.segmented_control, 0, Qt.AlignmentFlag.AlignLeft)
+        descriptions = (
+            self.tr("General settings for this section."),
+            self.tr("More details in a separate section."),
+        )
+        status = QLabel(descriptions[0])
+        self.segmented_control.currentChanged.connect(
+            lambda index: status.setText(descriptions[index])
+        )
+        layout.addWidget(status)
+        disabled_segments = ModernSegmentedControl([self.tr("General"), self.tr("Disabled")], page)
+        disabled_segments.setItemEnabled(1, False)
+        layout.addWidget(disabled_segments, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addStretch()
         return page
 

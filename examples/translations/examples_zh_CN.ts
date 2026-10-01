@@ -419,6 +419,12 @@
         <translation>开关</translation>
     </message>
     <message>
+        <location filename="../navigation_view_example.py" line="197"/>
+        <location filename="../navigation_view_example.py" line="1314"/>
+        <source>Segmented control</source>
+        <translation>分段控件</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="195"/>
         <source>Flyout</source>
         <translation>弹出面板</translation>
@@ -1132,21 +1138,6 @@
         <location filename="../navigation_view_example.py" line="1301"/>
         <source>Click to toggle. Use Tab and Space to try the keyboard focus indicator.</source>
         <translation>单击可切换状态。使用 Tab 和空格键可尝试键盘焦点指示器。</translation>
-    </message>
-    <message>
-        <location filename="../navigation_view_example.py" line="1306"/>
-        <source>Native text field</source>
-        <translation>原生文本框</translation>
-    </message>
-    <message>
-        <location filename="../navigation_view_example.py" line="1309"/>
-        <source>Default size</source>
-        <translation>默认尺寸</translation>
-    </message>
-    <message>
-        <location filename="../navigation_view_example.py" line="1309"/>
-        <source>No fixed height</source>
-        <translation>不固定高度</translation>
     </message>
     <message>
         <location filename="../navigation_view_example.py" line="1320"/>
