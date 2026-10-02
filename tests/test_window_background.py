@@ -103,9 +103,11 @@ def test_window_background_tracks_activation_and_inactive_theme_changes(
         other.close()
 
 
+@pytest.mark.parametrize("window_type", [ModernWindow, ModernDialog])
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
-def test_window_watercolor_switch_uses_theme_solid_surface(theme) -> None:
-    window = ModernWindow(theme=theme, watercolor=False)
+def test_window_watercolor_switch_uses_theme_solid_surface(window_type, theme) -> None:
+    window = window_type(theme=theme, watercolor=False)
+    frame = window.frame if isinstance(window, ModernWindow) else window._background_frame
     other = QWidget()
     try:
         window.resize(480, 320)
@@ -114,27 +116,27 @@ def test_window_watercolor_switch_uses_theme_solid_surface(theme) -> None:
         _activate(window)
         solid = QColor(theme.surface_alternate)
         assert not window.isWatercolorEnabled()
-        assert _surface_colors(window.frame) == (solid, solid)
+        assert _surface_colors(frame) == (solid, solid)
 
         _activate(other)
-        assert _surface_colors(window.frame) == (solid, solid)
+        assert _surface_colors(frame) == (solid, solid)
 
         window.setWatercolorEnabled(True)
         _activate(window)
-        active_colors = _surface_colors(window.frame)
+        active_colors = _surface_colors(frame)
         assert window.isWatercolorEnabled()
         assert active_colors[0] != active_colors[1]
 
         window.setWatercolorEnabled(False)
         _APP.processEvents()
-        assert _surface_colors(window.frame) == (solid, solid)
-        assert window.frame._watercolor_cache is None
+        assert _surface_colors(frame) == (solid, solid)
+        assert frame._watercolor_cache is None
 
         next_theme = DARK_THEME if theme is LIGHT_THEME else LIGHT_THEME
         window.setTheme(next_theme)
         _APP.processEvents()
         next_solid = QColor(next_theme.surface_alternate)
-        assert _surface_colors(window.frame) == (next_solid, next_solid)
+        assert _surface_colors(frame) == (next_solid, next_solid)
     finally:
         window.close()
         other.close()

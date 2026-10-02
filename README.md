@@ -1201,7 +1201,7 @@ discards pending results. Re-enabling can use cached colors while requesting a
 fresh sample. If no wallpaper is available, the configured base theme is used.
 Sampling always resolves against the latest mode and base themes.
 
-`ModernWindow` also accepts `watercolor=False` and exposes
+`ModernWindow` and `ModernDialog` also accept `watercolor=False` and expose
 `setWatercolorEnabled(bool)` / `isWatercolorEnabled()` to use the theme's solid
 `surface_alternate` color instead. `NavigationSidebar` supports the same option
 for its overlay surface. This choice is independent of wallpaper color sampling;

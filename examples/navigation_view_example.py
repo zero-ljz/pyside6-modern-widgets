@@ -1580,6 +1580,8 @@ class ExampleWindow(ModernWindow):
 
     def _show_dialog(self, dialog_type: type[QDialog]) -> None:
         dialog = dialog_type(self)
+        if isinstance(dialog, ModernDialog):
+            dialog.setWatercolorEnabled(self.isWatercolorEnabled())
         dialog.setWindowTitle(self.tr("Save changes"))
 
         layout = QVBoxLayout(dialog)

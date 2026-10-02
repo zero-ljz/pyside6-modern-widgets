@@ -53,6 +53,7 @@ class ModernDialog(QDialog):
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        watercolor: bool = True,
     ) -> None:
         self._uses_native_macos_title_bar = uses_macos_native_title_bar()
         self._macos_title_bar_configured: bool | None = None
@@ -70,6 +71,7 @@ class ModernDialog(QDialog):
         self._theme_override = theme
         self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
+        self._watercolor_enabled = bool(watercolor)
         self._corner_radius = metrics.corner_radius
         self._resize_controller = WindowResizeController(self)
         self._application_event_filter_installed = False
@@ -86,6 +88,7 @@ class ModernDialog(QDialog):
             theme=self._theme,
             corner_radius=paint_radius,
             opaque_surface=self._surface_policy.opaque_surface,
+            solid_surface=not self._watercolor_enabled,
         )
         self._background_frame.setObjectName("backgroundFrame")
         self._background_frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -123,6 +126,16 @@ class ModernDialog(QDialog):
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
+
+    def isWatercolorEnabled(self) -> bool:
+        return self._watercolor_enabled
+
+    def setWatercolorEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._watercolor_enabled:
+            return
+        self._watercolor_enabled = enabled
+        self._background_frame.setSolidSurface(not enabled)
 
     def setWindowFlags(self, flags: Qt.WindowType) -> None:
         QDialog.setWindowFlags(

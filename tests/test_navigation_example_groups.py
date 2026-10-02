@@ -188,3 +188,22 @@ def test_settings_watercolor_switch_updates_window_and_navigation_overlay():
     finally:
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_gallery_dialog_uses_current_watercolor_setting(monkeypatch):
+    window = ExampleWindow()
+    opened = []
+    monkeypatch.setattr(
+        ModernDialog,
+        "exec",
+        lambda dialog: opened.append(dialog.isWatercolorEnabled()),
+    )
+    try:
+        window.watercolor_switch.setChecked(False)
+        window._show_dialog(ModernDialog)
+        window.watercolor_switch.setChecked(True)
+        window._show_dialog(ModernDialog)
+        assert opened == [False, True]
+    finally:
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
