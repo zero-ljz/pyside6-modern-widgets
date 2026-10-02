@@ -8,6 +8,7 @@ from PySide6.QtCore import QEvent
 from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu, QMenuBar, QToolButton, QWidget
 
+from ._theme_binding import ThemeBinding
 from .modern_menu import ModernMenu
 from .theme import (
     DEFAULT_METRICS,
@@ -15,7 +16,6 @@ from .theme import (
     ModernTheme,
     _chrome_palette,
     inherited_theme,
-    theme_manager,
 )
 
 
@@ -49,8 +49,8 @@ class ModernMenuBar(QMenuBar):
         self._metrics = metrics
         self._acrylic_enabled = bool(acrylic)
         self._styled_theme: ModernTheme | None = None
-        theme_manager().themeChanged.connect(self._on_theme_changed)
         self._apply_theme()
+        self._theme_binding = ThemeBinding(self, self._inherited_theme, self._apply_theme)
         # Qt fills this menu with overflow actions during layout. Supply the
         # modern menu before the first layout instead of letting Qt create QMenu.
         extension: QToolButton | None = self.findChild(QToolButton, "qt_menubar_ext_button")
@@ -83,9 +83,6 @@ class ModernMenuBar(QMenuBar):
             self._styled_theme = theme
             self.setStyleSheet(_menu_bar_style(theme, self._metrics))
             self.setPalette(_chrome_palette(theme, self.palette()))
-
-    def _on_theme_changed(self, _theme: ModernTheme) -> None:
-        self._apply_theme()
 
     def event(self, event) -> bool:
         handled = super().event(event)

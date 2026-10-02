@@ -5,13 +5,54 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtGui import QKeySequence
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QLabel,
+    QLineEdit,
+    QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from pyside6_modern_widgets import ModernTabWidget, TabView
+from pyside6_modern_widgets import LIGHT_THEME, ModernTabWidget, TabView
 
 _APP = QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize(
+    "direction", [Qt.LayoutDirection.LeftToRight, Qt.LayoutDirection.RightToLeft]
+)
+@pytest.mark.parametrize("selected_index", [0, 3, 7])
+def test_overflowed_tabs_remain_painted_in_both_layout_directions(direction, selected_index):
+    view = TabView(theme=LIGHT_THEME)
+    view.setLayoutDirection(direction)
+    for index in range(8):
+        view.addTab(QLabel(str(index)), f"Tab {index}")
+    view.resize(500, 250)
+    view.show()
+    view.setCurrentIndex(selected_index)
+    _APP.processEvents()
+    try:
+        bar = view.tabBar()
+        scroll_buttons = [
+            bar.findChild(QToolButton, name) for name in ("ScrollLeftButton", "ScrollRightButton")
+        ]
+        assert all(button is not None and button.isVisible() for button in scroll_buttons)
+        selected_rect = bar.tabRect(selected_index)
+        # Sample the selected surface above its label and away from the scroll controls.
+        x, y = selected_rect.center().x(), selected_rect.top() + 5
+        assert bar.rect().contains(x, y)
+        assert all(not button.geometry().contains(x, y) for button in scroll_buttons)
+        image = bar.grab().toImage()
+        dpr = image.devicePixelRatio()
+        assert image.pixelColor(round(x * dpr), round(y * dpr)) == QColor(LIGHT_THEME.tab_selected)
+    finally:
+        view.close()
+        view.deleteLater()
 
 
 @pytest.mark.parametrize("index", [-10, -1, 0, 1, 2, 10])

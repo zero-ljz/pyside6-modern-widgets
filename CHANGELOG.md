@@ -98,6 +98,11 @@ are retained.
 
 ### Fixed
 
+- Preserve navigation redirects from selection callbacks during mouse, keyboard,
+  and programmatic button activation.
+- Keep overflowing tab titles, icons, and selected backgrounds visible in RTL layouts.
+- Refresh menu-bar styling when an ancestor changes theme or moves between windows,
+  including changes to colors outside the Qt palette.
 - Keep toolbar overflow menus alive when an ancestor container moves to another
   window before its previous owner is destroyed.
 - Synchronize notification theme caches on creation and refresh progress colors

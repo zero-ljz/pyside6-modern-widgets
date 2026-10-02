@@ -320,11 +320,14 @@ class _ModernTabBar(QTabBar):
         )
         painter.save()
         if scroll_buttons and (overflowed or any(button.isVisible() for button in scroll_buttons)):
-            controls_left = min(button.geometry().left() for button in scroll_buttons)
-            painter.setClipRect(
-                QRectF(0, 0, controls_left, self.height()),
-                Qt.ClipOperation.IntersectClip,
-            )
+            content_rect = QRectF(self.rect())
+            if self.isRightToLeft():
+                controls_right = max(button.geometry().right() + 1 for button in scroll_buttons)
+                content_rect.setLeft(controls_right)
+            else:
+                controls_left = min(button.geometry().left() for button in scroll_buttons)
+                content_rect.setRight(controls_left)
+            painter.setClipRect(content_rect, Qt.ClipOperation.IntersectClip)
 
         for index in range(self.count()):
             rect = self.tabRect(index)

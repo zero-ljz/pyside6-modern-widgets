@@ -46,6 +46,49 @@ def test_borrowed_button_selection_updates_navigation_and_activation_signals():
     _flush_deletes()
 
 
+@pytest.mark.parametrize("activation", ["click", "mouse", "keyboard"])
+@pytest.mark.parametrize("signal_source", ["view", "sidebar"])
+def test_item_activation_preserves_selection_made_in_change_callback(activation, signal_source):
+    view = NavigationView()
+    for label in ("A", "B", "C"):
+        view.addPage(QLabel(label), label)
+    changes, activations = [], []
+    redirected = False
+
+    def redirect(index):
+        nonlocal redirected
+        if index == 1 and not redirected:
+            redirected = True
+            view.setCurrentIndex(2)
+
+    view.currentChanged.connect(changes.append)
+    source = view if signal_source == "view" else view.sidebar
+    source.currentChanged.connect(redirect)
+    view.sidebar.itemActivated.connect(activations.append)
+    view.resize(800, 480)
+    view.show()
+    _APP.processEvents()
+    try:
+        button = view.sidebar.button(1)
+        if activation == "mouse":
+            QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        elif activation == "keyboard":
+            button.setFocus()
+            QTest.keyClick(button, Qt.Key.Key_Space)
+        else:
+            button.click()
+        assert changes == [1, 2]
+        assert view.currentIndex() == view.sidebar.currentIndex() == 2
+        assert view.currentWidget().text() == "C"
+        assert view.sidebar.button(2).isChecked()
+        assert not button.isChecked()
+        assert activations == [1]
+    finally:
+        view.close()
+        view.deleteLater()
+        _flush_deletes()
+
+
 @pytest.mark.parametrize("take", [False, True])
 @pytest.mark.parametrize("position", list(NavigationPosition))
 def test_item_removal_ownership_and_detached_selection(take, position):

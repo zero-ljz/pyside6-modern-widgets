@@ -6,7 +6,7 @@ from dataclasses import replace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QRect, Qt, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyleOptionMenuItem,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 from shiboken6 import isValid
@@ -145,6 +146,81 @@ def test_manual_menu_bar_updates_theme_when_moved_between_windows() -> None:
     assert _selected_background(menu_bar) == QColor("#654321")
     first.close()
     second.close()
+
+
+@pytest.mark.parametrize("visible", [False, True])
+def test_nested_menu_bar_follows_container_between_same_palette_windows(visible) -> None:
+    first = ModernWindow(theme=replace(LIGHT_THEME, control_pressed="#FF123456"))
+    second = ModernWindow(theme=replace(LIGHT_THEME, control_pressed="#FF654321"))
+    first_content, second_content = QWidget(), QWidget()
+    first.setCentralWidget(first_content)
+    second.setCentralWidget(second_content)
+    first_layout, second_layout = QVBoxLayout(first_content), QVBoxLayout(second_content)
+    container = QWidget()
+    first_layout.addWidget(container)
+    menu_bar = ModernMenuBar(container)
+    QVBoxLayout(container).addWidget(menu_bar)
+    menu_bar.addMenu("File")
+    try:
+        if visible:
+            first.show()
+            second.show()
+            _APP.processEvents()
+        assert first.palette() == second.palette()
+        assert _selected_background(menu_bar) == QColor("#123456")
+
+        # The bar's direct parent stays unchanged; only its ancestor moves.
+        second_layout.addWidget(container)
+        assert menu_bar.parentWidget() is container
+        assert _selected_background(menu_bar) == QColor("#654321")
+
+        first.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        second.setTheme(replace(LIGHT_THEME, control_pressed="#FF246813"))
+        assert _selected_background(menu_bar) == QColor("#246813")
+    finally:
+        if isValid(first):
+            first.deleteLater()
+        second.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("visible", [False, True])
+def test_nested_menu_bar_follows_ancestor_theme_signal_without_palette_change(visible) -> None:
+    class ThemeHost(QWidget):
+        themeChanged = Signal(object)
+
+        def __init__(self):
+            super().__init__()
+            self._theme = replace(LIGHT_THEME, control_pressed="#FF123456")
+
+        def theme(self):
+            return self._theme
+
+        def setTheme(self, theme):
+            self._theme = theme
+            self.themeChanged.emit(theme)
+
+    host = ThemeHost()
+    container = QWidget(host)
+    QVBoxLayout(host).addWidget(container)
+    menu_bar = ModernMenuBar(container)
+    QVBoxLayout(container).addWidget(menu_bar)
+    menu_bar.addMenu("File")
+    try:
+        if visible:
+            host.show()
+            _APP.processEvents()
+        assert _selected_background(menu_bar) == QColor("#123456")
+        palette = QPalette(host.palette())
+
+        host.setTheme(replace(host.theme(), control_pressed="#FF654321"))
+
+        assert host.palette() == palette
+        assert _selected_background(menu_bar) == QColor("#654321")
+    finally:
+        host.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 def test_standalone_menu_bar_follows_global_theme(theme_manager_instance) -> None:

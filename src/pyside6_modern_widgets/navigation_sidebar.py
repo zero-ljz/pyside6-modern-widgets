@@ -682,5 +682,6 @@ class NavigationSidebar(QWidget):
             index = self._items.index(button)
         except ValueError:
             return
-        self.setCurrentIndex(index)
+        # buttonToggled already selected this item. Its callbacks may have
+        # redirected selection, which activation must not overwrite.
         self.itemActivated.emit(index)
