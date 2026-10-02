@@ -268,7 +268,17 @@ class ModernFlyout(QWidget):
         self._reposition()
         self.show()
         self.setFocus(Qt.FocusReason.PopupFocusReason)
-        self.focusNextChild()
+        candidate = self.nextInFocusChain()
+        while candidate is not self:
+            if (
+                candidate.window() is self
+                and candidate.isVisible()
+                and candidate.isEnabled()
+                and candidate.focusPolicy() & Qt.FocusPolicy.TabFocus
+            ):
+                candidate.setFocus(Qt.FocusReason.PopupFocusReason)
+                break
+            candidate = candidate.nextInFocusChain()
 
     def _reposition(self) -> None:
         anchor = self.anchorWidget()
@@ -310,7 +320,7 @@ class ModernFlyout(QWidget):
             if event_type in (QEvent.Type.Hide, QEvent.Type.ParentChange):
                 self.close()
             elif event_type in (QEvent.Type.Move, QEvent.Type.Resize):
-                self._position_timer.start(0)
+                self._reposition()
             elif event_type == QEvent.Type.LayoutDirectionChange:
                 anchor = self.anchorWidget()
                 if anchor is not None:

@@ -21,6 +21,7 @@ from pyside6_modern_widgets import (
     ModernComboBox,
     ModernFlyout,
     ModernMenu,
+    ModernSlider,
     ModernWindow,
     ThemeMode,
 )
@@ -139,6 +140,18 @@ def test_open_keyboard_focus_escape_and_reuse(panel):
     assert events == ["open", "close", "open"]
 
 
+def test_initial_focus_does_not_look_like_keyboard_navigation(panel):
+    _, anchor, flyout, *_ = panel
+    slider = ModernSlider()
+    slider.setRange(0, 100)
+    flyout.setContentWidget(slider)
+    flyout.popup(anchor)
+    assert slider.hasFocus()
+    assert not slider._keyboard_focus
+    QTest.keyClick(slider, Qt.Key.Key_Right)
+    assert slider._keyboard_focus
+
+
 def test_child_combo_owns_first_escape(panel):
     _, anchor, flyout, _, combo, _ = panel
     flyout.popup(anchor)
@@ -199,6 +212,27 @@ def test_anchor_move_hide_and_destroy(panel):
     QCoreApplication.sendPostedEvents(anchor, QEvent.Type.DeferredDelete)
     assert not flyout.isVisible()
     assert flyout.anchorWidget() is None
+
+
+def test_popup_tracks_tool_window_move_immediately(theme_manager_instance):
+    screen = _APP.primaryScreen().availableGeometry()
+    tool = QWidget(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
+    tool.setGeometry(screen.left() + 100, screen.top() + 100, 400, 70)
+    anchor = QPushButton("Open", tool)
+    anchor.setGeometry(80, 15, 60, 30)
+    tool.show()
+    _APP.processEvents()
+    flyout = ModernFlyout(tool)
+    flyout.setContentWidget(QPushButton("Content"))
+    try:
+        flyout.popup(anchor, gap=4)
+        assert flyout.x() == anchor.mapToGlobal(QPoint()).x()
+        before = flyout.pos()
+        tool.move(tool.pos() + QPoint(40, 20))
+        assert flyout.pos() == before + QPoint(40, 20)
+    finally:
+        flyout.close()
+        tool.close()
 
 
 def test_local_and_global_theme_changes_while_open(panel, theme_manager_instance):
