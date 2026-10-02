@@ -3,8 +3,18 @@
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QEvent, QTranslator
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton, QTabWidget
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTranslator
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QScrollBar,
+    QTabWidget,
+)
 
 from examples import navigation_view_example
 from examples.navigation_view_example import ExampleWindow
@@ -15,6 +25,7 @@ from pyside6_modern_widgets import (
     ModernMenu,
     ModernMenuBar,
     ModernMessageBox,
+    ModernScrollBar,
     ModernSegmentedControl,
     ModernSwitch,
     ModernTabWidget,
@@ -50,14 +61,14 @@ def test_gallery_navigation_groups(language, native_title, custom_title, segment
         native_group = sidebar._groups[(NavigationPosition.TOP, native_title)]
         custom_group = sidebar._groups[(NavigationPosition.TOP, custom_title)]
         assert all(
-            sidebar._item_groups[sidebar.button(index)] is native_group for index in range(1, 13)
+            sidebar._item_groups[sidebar.button(index)] is native_group for index in range(1, 14)
         )
         assert all(
-            sidebar._item_groups[sidebar.button(index)] is custom_group for index in range(13, 19)
+            sidebar._item_groups[sidebar.button(index)] is custom_group for index in range(14, 19)
         )
         assert sidebar.button(0) not in sidebar._item_groups
         assert sidebar.button(19) not in sidebar._item_groups
-        assert sidebar.button(14).text() == segmented_title
+        assert sidebar.button(15).text() == segmented_title
         assert sidebar.currentIndex() == window.navigation.currentIndex() == 0
         assert window.acrylic_switch.text() == (
             "启用亚克力材质" if language == "zh_CN" else "Enable acrylic material"
@@ -116,7 +127,29 @@ def test_gallery_native_comparison_pages_have_both_working_controls(monkeypatch)
         ]
         assert window.native_tab_widget.count() == window.tab_widget.count() == 2
 
-        segmented_page = window.navigation.widget(14)
+        scroll_page = window.navigation.widget(13)
+        native_area, modern_area = scroll_page.findChildren(QScrollArea)
+        for orientation in (Qt.Orientation.Vertical, Qt.Orientation.Horizontal):
+            native_bar = (
+                native_area.verticalScrollBar()
+                if orientation == Qt.Orientation.Vertical
+                else native_area.horizontalScrollBar()
+            )
+            modern_bar = (
+                modern_area.verticalScrollBar()
+                if orientation == Qt.Orientation.Vertical
+                else modern_area.horizontalScrollBar()
+            )
+            assert type(native_bar) is QScrollBar
+            assert isinstance(modern_bar, ModernScrollBar)
+        rtl = scroll_page.findChild(QCheckBox)
+        rtl.setChecked(True)
+        assert all(
+            area.layoutDirection() == Qt.LayoutDirection.RightToLeft
+            for area in (native_area, modern_area)
+        )
+
+        segmented_page = window.navigation.widget(15)
         segments = segmented_page.findChildren(ModernSegmentedControl)
         assert len(segments) == 2
         assert not segments[1].isItemEnabled(1)

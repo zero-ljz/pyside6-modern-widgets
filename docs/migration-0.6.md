@@ -1,6 +1,7 @@
 # 迁移到 0.6.0
 
-0.6.0 统一主题继承、选择信号、页面所有权和时间参数命名。这是一个破坏性版本：
+待发布的 0.6.0 统一主题继承、选择信号、页面和侧栏项目所有权，以及时间参数命名。
+这是一个破坏性版本：
 下文列出的旧名称不提供别名、弃用包装或兼容参数。
 
 ## 迁移速查
@@ -10,6 +11,7 @@
 | 子组件 `theme=None` 跟随全局，忽略父组件主题 | 继承最近的主题父组件，没有时才跟随全局 |
 | `window.hideTitleBar()` 永久删除标题栏 | `window.setTitleBarVisible(False)` 隐藏，传 `True` 恢复 |
 | `page = navigation.removePage(index)` | `page = navigation.takePage(index)` |
+| `button = sidebar.removeItem(index)` | `button = sidebar.takeItem(index)` |
 | `window.content` | `window.centralWidget()` |
 | `window.cornerRadius` | `window.cornerRadius()`；写入使用 `setCornerRadius(value)` |
 | `segments.group.checkedId()` | `segments.currentIndex()` |
@@ -20,6 +22,7 @@
 | 读取整个 `segments.buttons` 列表 | `count()` 加 `button(index)`；返回的按钮由组件持有 |
 | `DockConfig(anim_duration=250, hide_delay=500)` | `DockConfig(animation_duration_ms=250, hide_delay_ms=500)` |
 | `ModernMetrics(animation_duration=250)` | `ModernMetrics(animation_duration_ms=250)` |
+| `TabView.insertTab(-1, ...)` 在开头插入 | 负索引现在追加到末尾；在开头插入请使用索引 `0` |
 | `window.initWindow()`、窗口/对话框/消息框的 `apply_window_style()` | 删除调用；初始化和样式刷新由组件内部负责 |
 
 ## 1. 主题统一继承
@@ -81,6 +84,11 @@ Flyout 使用锚点作为主题来源；通知卡片继承其 `NotificationManag
 
 如果业务代码以前在删除后手动调整缓存索引，应改为以 `currentChanged` 为准，避免重复调整。
 
+通过 `sidebar.button(index)` 借用的有效按钮调用 `setChecked(True)`，现在也会同步
+`currentIndex()`，在选择改变时发出一次 `currentChanged(index)`；在
+`NavigationView` 中还会同步当前页面。重复设置相同选择不发出信号。
+`itemActivated(index)` 仍只报告按钮激活，包括重复点击当前项。
+
 ## 3. 标题栏显隐可恢复
 
 ```python
@@ -105,6 +113,8 @@ assert window.isTitleBarVisible()
 | `TabView.removeTab(index)` / `ModernTabWidget.removeTab(index)` | `None` | 保留 | 同上，保持 Qt 原有语义 |
 | `NavigationView.takePage(index)` | 页面或 `None` | 设为 `None` | 交由调用者管理 |
 | `TabView.takeTab(index)` / `ModernTabWidget.takeTab(index)` | 页面或 `None` | 设为 `None` | 交由调用者管理 |
+| `NavigationSidebar.removeItem(index)` | `None` | 保留 | 原侧栏销毁时销毁，或由调用者提前处理 |
+| `NavigationSidebar.takeItem(index)` | 按钮或 `None` | 设为 `None` | 交由调用者管理 |
 | `ModernWindow.takeCentralWidget()` | 页面或 `None` | 设为 `None` | 交由调用者管理 |
 
 移除和取出的页面均隐藏；无效索引不改变状态，`take` 返回 `None`。
@@ -124,6 +134,17 @@ if previous is not None:
 
 `centralWidget()` 取代公开的 `content` 属性。它只读取，不会创建内部布局。
 `NavigationView` 也新增 `indexOf(page)` 和 `setCurrentWidget(page)`，无需操作内部堆栈来选择页面。
+
+侧栏按钮移除后也会隐藏，不再影响选中状态或触发 `itemActivated`。
+`button(index)` 返回借用的按钮；不要删除、重新挂接或修改其 checkable/exclusive
+结构。需要接管按钮时先调用 `takeItem()`。无效索引不会改变状态，`takeItem()` 返回
+`None`。旧代码需要取回按钮时可改为：
+
+```python
+button = sidebar.takeItem(index)
+if button is not None:
+    button.deleteLater()  # 或挂接到其他容器。
+```
 
 ## 5. 分段控件使用索引接口
 
@@ -184,9 +205,30 @@ setter 提供精确重载，便于类型检查发现错误参数。
 
 0.6.0 还包含先前未发布的通知 Handle 和 Dock 状态 API 调整。
 使用旧通知 ID、`duration`、`max_queued`、`setEnabled()` 等调用的应用，
-请同时按 [README 的通知迁移表](../README.md#notifications) 改为 Handle API。
+请改为以下 Handle API：
+
+| 旧调用 | 新调用 |
+| --- | --- |
+| `notify(..., notification_id=...)` 和相同 ID 替换 | 保存 `notify()` 返回的 handle，调用 `handle.update(...)`。 |
+| `duration=0`、`default_duration` | `timeout_ms=None`、`default_timeout_ms`。 |
+| `actions={"open": "Open"}` | `actions=[NotificationAction("open", "Open")]`。 |
+| `updateNotification(id, ...)`、`dismiss(id)` | `handle.update(...)`、`handle.dismiss()`。 |
+| `pause(id)`、`resume(id)` | `handle.pauseTimeout()`、`handle.resumeTimeout()`。 |
+| `setEnabled(False)` | `setDeliveryPaused(True)`。 |
+| `notification(id)` | 用 `handle.widget()` 访问视图，或用 `handle.snapshot()` 读取数据。 |
+| ID 列表和信号 | `notifications(state)` 返回 handle；信号也传递 handle。 |
+| `max_queued` 和旧的队列淘汰行为 | `capacity` 限制所有已接受的通知；超限时抛出 `OverflowError`。 |
+
 Dock 的设置通过 `config()` / `setConfig()` 获取和原子更新；
 显式 `collapse()` 不受 `auto_hide` 限制，条件命令返回是否成功。
 如使用过未发布的 `DockRestoreTrigger`、`restore_trigger`、`handle_draggable`、
 `setRestoreTrigger()` 或 `setHandleDraggable()`，改用 `DockHandleMode`、`handle_mode`
 和 `setHandleMode()`，不再组合互相冲突的行为开关。
+
+## TabView 与 Qt 行为对齐
+
+`insertTab(index, ...)` 的负索引现在表示追加到末尾，与 `QTabWidget` 一致。
+旧代码若使用 `-1` 插入开头，请改用 `0`。
+`setCurrentIndex()` / `setCurrentWidget()` 允许程序选择禁用页，但不会将页面启用。
+用户导航及 `nextTab()` / `previousTab()` 仍跳过禁用页；若程序选择也应跳过，
+请先检查 `isTabEnabled()`。

@@ -90,12 +90,6 @@ pyside6-lrelease examples/translations/examples_zh_CN.ts \
   -qm examples/translations/examples_zh_CN.qm
 ```
 
-It includes interactive `ModernDialog`, `ModernMessageBox`, and side-by-side
-`ModernMenu`/native `QMenu` examples, plus **Combo box**, **Switch**,
-**Segmented control**, **Flyout**,
-**Choice controls**, **Line edit**, **Notifications**, **Toolbar**, **Tab widget**, and
-**Spin editors**, **More inputs**, and **Edge docking** pages.
-
 The **Line edit** page compares native `QLineEdit` and `ModernLineEdit` with
 placeholder, clear button, read-only, password, disabled, and RTL states.
 
@@ -106,6 +100,10 @@ text, rich text, shortcut, and font editors with native Qt controls.
 
 The **Choice controls** page compares native and modern check boxes and radio
 buttons, including checked, mixed, disabled, and right-to-left examples.
+
+The **Scroll bars** page compares native `QScrollBar` and `ModernScrollBar`
+inside matching scroll areas, with vertical and horizontal bars and a shared
+right-to-left toggle.
 
 The **Toolbar** page compares native `QToolBar` and `ModernToolBar` side by side,
 using matching actions and icon sizes. The shared `ModernSlider` for width,
@@ -154,9 +152,11 @@ The example places a `ModernMenuBar` in the title bar's left custom-widget area,
 keeps the centered title and window icon visible, and offers a theme button on
 the right. Narrow the window to try menu overflow and the navigation sidebar's
 automatic overlay mode.
-Open Settings to switch between System, Light, and Dark at runtime and toggle
-wallpaper colors independently. Existing pages, menus, and dialogs update without
-recreating the window. The tab example's text also inherits the active palette.
+Open Settings to switch between System, Light, and Dark at runtime, toggle the
+watercolor effect, and choose whether its colors follow the desktop wallpaper.
+The wallpaper color switch is available while watercolor is enabled. Windows 11
+also shows an acrylic setting. Existing pages, menus, and dialogs update without
+recreating the window.
 
 Run the multi-tab `ModernWindow` example without a menu bar:
 

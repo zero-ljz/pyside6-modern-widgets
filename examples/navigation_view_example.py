@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QScrollBar,
     QSpinBox,
     QStyle,
     QTabWidget,
@@ -189,6 +190,12 @@ class ExampleWindow(ModernWindow):
             group=native_group,
         )
         self.navigation.addPage(
+            self._create_scroll_bar_page(),
+            self.tr("Scroll bars"),
+            standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
+            group=native_group,
+        )
+        self.navigation.addPage(
             self._create_switch_page(),
             self.tr("Switch"),
             standard_icon(QStyle.StandardPixmap.SP_DialogYesButton),
@@ -198,12 +205,6 @@ class ExampleWindow(ModernWindow):
             self._create_segmented_control_page(),
             self.tr("Segmented control"),
             standard_icon(QStyle.StandardPixmap.SP_DialogApplyButton),
-            group=custom_group,
-        )
-        self.navigation.addPage(
-            self._create_scroll_bar_page(),
-            self.tr("Scroll bars"),
-            standard_icon(QStyle.StandardPixmap.SP_FileDialogListView),
             group=custom_group,
         )
         self.navigation.addPage(
@@ -564,39 +565,57 @@ class ExampleWindow(ModernWindow):
 
     def _create_scroll_bar_page(self) -> QWidget:
         page, layout = self._create_page(self.tr("Scroll bars"))
-        scroll = QScrollArea(page)
-        scroll.setObjectName("ScrollBarExampleArea")
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet(
-            "QScrollArea#ScrollBarExampleArea, "
-            "QScrollArea#ScrollBarExampleArea > QWidget, "
-            "QWidget#ScrollBarExampleContent { background: transparent; border: none; }"
-        )
-        scroll.setWidgetResizable(False)
-        scroll.setFixedHeight(250)
-        scroll.setVerticalScrollBar(ModernScrollBar(Qt.Orientation.Vertical))
-        scroll.setHorizontalScrollBar(ModernScrollBar(Qt.Orientation.Horizontal))
-        scroll.setCornerWidget(QWidget(scroll))
-        content = QWidget()
-        content.setObjectName("ScrollBarExampleContent")
-        content.setFixedSize(1100, 720)
-        content_layout = QVBoxLayout(content)
-        for index in range(24):
-            row = QWidget(content)
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.addWidget(QLabel(self.tr("Document %1").replace("%1", str(index + 1))))
-            row_layout.addStretch()
-            row_layout.addWidget(QLabel(self.tr("Ready")))
-            content_layout.addWidget(row)
-        scroll.setWidget(content)
-        layout.addWidget(scroll)
+        comparison = QGridLayout()
+        comparison.setHorizontalSpacing(24)
+        areas = []
+        for column, (heading, modern) in enumerate(
+            (("QScrollBar", False), ("ModernScrollBar", True))
+        ):
+            comparison.addWidget(QLabel(heading), 0, column)
+            scroll = QScrollArea(page)
+            scroll.setObjectName("ScrollBarExampleArea")
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setStyleSheet(
+                "QScrollArea#ScrollBarExampleArea, "
+                "QScrollArea#ScrollBarExampleArea > QWidget, "
+                "QWidget#ScrollBarExampleContent { background: transparent; border: none; }"
+            )
+            scroll.setWidgetResizable(False)
+            scroll.setFixedHeight(250)
+            if modern:
+                scroll.setVerticalScrollBar(ModernScrollBar(Qt.Orientation.Vertical))
+                scroll.setHorizontalScrollBar(ModernScrollBar(Qt.Orientation.Horizontal))
+            else:
+                scroll.setVerticalScrollBar(QScrollBar(Qt.Orientation.Vertical))
+                scroll.setHorizontalScrollBar(QScrollBar(Qt.Orientation.Horizontal))
+            scroll.setCornerWidget(QWidget(scroll))
+            content = QWidget()
+            content.setObjectName("ScrollBarExampleContent")
+            content.setFixedSize(1100, 720)
+            content_layout = QVBoxLayout(content)
+            for index in range(24):
+                row = QWidget(content)
+                row_layout = QHBoxLayout(row)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.addWidget(QLabel(self.tr("Document %1").replace("%1", str(index + 1))))
+                row_layout.addStretch()
+                row_layout.addWidget(QLabel(self.tr("Ready")))
+                content_layout.addWidget(row)
+            scroll.setWidget(content)
+            comparison.addWidget(scroll, 1, column)
+            comparison.setColumnStretch(column, 1)
+            areas.append(scroll)
+        layout.addLayout(comparison)
         rtl = QCheckBox(self.tr("Right-to-left layout"))
-        rtl.toggled.connect(
-            lambda checked: scroll.setLayoutDirection(
+
+        def set_direction(checked: bool) -> None:
+            direction = (
                 Qt.LayoutDirection.RightToLeft if checked else Qt.LayoutDirection.LeftToRight
             )
-        )
+            for area in areas:
+                area.setLayoutDirection(direction)
+
+        rtl.toggled.connect(set_direction)
         layout.addWidget(rtl)
         layout.addStretch()
         return page

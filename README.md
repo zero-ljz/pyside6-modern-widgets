@@ -1,5 +1,7 @@
 # pyside6-modern-widgets
 
+[简体中文](README.zh-CN.md)
+
 Cross-platform desktop widgets for PySide6. The package provides frameless
 window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 
@@ -87,36 +89,20 @@ keeping themed Qt message content and buttons.
 
 ## Installation
 
+The 0.6.0 changes described in this checkout are not published yet. To use this
+version from the repository, install it in editable mode with `pip install -e .`.
+The command below installs the latest published release.
+
 ```shell
 pip install pyside6-modern-widgets
 ```
 
-## Upgrading to 0.6.0
+## Upcoming 0.6.0
 
-Version 0.6.0 standardizes theme inheritance, selection signals, page ownership,
-reversible title-bar visibility, and typed widget access. This is a breaking
-release: renamed APIs and parameters have no compatibility aliases.
-Read the [0.6.0 migration guide](docs/migration-0.6.md) before upgrading.
-
-Changes after 0.6.0, including the sidebar item ownership API, are described in
-the [next-release migration guide](docs/migration-next.md).
-
-## Upgrading from 0.4.x
-
-Version 0.5.0 adds modern dialogs, message boxes, menus, and menu bars, plus
-independent title-bar text/icon visibility and centered title text. It also
-improves Windows maximize/restore behavior and content-aware navigation layout.
-See the [changelog](CHANGELOG.md#050---2026-09-11) for the full release notes.
-
-When upgrading from 0.4.x, remove uses of `WatercolorStyle`,
-`theme_with_watercolor_style`, `ORIGINAL_LIGHT_THEME`, and `ORIGINAL_DARK_THEME`.
-These exports and the title-bar Theme Style submenu have been removed. Widgets
-now follow desktop-wallpaper colors by default; `LIGHT_THEME`, `DARK_THEME`,
-`ModernTheme`, and widget-level `setTheme()` remain available for local overrides.
-
-Automatic navigation overlay thresholds now depend on the current page's
-minimum width instead of fixed window widths. Use `setAutoSidebarOverlay(False)`
-and `setSidebarOverlay()` if your application needs explicit control.
+The upcoming 0.6.0 release standardizes theme inheritance, selection signals,
+page and sidebar item ownership, reversible title-bar visibility, and typed widget
+access. Renamed APIs and parameters have no compatibility aliases. Read the
+[0.6.0 migration guide](docs/migration-0.6.md) before upgrading.
 
 ## PyInstaller
 
@@ -616,8 +602,7 @@ The 4-pixel track and circular thumb are painted with the current theme and acti
 `QPalette.Accent` color. `setTheme(DARK_THEME)` overrides the theme locally;
 `setTheme(None)` resumes inheritance. Horizontal and vertical, hover, pressed,
 focus, and disabled appearances are supported. Set an accessible name when no
-visible label is associated with the slider. The navigation example uses it
-for tooltip delays and toolbar width.
+visible label is associated with the slider.
 
 ## Modern scroll bar
 
@@ -638,7 +623,8 @@ area.setHorizontalScrollBar(ModernScrollBar(Qt.Orientation.Horizontal))
 ```
 
 The bar inherits the nearest modern theme, or accepts a local `setTheme(...)`
-override. The navigation example includes both orientations and an RTL toggle.
+override. The navigation example compares native and modern scroll bars in both
+orientations, with a shared RTL toggle.
 
 ## Modern segmented control
 
@@ -881,20 +867,6 @@ Desktop action buttons accept mouse input without activating the card; use in-wi
 delivery for Tab/Space/Enter/Escape keyboard interaction. Wayland requires a host
 QWidget and uses the in-window fallback; `desktop=True` there raises `ValueError`.
 Desktop positioning/stacking elsewhere remains subject to window-manager policy.
-
-The handle API intentionally replaces the earlier ID API before adoption:
-
-| Earlier API | Handle API |
-| --- | --- |
-| `notify(..., notification_id=...)` / same-ID replacement | Create once and keep the returned handle; call `handle.update(...)`. |
-| `duration=0`, `default_duration` | `timeout_ms=None`, `default_timeout_ms`. |
-| `actions={"open": "Open"}` | `actions=[NotificationAction("open", "Open")]`. |
-| `updateNotification(id, ...)`, `dismiss(id)` | `handle.update(...)`, `handle.dismiss()`. |
-| `pause(id)` / `resume(id)` | `handle.pauseTimeout()` / `handle.resumeTimeout()`. |
-| `setEnabled(False)` | `setDeliveryPaused(True)`. |
-| `notification(id)` | `handle.widget()` for explicit low-level access; `handle.snapshot()` for data. |
-| ID lists and signals | `notifications(state)` returns handles; signals carry those same handle objects. |
-| `max_queued` with oldest-queued eviction | `capacity` bounds all accepted lifetimes and explicitly rejects excess submissions. |
 
 Run `python examples/navigation_view_example.py` and open **Notifications** for
 severity samples, placement, queued delivery, persistent cards, long messages,
@@ -1320,13 +1292,8 @@ manager.setMode(mode)
 manager.modeChanged.connect(lambda mode: settings.setValue("appearance/mode", mode.value))
 ```
 
-The previous manager-level `setTheme()`, `setFollowsSystemTheme()`, and
-`followsSystemTheme()` APIs are removed. Use `setMode()` and `setThemes()`;
-widget-level `setTheme()` remains the local-override API.
-
 `TabView` uses the standard Qt argument order: `addTab(widget, text)` or
-`addTab(widget, icon, text)`. The former reverse `(widget, text, icon)` order is
-not supported.
+`addTab(widget, icon, text)`.
 
 Like `QTabWidget`, `TabView.insertTab()` appends when the index is negative or
 beyond the current count. Programmatic `setCurrentIndex()` / `setCurrentWidget()`

@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+These changes are planned for 0.6.0. The release intentionally breaks the APIs
+listed in the [migration guide](docs/migration-0.6.md); no compatibility aliases
+are retained.
+
 ### Added
 
 - Add `ModernCheckBox` and `ModernRadioButton` with themed indicators, plus
@@ -14,53 +18,17 @@ All notable changes to this project are documented in this file.
 - Add `ModernToolButton`, with native Fusion sizing, action synchronization,
   popup modes and RTL hit regions, plus themed checked, hover, press, focus and
   disabled states. Add native/modern tool-button comparisons to the gallery.
-- Support named navigation groups in `NavigationSidebar.addItem()` and
-  `NavigationView.addPage()`, with headings that hide in collapsed mode.
 - Add `ModernPushButton`, retaining native `QPushButton` behavior and Fusion
   geometry with themed hover, press, focus, disabled, default and checked states.
   Add a native/modern comparison page to the navigation example.
+- Support named navigation groups in `NavigationSidebar.addItem()` and
+  `NavigationView.addPage()`, with headings that hide in collapsed mode.
 - Add per-component `acrylic` controls for Windows 11 menus, combo popups,
   flyouts, notifications, menu bars, and toolbars, with an opaque fallback on
   other platforms.
 - Add `watercolor` controls for `ModernWindow`, `ModernDialog`, and
   `NavigationSidebar` overlays. The navigation gallery exposes separate
   watercolor and wallpaper color settings.
-
-### Changed
-
-- Make `NavigationSidebar.removeItem()` retain Qt ownership and return None.
-  Add `takeItem()` to return the hidden button and transfer ownership to the
-  caller, matching page container removal. See the
-  [next-release migration guide](docs/migration-next.md) for this breaking change.
-
-### Fixed
-
-- Restore the `ModernKeySequenceEdit` palette after theme changes and align
-  `ModernScrollBar` arrows with its thumb.
-- Keep compact `ModernFlyout` content sized correctly and match menu check
-  indicators to the modern choice controls.
-- Restore themed palettes after stylesheet repolishing and appearance changes;
-  avoid a translucent `ModernMessageBox` surface on Linux.
-- Paint `ModernToolButton` direction and menu arrows as outlined, round-ended
-  chevrons consistent with the other modern controls, retaining native geometry.
-- Match Qt tab behavior when inserting at a negative index (append) and when
-  programmatically selecting a disabled tab (select without enabling it).
-- Synchronize sidebar selection and `currentChanged` when a borrowed button is
-  checked programmatically; removed buttons no longer trigger sidebar activation.
-- Keep menus created by `ModernMenuBar` owned by the menu bar, so moving it to
-  another window preserves its menus when the old window is destroyed.
-- Preserve navigation selections made in selection callbacks instead of restoring
-  the outer call's stale index or publishing stale selection notifications.
-- Reset standalone notification close reasons when shown again, so a normal close
-  does not repeat the reason from a previous dismissal.
-
-## [0.6.0] - 2026-09-26
-
-This release intentionally breaks the APIs listed in the
-[migration guide](docs/migration-0.6.md); no compatibility aliases are retained.
-
-### Added
-
 - Add effective `themeChanged` signals and shared ancestor theme tracking,
   including hidden widgets and changes to parent hierarchies.
 - Add reversible `setTitleBarVisible()` / `isTitleBarVisible()` while preserving
@@ -86,6 +54,9 @@ This release intentionally breaks the APIs listed in the
 
 ### Changed
 
+- Make `NavigationSidebar.removeItem()` retain Qt ownership and return None.
+  Add `takeItem()` to return the hidden button and transfer ownership to the
+  caller, matching page container removal.
 - Resolve all component theme overrides through the nearest themed ancestor,
   falling back to the global manager. `setTheme(None)` restores inheritance.
 - Make `NavigationView.removePage()` retain Qt ownership and return None, matching
@@ -126,6 +97,24 @@ This release intentionally breaks the APIs listed in the
 
 ### Fixed
 
+- Restore the `ModernKeySequenceEdit` palette after theme changes and align
+  `ModernScrollBar` arrows with its thumb.
+- Keep compact `ModernFlyout` content sized correctly and match menu check
+  indicators to the modern choice controls.
+- Restore themed palettes after stylesheet repolishing and appearance changes;
+  avoid a translucent `ModernMessageBox` surface on Linux.
+- Paint `ModernToolButton` direction and menu arrows as outlined, round-ended
+  chevrons consistent with the other modern controls, retaining native geometry.
+- Match Qt tab behavior when inserting at a negative index (append) and when
+  programmatically selecting a disabled tab (select without enabling it).
+- Synchronize sidebar selection and `currentChanged` when a borrowed button is
+  checked programmatically; removed buttons no longer trigger sidebar activation.
+- Keep menus created by `ModernMenuBar` owned by the menu bar, so moving it to
+  another window preserves its menus when the old window is destroyed.
+- Preserve navigation selections made in selection callbacks instead of restoring
+  the outer call's stale index or publishing stale selection notifications.
+- Reset standalone notification close reasons when shown again, so a normal close
+  does not repeat the reason from a previous dismissal.
 - Emit `NavigationSidebar.currentChanged` when removing an earlier item shifts
   the selected index, after the sidebar state has been updated.
 - Propagate window metrics to toolbars created by `addToolBar(title)` and their
@@ -634,8 +623,7 @@ This release intentionally breaks the APIs listed in the
 - Kept overlay expansion from moving content or increasing the top-level
   window width.
 
-[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.13...v0.6.0
+[Unreleased]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.13...HEAD
 [0.5.13]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.12...v0.5.13
 [0.5.12]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/zero-ljz/pyside6-modern-widgets/compare/v0.5.10...v0.5.11
