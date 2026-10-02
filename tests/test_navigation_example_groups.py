@@ -16,6 +16,7 @@ from pyside6_modern_widgets import (
     ModernMenuBar,
     ModernMessageBox,
     ModernSegmentedControl,
+    ModernSwitch,
     ModernTabWidget,
     ModernToolBar,
     NavigationPosition,
@@ -60,6 +61,9 @@ def test_gallery_navigation_groups(language, native_title, custom_title, segment
         assert sidebar.currentIndex() == window.navigation.currentIndex() == 0
         assert window.acrylic_switch.text() == (
             "启用亚克力背景" if language == "zh_CN" else "Enable acrylic background"
+        )
+        assert window.watercolor_switch.text() == (
+            "启用水彩背景" if language == "zh_CN" else "Enable watercolor background"
         )
     finally:
         window.deleteLater()
@@ -151,6 +155,33 @@ def test_settings_acrylic_switch_is_only_shown_on_windows_11(monkeypatch, suppor
     window = ExampleWindow()
     try:
         assert window.acrylic_switch.isHidden() is not supported
+    finally:
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_settings_watercolor_switch_updates_window_and_navigation_overlay():
+    window = ExampleWindow()
+    try:
+        settings_layout = window.navigation.widget(19).layout()
+        assert settings_layout.indexOf(window.watercolor_switch) < settings_layout.indexOf(
+            window.wallpaper_switch
+        )
+        assert window.watercolor_switch.isChecked()
+        assert isinstance(window.wallpaper_switch, ModernSwitch)
+        assert window.wallpaper_switch.isEnabled()
+        wallpaper_selected = window.wallpaper_switch.isChecked()
+        window.watercolor_switch.setChecked(False)
+        assert not window.isWatercolorEnabled()
+        assert not window.navigation.sidebar.isWatercolorEnabled()
+        assert not window.wallpaper_switch.isEnabled()
+        window.wallpaper_switch.click()
+        assert window.wallpaper_switch.isChecked() == wallpaper_selected
+        window.watercolor_switch.setChecked(True)
+        assert window.isWatercolorEnabled()
+        assert window.navigation.sidebar.isWatercolorEnabled()
+        assert window.wallpaper_switch.isEnabled()
+        assert window.wallpaper_switch.isChecked() == wallpaper_selected
     finally:
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

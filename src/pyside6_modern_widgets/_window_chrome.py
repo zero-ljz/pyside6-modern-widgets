@@ -580,6 +580,15 @@ class BackgroundFrame(QFrame):
         self._invalidate_watercolor_cache()
         self.update()
 
+    def setSolidSurface(self, solid: bool) -> None:
+        solid = bool(solid)
+        if solid == self._solid_surface:
+            return
+        self._solid_surface = solid
+        if solid:
+            self._invalidate_watercolor_cache()
+        self.update()
+
     def setCornerRadius(self, radius: int) -> None:
         self._corner_radius = radius
         self.update()
@@ -587,7 +596,7 @@ class BackgroundFrame(QFrame):
     def setLiveResize(self, active: bool) -> None:
         if active == self._live_resize:
             return
-        if active and self.isActiveWindow():
+        if active and not self._solid_surface and self.isActiveWindow():
             self._ensure_watercolor_cache()
         self._live_resize = active
         if not active:

@@ -103,6 +103,68 @@ def test_window_background_tracks_activation_and_inactive_theme_changes(
         other.close()
 
 
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_window_watercolor_switch_uses_theme_solid_surface(theme) -> None:
+    window = ModernWindow(theme=theme, watercolor=False)
+    other = QWidget()
+    try:
+        window.resize(480, 320)
+        window.show()
+        other.show()
+        _activate(window)
+        solid = QColor(theme.surface_alternate)
+        assert not window.isWatercolorEnabled()
+        assert _surface_colors(window.frame) == (solid, solid)
+
+        _activate(other)
+        assert _surface_colors(window.frame) == (solid, solid)
+
+        window.setWatercolorEnabled(True)
+        _activate(window)
+        active_colors = _surface_colors(window.frame)
+        assert window.isWatercolorEnabled()
+        assert active_colors[0] != active_colors[1]
+
+        window.setWatercolorEnabled(False)
+        _APP.processEvents()
+        assert _surface_colors(window.frame) == (solid, solid)
+        assert window.frame._watercolor_cache is None
+
+        next_theme = DARK_THEME if theme is LIGHT_THEME else LIGHT_THEME
+        window.setTheme(next_theme)
+        _APP.processEvents()
+        next_solid = QColor(next_theme.surface_alternate)
+        assert _surface_colors(window.frame) == (next_solid, next_solid)
+    finally:
+        window.close()
+        other.close()
+
+
+def test_navigation_overlay_watercolor_switch_uses_solid_surface() -> None:
+    window = ModernWindow(theme=LIGHT_THEME)
+    navigation = NavigationView(theme=LIGHT_THEME)
+    navigation.setAutoSidebarOverlay(False)
+    window.setCentralWidget(navigation)
+    navigation.setSidebarOverlay(True)
+    navigation.sidebar.setCollapsed(False, animated=False)
+    try:
+        window.resize(480, 320)
+        window.show()
+        _activate(window)
+        sidebar = navigation.sidebar
+        assert _surface_colors(sidebar)[0] != _surface_colors(sidebar)[1]
+        sidebar.setWatercolorEnabled(False)
+        _APP.processEvents()
+        solid = QColor(LIGHT_THEME.surface_alternate)
+        assert not sidebar.isWatercolorEnabled()
+        assert _surface_colors(sidebar) == (solid, solid)
+        sidebar.setWatercolorEnabled(True)
+        _APP.processEvents()
+        assert _surface_colors(sidebar)[0] != _surface_colors(sidebar)[1]
+    finally:
+        window.close()
+
+
 @pytest.mark.parametrize("overlay", [False, True], ids=["window", "sidebar"])
 @pytest.mark.parametrize(
     "theme, inactive_color",

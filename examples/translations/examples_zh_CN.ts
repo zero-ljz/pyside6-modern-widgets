@@ -1170,6 +1170,10 @@
         <translation>启用亚克力背景</translation>
     </message>
     <message>
+        <source>Enable watercolor background</source>
+        <translation>启用水彩背景</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="1369"/>
         <source>Toolbars</source>
         <translation>工具栏</translation>

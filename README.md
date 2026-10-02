@@ -1201,6 +1201,13 @@ discards pending results. Re-enabling can use cached colors while requesting a
 fresh sample. If no wallpaper is available, the configured base theme is used.
 Sampling always resolves against the latest mode and base themes.
 
+`ModernWindow` also accepts `watercolor=False` and exposes
+`setWatercolorEnabled(bool)` / `isWatercolorEnabled()` to use the theme's solid
+`surface_alternate` color instead. `NavigationSidebar` supports the same option
+for its overlay surface. This choice is independent of wallpaper color sampling;
+the navigation gallery has a separate watercolor switch in Settings. Its wallpaper
+color option can be changed only while watercolor is enabled.
+
 Wallpaper discovery, metadata checks, and sampling run off the GUI thread. A file
 watcher and a one-second metadata poll detect changes; only changed images are
 resampled. Repeated refresh requests are coalesced. Transient query errors retain

@@ -311,6 +311,7 @@ class ModernWindow(QWidget):
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        watercolor: bool = True,
     ) -> None:
         self._uses_native_macos_title_bar = uses_macos_native_title_bar()
         self._macos_title_bar_configured: bool | None = None
@@ -325,6 +326,7 @@ class ModernWindow(QWidget):
         self._theme_override = theme
         self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
+        self._watercolor_enabled = bool(watercolor)
         QWidget.setWindowFlag(
             self,
             Qt.WindowType.FramelessWindowHint,
@@ -452,6 +454,7 @@ class ModernWindow(QWidget):
             theme=self._theme,
             corner_radius=self._surface_policy.paint_corner_radius(self._corner_radius),
             opaque_surface=self._surface_policy.opaque_surface,
+            solid_surface=not self._watercolor_enabled,
         )
         self.frame.setObjectName("backgroundFrame")
         self.frame.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -750,6 +753,16 @@ class ModernWindow(QWidget):
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
+
+    def isWatercolorEnabled(self) -> bool:
+        return self._watercolor_enabled
+
+    def setWatercolorEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._watercolor_enabled:
+            return
+        self._watercolor_enabled = enabled
+        self.frame.setSolidSurface(not enabled)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
         """Override locally; None restores ancestor/global theme inheritance."""

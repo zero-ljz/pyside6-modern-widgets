@@ -267,11 +267,13 @@ class NavigationSidebar(QWidget):
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        watercolor: bool = True,
     ) -> None:
         super().__init__(parent)
         self._theme_override = theme
         self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
+        self._watercolor_enabled = bool(watercolor)
         self.setObjectName("ModernNavigationSidebar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(_sidebar_style(self._theme, self._metrics))
@@ -384,7 +386,11 @@ class NavigationSidebar(QWidget):
             key = (position, group)
             section = self._groups.get(key)
             if section is None:
-                container = self.scrollContent if position is NavigationPosition.TOP else self._bottom_container
+                container = (
+                    self.scrollContent
+                    if position is NavigationPosition.TOP
+                    else self._bottom_container
+                )
                 section = _NavigationGroup(group, container)
                 section.setCollapsed(self._collapsed)
                 self._groups[key] = section
@@ -537,13 +543,16 @@ class NavigationSidebar(QWidget):
 
         parent = self.parentWidget()
         surface_width = parent.width() if parent is not None else self.width()
-        opacity = self._activation_transition.opacity
-        if opacity > 0:
-            paint_watercolor(painter, QRectF(self.rect()), self._theme, surface_width)
-        if opacity < 1:
-            painter.setOpacity(1 - opacity)
-            painter.fillRect(self.rect(), inactive_surface_color(self._theme))
-            painter.setOpacity(1)
+        if self._watercolor_enabled:
+            opacity = self._activation_transition.opacity
+            if opacity > 0:
+                paint_watercolor(painter, QRectF(self.rect()), self._theme, surface_width)
+            if opacity < 1:
+                painter.setOpacity(1 - opacity)
+                painter.fillRect(self.rect(), inactive_surface_color(self._theme))
+                painter.setOpacity(1)
+        else:
+            painter.fillRect(self.rect(), QColor(self._theme.surface_alternate))
 
         if not self._collapsed:
             border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
@@ -628,6 +637,16 @@ class NavigationSidebar(QWidget):
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
+
+    def isWatercolorEnabled(self) -> bool:
+        return self._watercolor_enabled
+
+    def setWatercolorEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._watercolor_enabled:
+            return
+        self._watercolor_enabled = enabled
+        self.update()
 
     def setTheme(self, theme: ModernTheme | None) -> None:
         """Override locally; None restores ancestor/global theme inheritance."""

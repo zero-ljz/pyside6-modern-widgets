@@ -1349,11 +1349,16 @@ class ExampleWindow(ModernWindow):
         manager.modeChanged.connect(self._sync_theme_mode)
         layout.addWidget(self.theme_mode_combo)
 
-        self.wallpaper_checkbox = QCheckBox(self.tr("Use desktop wallpaper colors"))
-        self.wallpaper_checkbox.setChecked(manager.wallpaperEnabled())
-        self.wallpaper_checkbox.toggled.connect(manager.setWallpaperEnabled)
-        manager.wallpaperEnabledChanged.connect(self.wallpaper_checkbox.setChecked)
-        layout.addWidget(self.wallpaper_checkbox)
+        self.watercolor_switch = ModernSwitch(self.tr("Enable watercolor background"))
+        self.watercolor_switch.setChecked(self.isWatercolorEnabled())
+        self.watercolor_switch.toggled.connect(self._set_watercolor_enabled)
+        layout.addWidget(self.watercolor_switch)
+        self.wallpaper_switch = ModernSwitch(self.tr("Use desktop wallpaper colors"))
+        self.wallpaper_switch.setChecked(manager.wallpaperEnabled())
+        self.wallpaper_switch.setEnabled(self.isWatercolorEnabled())
+        self.wallpaper_switch.toggled.connect(manager.setWallpaperEnabled)
+        manager.wallpaperEnabledChanged.connect(self.wallpaper_switch.setChecked)
+        layout.addWidget(self.wallpaper_switch)
         self.acrylic_switch = ModernSwitch(self.tr("Enable acrylic background"))
         self.acrylic_switch.setChecked(self._acrylic_enabled)
         self.acrylic_switch.toggled.connect(self._set_acrylic_enabled)
@@ -1361,6 +1366,11 @@ class ExampleWindow(ModernWindow):
         self.acrylic_switch.setVisible(_supports_windows_acrylic())
         layout.addStretch()
         return page
+
+    def _set_watercolor_enabled(self, enabled: bool) -> None:
+        self.setWatercolorEnabled(enabled)
+        self.navigation.sidebar.setWatercolorEnabled(enabled)
+        self.wallpaper_switch.setEnabled(enabled)
 
     def _set_acrylic_enabled(self, enabled: bool) -> None:
         self._acrylic_enabled = enabled
