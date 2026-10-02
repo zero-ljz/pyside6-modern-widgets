@@ -13,6 +13,7 @@ from .theme import ModernTheme, theme_manager
 
 class ThemeBinding(QObject):
     changed = Signal(object)
+    ancestryChanged = Signal()
 
     def __init__(
         self,
@@ -54,6 +55,9 @@ class ThemeBinding(QObject):
                 self._connections.append(signal.connect(self.refresh))
             ancestor = ancestor.parentWidget()
         self.refresh()
+        if isValid(self) and self._active:
+            # Ownership can change even when the resolved theme stays the same.
+            self.ancestryChanged.emit()
 
     def _disconnect_ancestors(self) -> None:
         for connection in self._connections:

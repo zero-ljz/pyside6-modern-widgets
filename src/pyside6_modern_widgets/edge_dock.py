@@ -303,7 +303,7 @@ class EdgeDockController(QObject):
         if not target.isWindow():
             raise ValueError("target must be a top-level widget")
         surface = target if drag_widget is None else drag_widget
-        if surface is not target and (surface.isWindow() or not target.isAncestorOf(surface)):
+        if surface.window() is not target:
             raise ValueError("drag_widget must belong to target")
         for child in target.children():
             if isinstance(child, EdgeDockController) and child._state != DockState.DETACHED:
@@ -566,14 +566,13 @@ class EdgeDockController(QObject):
         """Bind a drag surface; None selects the target's empty space.
 
         Destroying the surface suspends dragging until another surface is bound.
+        Reparenting it outside the target suspends dragging until it returns.
         Docking and auto-hide remain available in the meantime.
         """
         if self._state == DockState.DETACHED:
             return
         surface = self._target if widget is None else widget
-        if surface is not self._target and (
-            surface.isWindow() or not self._target.isAncestorOf(surface)
-        ):
+        if surface.window() is not self._target:
             raise ValueError("drag_widget must belong to target")
         self._finish_drag()
         self._snap_timer.stop()
@@ -601,6 +600,13 @@ class EdgeDockController(QObject):
         self._surface_connection = None
         self._finish_drag()
         self._snap_timer.stop()
+
+    def _owns_drag_surface(self) -> bool:
+        return (
+            self._surface is not None
+            and isValid(self._surface)
+            and self._surface.window() is self._target
+        )
 
     def dismiss(self) -> bool:
         """Hide the target and its handle, clearing docking without closing it.
@@ -1075,14 +1081,17 @@ class EdgeDockController(QObject):
     def _complete_system_drag(self) -> None:
         if not self._system_move:
             return
-        moved = self._target.pos() != self._start_pos
+        moved = self._owns_drag_surface() and self._target.pos() != self._start_pos
         self._finish_drag()
         # Let native DPI changes and Qt's release handler settle before snapping.
         if moved:
             self._snap_timer.start(0)
 
     def _check_drag_finished(self) -> None:
-        if not self._buttons_pressed(left_only=True):
+        if not self._owns_drag_surface():
+            self._finish_drag()
+            self._snap_timer.stop()
+        elif not self._buttons_pressed(left_only=True):
             self._complete_system_drag()
 
     @staticmethod
@@ -1306,6 +1315,9 @@ class EdgeDockController(QObject):
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if not self.isEnabled():
             return False
+        if self._press is not None and not self._owns_drag_surface():
+            self._finish_drag()
+            self._snap_timer.stop()
         if watched is self._handle and self.handleMode() == DockHandleMode.DRAG_OR_CLICK:
             return self._handle_event(event)
         kind = event.type()
@@ -1338,6 +1350,8 @@ class EdgeDockController(QObject):
             ):
                 self._transition(DockState.FLOATING)
         if self._surface is not None and watched is self._surface:
+            if not self._owns_drag_surface():
+                return False
             if kind == QEvent.Type.Enter:
                 self._hide_timer.stop()
             elif kind == QEvent.Type.UngrabMouse and not self._system_move:

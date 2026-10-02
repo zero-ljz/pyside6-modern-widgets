@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QLineEdit, QPushButton, QVBoxLayout, QWidget
@@ -261,6 +261,100 @@ def test_drag_region_must_belong_to_window() -> None:
         window.setDragRegion(foreign)
     foreign.close()
     window.close()
+
+
+@pytest.mark.parametrize("move_ancestor", [False, True])
+@pytest.mark.parametrize("visible_during_transfer", [False, True])
+def test_transferred_drag_regions_suspend_and_can_be_disabled(
+    monkeypatch, move_ancestor, visible_during_transfer
+):
+    class PressWidget(QWidget):
+        def mousePressEvent(self, event):
+            presses.append(True)
+            event.accept()
+
+    window = ModernWindow(None, Qt.WindowType.Tool)
+    destination = QWidget()
+    window.resize(400, 300)
+    container = QWidget(window)
+    container.setGeometry(30, 60, 250, 180)
+    region = PressWidget(container)
+    region.setGeometry(20, 20, 120, 80)
+    window.setDragRegion(region)
+    moves, presses = [], []
+    monkeypatch.setattr(window, "startSystemMove", lambda _: moves.append(True) or True)
+    moved = container if move_ancestor else region
+    original_parent = moved.parentWidget()
+    if visible_during_transfer:
+        window.show()
+        _APP.processEvents()
+    moved.setParent(destination)
+    destination.show()
+    moved.show()
+    window.show()
+    _APP.processEvents()
+    try:
+        QTest.mouseClick(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+        assert moves == []
+        assert presses == [True]
+
+        moved.setParent(original_parent)
+        moved.show()
+        QTest.mouseClick(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+        assert moves == [True]
+
+        moved.setParent(destination)
+        window.setDragRegion(region, False)
+        moved.setParent(original_parent)
+        moved.show()
+        QTest.mouseClick(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+        assert moves == [True]
+        assert presses == [True, True]
+    finally:
+        window.close()
+        destination.close()
+        window.deleteLater()
+        destination.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("action", ["move_region", "move_ancestor", "disable", "destroy"])
+def test_drag_region_lifecycle_cancels_an_active_fallback_move(monkeypatch, action):
+    window = ModernWindow(None, Qt.WindowType.Tool)
+    destination = QWidget()
+    window.resize(400, 300)
+    container = QWidget(window)
+    container.setGeometry(30, 60, 250, 180)
+    region = QWidget(container)
+    region.setGeometry(20, 20, 120, 80)
+    window.setDragRegion(region)
+    window.show()
+    _APP.processEvents()
+    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
+    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: False)
+    try:
+        QTest.mousePress(region, Qt.MouseButton.LeftButton, pos=QPoint(20, 20))
+        assert window._drag_move_offset is not None
+        position = window.pos()
+        if action == "move_region":
+            region.setParent(destination)
+        elif action == "move_ancestor":
+            container.setParent(destination)
+        elif action == "disable":
+            window.setDragRegion(region, False)
+        else:
+            region.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        QTest.mouseMove(window, QPoint(220, 180))
+        QTest.mouseRelease(window, Qt.MouseButton.LeftButton, pos=QPoint(220, 180))
+        assert window.pos() == position
+        assert window._drag_move_offset is None
+    finally:
+        window.close()
+        destination.close()
+        window.deleteLater()
+        destination.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.mark.parametrize(

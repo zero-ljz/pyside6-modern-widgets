@@ -607,13 +607,10 @@ class ModernNotification(QWidget):
         ):
             self._sync_icon()
             self._changed()
-        if (
-            hasattr(self, "_metrics")
-            and self.isVisible()
-            and event.type() == QEvent.Type.PaletteChange
-        ):
+        if hasattr(self, "_progress_bar") and event.type() == QEvent.Type.PaletteChange:
             self._sync_progress_style()
-            self._refresh_surface()
+            if self.isVisible():
+                self._refresh_surface()
 
     def _connect_screen_change_signal(self) -> None:
         window_handle = self.windowHandle()

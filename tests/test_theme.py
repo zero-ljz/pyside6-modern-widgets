@@ -97,6 +97,56 @@ def test_mode_signals_are_distinct_and_emit_after_state_is_applied(theme_manager
     assert themes == [DARK_THEME]
 
 
+@pytest.mark.parametrize("observer_first", [False, True])
+@pytest.mark.parametrize("callback_source", ["palette", "theme", "mode"])
+def test_reentrant_mode_change_does_not_publish_superseded_state(
+    theme_manager_instance, callback_source, observer_first
+):
+    manager = theme_manager_instance
+    manager.setMode(ThemeMode.LIGHT)
+    modes, themes = [], []
+
+    def observe():
+        manager.modeChanged.connect(modes.append)
+        manager.themeChanged.connect(themes.append)
+
+    if observer_first:
+        observe()
+
+    def restore_light(value):
+        if callback_source == "palette":
+            dark = value.color(QPalette.ColorRole.Window) == QColor(DARK_THEME.surface)
+        elif callback_source == "theme":
+            dark = value == DARK_THEME
+        else:
+            dark = value == ThemeMode.DARK
+        if dark:
+            manager.setMode(ThemeMode.LIGHT)
+
+    signal = {
+        "palette": _APP.paletteChanged,
+        "theme": manager.themeChanged,
+        "mode": manager.modeChanged,
+    }[callback_source]
+    connection = signal.connect(restore_light)
+    if not observer_first:
+        observe()
+    try:
+        manager.setMode(ThemeMode.DARK)
+        assert manager.mode() == ThemeMode.LIGHT
+        assert manager.theme() == LIGHT_THEME
+        assert _APP.palette().color(QPalette.ColorRole.Window) == QColor(LIGHT_THEME.surface)
+        assert themes[-1] == manager.theme()
+        assert modes == (
+            [ThemeMode.DARK, ThemeMode.LIGHT] if callback_source == "mode" else [ThemeMode.LIGHT]
+        )
+        assert themes == (
+            [LIGHT_THEME] if callback_source == "palette" else [DARK_THEME, LIGHT_THEME]
+        )
+    finally:
+        signal.disconnect(connection)
+
+
 def test_custom_theme_pair_survives_mode_switches(theme_manager_instance, system_appearance):
     manager = theme_manager_instance
     light = replace(LIGHT_THEME, name="brand-day", accent="#123456")

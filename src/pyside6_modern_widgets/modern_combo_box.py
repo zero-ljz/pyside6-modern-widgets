@@ -357,7 +357,8 @@ class _ComboAppearance(_ComboBase):
         self._styled_theme: ModernTheme | None = None
         self._applying_theme = False
         self._palette_override = QPalette()
-        self._default_line_edit: QLineEdit | None = None
+        # QFontComboBox already creates its default editor in the Qt constructor.
+        self._default_line_edit: QLineEdit | None = self.lineEdit()
         self._popup: QWidget | None = None
         self._popup_margins: QMargins | None = None
         self._modern_style = _ComboBoxStyle(self)

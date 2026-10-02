@@ -141,6 +141,7 @@ class ModernToolBar(QToolBar):
         self._apply_theme()
         self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
         self._theme_binding.changed.connect(self.themeChanged.emit)
+        self._theme_binding.ancestryChanged.connect(self._apply_theme)
 
     def isAcrylicEnabled(self) -> bool:
         return self._acrylic_enabled

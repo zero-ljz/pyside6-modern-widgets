@@ -188,6 +188,45 @@ def test_theme_inheritance_override_reparenting_and_toolbar_styles_do_not_style_
         second.deleteLater()
 
 
+@pytest.mark.parametrize("local_theme", [None, DARK_THEME])
+def test_overflow_survives_ancestor_transfer_before_old_window_is_deleted(
+    theme_manager_instance, local_theme
+):
+    first, second = QWidget(), QWidget()
+    page = QWidget(first)
+    container = QWidget(page)
+    toolbar = ModernToolBar(container, theme=local_theme)
+    toolbar.setFixedWidth(120)
+    for index in range(6):
+        toolbar.addAction(f"Action {index}")
+    popup = toolbar.overflowMenu()
+    try:
+        # Moving an ancestor does not send ParentChange to the toolbar itself.
+        # Delete the old owner before any queued layout/show events can run.
+        page.setParent(second)
+        first.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert isValid(toolbar) and isValid(popup)
+        assert popup.parentWidget() is second
+        toolbar.setAcrylicEnabled(False)
+        second.show()
+        page.show()
+        container.show()
+        toolbar.show()
+        settle()
+        assert toolbar.actions()[-1] in inspect_popup(toolbar)
+        toolbar.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert not isValid(popup)
+    finally:
+        if isValid(first):
+            first.deleteLater()
+        second.close()
+        second.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 def test_widget_actions_create_popup_instances_without_stealing_default_widgets():
     class SearchAction(QWidgetAction):
         def createWidget(self, parent):

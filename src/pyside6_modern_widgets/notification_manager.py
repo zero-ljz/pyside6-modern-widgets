@@ -601,7 +601,7 @@ class NotificationManager(QObject):
                 card.setFont(host.font())
                 card.setLayoutDirection(host.layoutDirection())
             card._inherited_theme = self.theme()
-            card._apply_theme()
+            card._theme_binding.refresh()
             card._managed = True
             timer = QTimer(self)
             timer.setSingleShot(True)

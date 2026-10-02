@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from . import _resources, _system_menu  # noqa: F401
 from ._macos_window import (
@@ -348,6 +349,7 @@ class ModernWindow(QWidget):
         self._native_caption_manual_move_offset: QPoint | None = None
         self._drag_region_ids: set[int] = set()
         self._drag_move_offset: QPoint | None = None
+        self._drag_move_region: ref[QWidget] | None = None
         self._normal_geometry: QRect | None = None
         self._application_event_filter_installed = False
         self._native_child_event_filter = _NativeChildHitTestFilter(self)
@@ -822,8 +824,11 @@ class ModernWindow(QWidget):
             self.titleBar.setTitleVisible(visible)
 
     def setDragRegion(self, widget: QWidget, enabled: bool = True) -> None:
-        """Use left-button drags on ``widget`` to start a system window move."""
-        if widget is not self and widget.window() is not self:
+        """Use left-button drags while ``widget`` belongs to this window.
+
+        Reparented regions are suspended and can still be explicitly disabled.
+        """
+        if enabled and widget is not self and widget.window() is not self:
             raise ValueError("drag regions must belong to this ModernWindow")
         region_id = id(widget)
         if enabled:
@@ -839,10 +844,13 @@ class ModernWindow(QWidget):
                 )
         else:
             self._drag_region_ids.discard(region_id)
+            if self._drag_move_region is not None and self._drag_move_region() is widget:
+                self._finish_system_move()
 
     def startSystemMove(self, global_position: QPoint | None = None) -> bool:
         """Start native window movement, with a portable client-side fallback."""
         self._drag_move_offset = None
+        self._drag_move_region = None
         self._system_move_pending = True
         handle = self.windowHandle()
         if (
@@ -868,6 +876,7 @@ class ModernWindow(QWidget):
         if getattr(self, "_system_move_pending", False):
             self._system_move_pending = False
             self._drag_move_offset = None
+            self._drag_move_region = None
             self._system_move_finished.emit()
 
     def isTitleVisible(self) -> bool:
@@ -1515,6 +1524,7 @@ class ModernWindow(QWidget):
     def hideEvent(self, event) -> None:
         self._system_move_pending = False
         self._drag_move_offset = None
+        self._drag_move_region = None
         self._finish_manual_resize()
         self._finish_system_resize_tracking()
         self._macos_title_bar_resize_timer.stop()
@@ -1523,6 +1533,10 @@ class ModernWindow(QWidget):
         super().hideEvent(event)
 
     def eventFilter(self, watched, event) -> bool:
+        if self._drag_move_region is not None:
+            region = self._drag_move_region()
+            if region is None or not isValid(region) or region.window() is not self:
+                self._finish_system_move()
         if (
             self._uses_native_macos_title_bar
             and isinstance(watched, QToolBar)
@@ -1543,10 +1557,14 @@ class ModernWindow(QWidget):
         if isinstance(watched, QWidget):
             if (
                 id(watched) in self._drag_region_ids
+                and watched.window() is self
                 and event.type() == QEvent.Type.MouseButtonPress
             ):
                 if event.button() == Qt.MouseButton.LeftButton:
-                    return self.startSystemMove(event.globalPosition().toPoint())
+                    started = self.startSystemMove(event.globalPosition().toPoint())
+                    if self._drag_move_offset is not None:
+                        self._drag_move_region = ref(watched)
+                    return started
             elif (
                 self._drag_move_offset is not None
                 and watched.window() is self

@@ -355,6 +355,7 @@ def test_theme_changes_and_card_override(managers, theme_manager_instance):
     assert card.palette().color(QPalette.ColorRole.Window) == QColor(DARK_THEME.surface)
     host.setTheme(LIGHT_THEME)
     assert card.theme() == LIGHT_THEME
+    assert card.palette().color(QPalette.ColorRole.Window) == QColor(LIGHT_THEME.surface)
     card.setTheme(DARK_THEME)
     manager.setTheme(LIGHT_THEME)
     assert card.theme() == DARK_THEME
@@ -364,6 +365,24 @@ def test_theme_changes_and_card_override(managers, theme_manager_instance):
     host.setTheme(None)
     theme_manager_instance.setMode(ThemeMode.DARK)
     assert card.theme() == DARK_THEME
+
+
+@pytest.mark.parametrize("desktop", [False, True])
+@pytest.mark.parametrize("restored_theme", [LIGHT_THEME, None], ids=["explicit", "inherited"])
+def test_manager_initial_theme_can_restore_global_palette(managers, desktop, restored_theme):
+    create, *_ = managers
+    manager = create(desktop=desktop, theme=DARK_THEME)
+    card = manager.notify("Theme", "Body", timeout_ms=None).widget()
+    assert card.palette().color(QPalette.ColorRole.Window) == QColor(DARK_THEME.surface)
+    changes = []
+    card.themeChanged.connect(changes.append)
+
+    manager.setTheme(restored_theme)
+
+    assert card.theme() == LIGHT_THEME
+    assert card.palette().color(QPalette.ColorRole.Window) == QColor(LIGHT_THEME.surface)
+    assert card.palette().color(QPalette.ColorRole.Text) == QColor(LIGHT_THEME.text)
+    assert changes == [LIGHT_THEME]
 
 
 def test_closed_handle_cannot_affect_a_new_lifetime(managers):
@@ -953,6 +972,34 @@ def test_progress_uses_active_accent_and_updates_with_palette(managers):
         settle()
         image = card._progress_bar.grab().toImage()
         assert image.pixelColor(image.width() // 2, image.height() // 2) == QColor(color)
+
+
+@pytest.mark.parametrize("desktop", [False, True])
+@pytest.mark.parametrize("hidden_state", ["queued", "paused"])
+def test_hidden_progress_uses_updated_accent_when_shown(managers, desktop, hidden_state):
+    create, *_ = managers
+    manager = create(desktop=desktop, max_visible=1)
+    first = manager.notify("First", timeout_ms=None) if hidden_state == "queued" else None
+    handle = manager.notify("Progress", progress=100, timeout_ms=None)
+    card = handle.widget()
+    if hidden_state == "paused":
+        manager.setDeliveryPaused(True)
+    assert not card.isVisible()
+
+    color = QColor("#ad246a")
+    palette = QPalette(_APP.palette())
+    palette.setColor(QPalette.ColorGroup.Active, QPalette.ColorRole.Accent, color)
+    _APP.setPalette(palette)
+    settle()
+
+    if first is not None:
+        first.dismiss()
+    else:
+        manager.setDeliveryPaused(False)
+    settle()
+    assert handle.state() == NotificationState.VISIBLE
+    image = card._progress_bar.grab().toImage()
+    assert image.pixelColor(image.width() // 2, image.height() // 2) == color
 
 
 def test_work_area_changes_and_max_visible_reflow(managers, monkeypatch):

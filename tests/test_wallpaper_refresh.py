@@ -252,3 +252,37 @@ def test_disabling_restores_custom_base_after_successful_sampling(manager, monke
     manager.setWallpaperEnabled(False)
     assert manager.theme() == selected
     assert not manager._wallpaper_poll_timer.isActive()
+
+
+@pytest.mark.parametrize("observer_first", [False, True])
+@pytest.mark.parametrize("callback_source", ["theme", "policy"])
+def test_reentrant_wallpaper_policy_does_not_emit_superseded_value(
+    manager, monkeypatch, tmp_path, observer_first, callback_source
+):
+    path = tmp_path / "wallpaper.png"
+    path.touch()
+    monkeypatch.setattr(theme_module, "desktop_wallpaper_path", lambda: path)
+    monkeypatch.setattr(theme_module, "wallpaper_colors", lambda _path: (QColor("red"),))
+    manager.setWallpaperEnabled(True)
+    _wait_until(lambda: manager._wallpaper_future is None)
+    sampled = manager.theme()
+    changes = []
+    if observer_first:
+        manager.wallpaperEnabledChanged.connect(changes.append)
+
+    def keep_wallpaper(value):
+        restore = value == LIGHT_THEME if callback_source == "theme" else value is False
+        if restore:
+            manager.setWallpaperEnabled(True)
+
+    signal = manager.themeChanged if callback_source == "theme" else manager.wallpaperEnabledChanged
+    connection = signal.connect(keep_wallpaper)
+    if not observer_first:
+        manager.wallpaperEnabledChanged.connect(changes.append)
+    try:
+        manager.setWallpaperEnabled(False)
+        assert manager.wallpaperEnabled()
+        assert manager.theme() == sampled
+        assert changes == ([False, True] if callback_source == "policy" else [True])
+    finally:
+        signal.disconnect(connection)

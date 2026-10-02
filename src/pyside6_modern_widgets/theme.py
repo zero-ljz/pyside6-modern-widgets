@@ -8,9 +8,10 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import QFileSystemWatcher, QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QFileSystemWatcher, QObject, Qt, QTimer, Signal, SignalInstance
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
+from shiboken6 import isValid
 
 from ._wallpaper import (
     WallpaperSignature,
@@ -343,6 +344,7 @@ class ThemeManager(QObject):
         self._light_theme = LIGHT_THEME
         self._dark_theme = DARK_THEME
         self._theme = LIGHT_THEME
+        self._emitting_changes: set[str] = set()
         self._system_scheme = Qt.ColorScheme.Unknown
         self._application: QApplication | None = None
         self._base_palette: QPalette | None = None
@@ -377,8 +379,8 @@ class ThemeManager(QObject):
         changed = mode != self._mode
         self._mode = mode
         self._update_theme()
-        if changed:
-            self.modeChanged.emit(mode)
+        if changed and self._mode == mode:
+            self._emit_change("_mode", self.modeChanged)
 
     def isDark(self) -> bool:
         """Return whether the effective mode is dark, including in SYSTEM mode."""
@@ -416,7 +418,8 @@ class ThemeManager(QObject):
                     timer.stop()
             self._sync_wallpaper_watch(None)
         self._update_theme()
-        self.wallpaperEnabledChanged.emit(enabled)
+        if self._wallpaper_enabled == enabled:
+            self._emit_change("_wallpaper_enabled", self.wallpaperEnabledChanged)
 
     def refreshWallpaperTheme(self) -> None:
         """Refresh asynchronously when wallpaper is enabled; otherwise do nothing."""
@@ -464,9 +467,27 @@ class ThemeManager(QObject):
             palette = palette_for_theme(theme, self._base_palette)
             if palette != self._application.palette():
                 self._application.setPalette(palette)
-        if changed:
-            self.themeChanged.emit(theme)
-        self._ensure_wallpaper_monitor()
+        # Palette callbacks can synchronously select another mode or base theme.
+        # That nested update has already published the state now in effect.
+        if changed and self._theme == theme:
+            self._emit_change("_theme", self.themeChanged)
+        if isValid(self):
+            self._ensure_wallpaper_monitor()
+
+    def _emit_change(self, attribute: str, signal: SignalInstance) -> None:
+        if attribute in self._emitting_changes:
+            return
+        self._emitting_changes.add(attribute)
+        try:
+            while isValid(self):
+                value = getattr(self, attribute)
+                signal.emit(value)
+                # Finish delivering one value to every listener before publishing
+                # a callback's replacement, regardless of connection order.
+                if value == getattr(self, attribute):
+                    break
+        finally:
+            self._emitting_changes.discard(attribute)
 
     def _ensure_wallpaper_monitor(self) -> None:
         application = QApplication.instance()

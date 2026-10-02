@@ -23,6 +23,7 @@ from examples.navigation_view_example import ExampleWindow
 from pyside6_modern_widgets import (
     DARK_THEME,
     LIGHT_THEME,
+    ModernComboBox,
     ModernDateEdit,
     ModernDoubleSpinBox,
     ModernFontComboBox,
@@ -168,6 +169,34 @@ def test_shortcut_and_font_variants_keep_specialized_api(theme_manager_instance)
         shortcut.close()
         fonts.close()
         native_fonts.close()
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_font_combo_default_editor_uses_the_same_surface_as_editable_combo(
+    theme_manager_instance, theme
+):
+    combo = ModernComboBox(theme=theme)
+    fonts = ModernFontComboBox(theme=theme)
+    combo.setEditable(True)
+    try:
+        for widget in (combo, fonts):
+            widget.setEditText("")
+            widget.resize(200, 30)
+            widget.show()
+            widget.clearFocus()
+        _APP.processEvents()
+        images = [widget.grab().toImage() for widget in (combo, fonts)]
+        for widget, image in zip((combo, fonts), images):
+            scale = widget.devicePixelRatioF()
+            editor = widget.lineEdit().geometry()
+            y = round(editor.center().y() * scale)
+            outside = image.pixelColor(round((editor.left() - 1) * scale), y)
+            inside = image.pixelColor(round((editor.left() + 5) * scale), y)
+            assert inside == outside
+        assert images[0].pixelColor(10, 15) == images[1].pixelColor(10, 15)
+    finally:
+        combo.close()
+        fonts.close()
 
 
 def test_shortcut_editor_palette_tracks_gallery_theme_switch(theme_manager_instance):

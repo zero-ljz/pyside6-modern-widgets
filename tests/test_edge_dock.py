@@ -1129,6 +1129,98 @@ def test_binding_new_surface_removes_old_surface_drag_behavior(docked):
     assert window.pos() != start
 
 
+@pytest.mark.parametrize("move_ancestor", [False, True])
+def test_transferred_drag_surface_suspends_and_resumes_with_ownership(
+    docked, monkeypatch, move_ancestor
+):
+    class PressWidget(QWidget):
+        def mousePressEvent(self, event):
+            presses.append(True)
+            event.accept()
+
+    window, controller, _, _ = docked
+    controller.setAutoHide(False)
+    destination = QWidget()
+    container = QWidget(window)
+    container.setGeometry(20, 30, 200, 120)
+    region = PressWidget(container)
+    region.setGeometry(20, 20, 120, 80)
+    controller.setDragWidget(region)
+    moves, presses = [], []
+    monkeypatch.setattr(
+        window.windowHandle(), "startSystemMove", lambda: moves.append(True) or True
+    )
+    moved = container if move_ancestor else region
+    original_parent = moved.parentWidget()
+    moved.setParent(destination)
+    destination.show()
+    moved.show()
+    try:
+        _drag(region, QPoint(80, 40))
+        assert moves == []
+        assert presses == [True]
+        assert controller._press is None
+        assert controller.dock(DockSide.LEFT)
+
+        moved.setParent(original_parent)
+        container.show()
+        region.show()
+        _drag(region, QPoint(80, 40))
+        assert moves == [True]
+        assert presses == [True]
+    finally:
+        destination.close()
+        destination.deleteLater()
+
+
+@pytest.mark.parametrize("move_ancestor", [False, True])
+@pytest.mark.parametrize("native_drag", [False, True])
+def test_transferring_active_drag_surface_cancels_drag_and_snap(
+    docked, monkeypatch, move_ancestor, native_drag
+):
+    window, controller, _, _ = docked
+    controller.setAutoHide(False)
+    destination = QWidget()
+    container = QWidget(window)
+    container.setGeometry(20, 30, 200, 120)
+    region = QWidget(container)
+    region.setGeometry(20, 20, 120, 80)
+    controller.setDragWidget(region)
+    container.show()
+    region.show()
+    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: native_drag)
+    local = region.rect().center()
+    pointer = region.mapToGlobal(local)
+    _mouse(region, QEvent.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton)
+    assert controller._press is not None
+    moved = container if move_ancestor else region
+    moved.setParent(destination)
+    position = window.pos()
+    try:
+        controller._check_drag_finished()
+        _mouse(
+            region, QEvent.MouseMove, local, pointer + QPoint(80, 40), Qt.NoButton, Qt.LeftButton
+        )
+        assert controller._press is None
+        assert not controller._drag_watch.isActive()
+        assert not controller._snap_timer.isActive()
+        assert window.pos() == position
+    finally:
+        destination.close()
+        destination.deleteLater()
+
+
+def test_drag_surface_must_share_target_top_level_window(docked):
+    window, controller, _, _ = docked
+    owned_window = QWidget(window, Qt.WindowType.Tool)
+    region = QWidget(owned_window)
+    with pytest.raises(ValueError, match="belong"):
+        controller.setDragWidget(region)
+    controller.detach()
+    with pytest.raises(ValueError, match="belong"):
+        EdgeDockController(window, drag_widget=region)
+
+
 def test_only_one_attached_controller_can_own_a_target(docked):
     window, controller, _, _ = docked
     with pytest.raises(ValueError, match="already has"):

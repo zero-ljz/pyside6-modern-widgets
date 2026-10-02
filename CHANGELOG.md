@@ -98,6 +98,15 @@ are retained.
 
 ### Fixed
 
+- Keep toolbar overflow menus alive when an ancestor container moves to another
+  window before its previous owner is destroyed.
+- Synchronize notification theme caches on creation and refresh progress colors
+  while notifications are queued or suspended.
+- Stop registered drag regions from moving their former window after reparenting,
+  and allow moved regions to be explicitly unregistered.
+- Preserve a single themed surface in the default editable font combo box.
+- Avoid publishing superseded theme, mode, or wallpaper-policy changes when
+  application callbacks synchronously select a different setting.
 - Restore the `ModernKeySequenceEdit` palette after theme changes and align
   `ModernScrollBar` arrows with its thumb.
 - Keep compact `ModernFlyout` content sized correctly and match menu check
