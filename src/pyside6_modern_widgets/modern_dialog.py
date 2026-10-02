@@ -148,12 +148,8 @@ class ModernDialog(QDialog):
             self._sync_chrome_with_window_flags()
 
     def setWindowFlag(self, flag: Qt.WindowType, on: bool = True) -> None:
-        QDialog.setWindowFlag(self, flag, on)
-        QDialog.setWindowFlag(
-            self, Qt.WindowType.FramelessWindowHint, not self._uses_native_macos_title_bar
-        )
-        if hasattr(self, "_title_bar"):
-            self._sync_chrome_with_window_flags()
+        flags = self.windowFlags()
+        self.setWindowFlags(flags | flag if on else flags & ~flag)
 
     def setTheme(self, theme: ModernTheme | None) -> None:
         """Override locally; None restores ancestor/global theme inheritance."""

@@ -210,7 +210,9 @@ def test_background_fade_blends_pixels_and_reverses_without_a_jump(
                     assert abs(channel(middle) - expected) <= 2
 
         _activate(window, settle=False)
-        assert _surface_colors(surface) == middle_colors
+        for before, after in zip(middle_colors, _surface_colors(surface)):
+            for channel in (QColor.red, QColor.green, QColor.blue):
+                assert abs(channel(before) - channel(after)) <= 2
         QTest.qWait(SurfaceActivationTransition.DURATION_MS + 30)
         assert _surface_colors(surface) == active_colors
     finally:

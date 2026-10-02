@@ -32,6 +32,14 @@ def settle():
     QTest.qWait(10)
 
 
+def wait_for(predicate):
+    for _ in range(50):
+        if predicate():
+            return
+        QTest.qWait(10)
+    assert predicate()
+
+
 def delete_pending():
     for _ in range(2):
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
@@ -107,7 +115,7 @@ def test_fifo_queue_and_expiry_begin_on_display(managers):
     settle()
     assert list(manager.notifications(NotificationState.VISIBLE)) == [second]
     assert shown == [second]
-    QTest.qWait(160)
+    wait_for(lambda: not manager.notifications())
     assert list(manager.notifications()) == []
     assert closed == [(first, "dismissed"), (second, "expired")]
 
@@ -125,7 +133,7 @@ def test_pause_reasons_preserve_remaining_time(managers):
     QTest.qWait(200)
     assert key.widget() is card
     _APP.sendEvent(card, QEvent(QEvent.Type.Leave))
-    QTest.qWait(200)
+    wait_for(lambda: key.widget() is None)
     assert key.widget() is None
 
 
@@ -152,7 +160,7 @@ def test_handle_update_preserves_identity_order_and_unspecified_fields(managers)
     assert first.update(title="Complete", kind="success", progress=None, actions=[], timeout_ms=80)
     assert card.kind() == NotificationKind.SUCCESS
     assert card.progress() is None
-    QTest.qWait(150)
+    wait_for(first.isClosed)
     assert first.isClosed()
     assert first.widget() is None
     assert manager.notifications(NotificationState.VISIBLE) == (queued,)
@@ -301,7 +309,7 @@ def test_window_delivery_tracks_resize_and_pauses_when_hidden(managers):
     assert key.widget() is card
     host.show()
     settle()
-    QTest.qWait(230)
+    wait_for(lambda: key.widget() is None)
     assert key.widget() is None
 
 
@@ -329,7 +337,10 @@ def test_disabled_delivery_retains_queue_and_time(managers):
     assert manager.notifications(NotificationState.SUSPENDED) == (key,)
     assert manager.notifications(NotificationState.QUEUED) == (next_key,)
     manager.setDeliveryPaused(False)
-    QTest.qWait(160)
+    for _ in range(50):
+        if key.widget() is None:
+            break
+        QTest.qWait(10)
     assert key.widget() is None
     assert list(manager.notifications(NotificationState.VISIBLE)) == [next_key]
 
@@ -642,7 +653,7 @@ def test_suspension_at_full_capacity_preserves_notification_and_remaining_time(m
     QTest.qWait(220)
     assert handle.state() == NotificationState.VISIBLE
     handle.resumeTimeout()
-    QTest.qWait(220)
+    wait_for(lambda: handle.closeReason() == "expired")
     assert handle.closeReason() == "expired"
 
 
@@ -759,7 +770,7 @@ def test_timeout_defaults_omission_and_explicit_none(managers):
     QTest.qWait(150)
     assert not default.isClosed() and not persistent.isClosed()
     persistent.update(timeout_ms=80)
-    QTest.qWait(150)
+    wait_for(lambda: persistent.closeReason() == "expired")
     assert persistent.closeReason() == "expired"
     assert default.snapshot().timeout_ms is None
 
@@ -1025,7 +1036,10 @@ def test_desktop_card_refreshes_twice_after_display_metrics_change(managers, mon
 
     assert card._surface_refresh_timer.isActive()
     assert card._surface_settle_timer.isActive()
-    QTest.qWait(130)
+    for _ in range(50):
+        if len(refreshes) >= 2 and len(reflows) >= 2:
+            break
+        QTest.qWait(10)
     assert len(refreshes) >= 2
     assert len(reflows) >= 2
     assert card.screen().availableGeometry().contains(card.geometry())

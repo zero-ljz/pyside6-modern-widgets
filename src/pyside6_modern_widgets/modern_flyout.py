@@ -327,7 +327,16 @@ class ModernFlyout(QWidget):
             and event.key() == Qt.Key.Key_Escape
             and QApplication.activePopupWidget() is self
         ):
+            anchor = self.anchorWidget()
             self.close()
+            if anchor is not None and anchor.isVisible():
+
+                def restore_focus() -> None:
+                    if isValid(anchor) and anchor.isVisible() and not self.isVisible():
+                        anchor.window().activateWindow()
+                        anchor.setFocus(Qt.FocusReason.PopupFocusReason)
+
+                QTimer.singleShot(0, self, restore_focus)
             return True
         return super().eventFilter(watched, event)
 

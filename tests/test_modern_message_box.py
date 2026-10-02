@@ -41,7 +41,8 @@ def test_translucent_message_box_keeps_its_background_painted():
             pytest.skip("This platform uses an opaque message-box surface")
         assert box.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         assert box._background_frame.isVisible()
-        pixel = box.grab().toImage().pixelColor(box.width() - 10, box.height() - 10)
+        frame = box._background_frame
+        pixel = frame.grab().toImage().pixelColor(frame.width() - 10, frame.height() - 10)
         assert pixel == QColor(LIGHT_THEME.surface_alternate)
     finally:
         _dispose(box)

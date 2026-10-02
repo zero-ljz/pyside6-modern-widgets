@@ -58,6 +58,10 @@ class WindowsMessage:
     l_param: int
 
 
+def _load_win_dll(name: str):
+    return ctypes.WinDLL(name, use_last_error=True)  # type: ignore[attr-defined]
+
+
 class _TrackMouseEvent(ctypes.Structure):
     _fields_ = (
         ("cbSize", wintypes.DWORD),
@@ -107,7 +111,7 @@ def set_window_corner_preference(hwnd: int, *, rounded: bool, small: bool = Fals
     try:
         # DWMWCP_ROUNDSMALL (3) uses 4-DIP corners; DWMWCP_ROUND (2) uses 8 DIP.
         preference = ctypes.c_int((3 if small else 2) if rounded else 1)
-        function = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        function = ctypes.windll.dwmapi.DwmSetWindowAttribute  # type: ignore[attr-defined]
         function.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
         function.restype = ctypes.c_long
         return (
@@ -120,7 +124,7 @@ def set_window_corner_preference(hwnd: int, *, rounded: bool, small: bool = Fals
 
 def window_dpi(hwnd: int) -> int | None:
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.GetDpiForWindow.argtypes = (wintypes.HWND,)
         user32.GetDpiForWindow.restype = wintypes.UINT
         return int(user32.GetDpiForWindow(wintypes.HWND(hwnd))) or None
@@ -180,7 +184,7 @@ def read_message(address: int) -> WindowsMessage:
 def is_window_maximized(hwnd: int) -> bool:
     """Return the Win32 maximize state when Qt's state has not caught up yet."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.IsZoomed.argtypes = (wintypes.HWND,)
         user32.IsZoomed.restype = wintypes.BOOL
         return bool(user32.IsZoomed(wintypes.HWND(hwnd)))
@@ -191,7 +195,7 @@ def is_window_maximized(hwnd: int) -> bool:
 def restore_native_window(hwnd: int, *, visible: bool = True) -> None:
     """Clear native maximization before Qt restores a frameless window."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         if not visible:
             # ShowWindow(SW_RESTORE) would reveal a hidden widget. Clear only
             # the native state bit; Qt will apply its normal geometry on show.
@@ -217,7 +221,7 @@ def restore_native_window(hwnd: int, *, visible: bool = True) -> None:
 def set_window_topmost(hwnd: int, on_top: bool) -> bool:
     """Change only the HWND's stacking band, without refreshing its frame."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.SetWindowPos.argtypes = (
             wintypes.HWND,
             wintypes.HWND,
@@ -252,7 +256,7 @@ def bring_window_to_front(hwnd: int) -> bool:
     detach it afterward; never change the global foreground-lock policy.
     """
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.IsWindow.argtypes = (wintypes.HWND,)
         user32.IsWindow.restype = wintypes.BOOL
         if not user32.IsWindow(wintypes.HWND(hwnd)):
@@ -288,7 +292,7 @@ def bring_window_to_front(hwnd: int) -> bool:
         if not foreground:
             return False
 
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32 = _load_win_dll("kernel32")
         kernel32.GetCurrentThreadId.argtypes = ()
         kernel32.GetCurrentThreadId.restype = wintypes.DWORD
         user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
@@ -316,7 +320,7 @@ def window_is_at_cursor(hwnd: int) -> bool | None:
     if position is None:
         return None
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.WindowFromPoint.argtypes = (wintypes.POINT,)
         user32.WindowFromPoint.restype = wintypes.HWND
         user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
@@ -331,7 +335,7 @@ def window_is_at_cursor(hwnd: int) -> bool | None:
 
 def track_non_client_mouse_leave(hwnd: int) -> None:
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.TrackMouseEvent.argtypes = (ctypes.POINTER(_TrackMouseEvent),)
         user32.TrackMouseEvent.restype = wintypes.BOOL
         request = _TrackMouseEvent(
@@ -348,7 +352,7 @@ def track_non_client_mouse_leave(hwnd: int) -> None:
 def set_mouse_capture(hwnd: int, captured: bool) -> None:
     """Capture or release mouse input for a custom non-client interaction."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         if captured:
             user32.SetCapture.argtypes = (wintypes.HWND,)
             user32.SetCapture.restype = wintypes.HWND
@@ -364,7 +368,7 @@ def set_mouse_capture(hwnd: int, captured: bool) -> None:
 def mouse_buttons_pressed(*, left_only: bool = False) -> bool | None:
     """Read the live button state when a native move consumes Qt mouse events."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.GetAsyncKeyState.argtypes = (ctypes.c_int,)
         user32.GetAsyncKeyState.restype = ctypes.c_short
         buttons = (0x01,) if left_only else (0x01, 0x02, 0x04, 0x05, 0x06)
@@ -383,7 +387,7 @@ def start_system_move(hwnd: int) -> bool:
     # can make Windows reposition the cursor when it takes over the drag.
     l_param = (position[0] & 0xFFFF) | ((position[1] & 0xFFFF) << 16)
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
         user32.SetForegroundWindow.restype = wintypes.BOOL
         user32.ReleaseCapture.argtypes = ()
@@ -407,7 +411,7 @@ def start_system_move(hwnd: int) -> bool:
 def constrain_maximized_client_area(hwnd: int, l_param: int) -> None:
     """Keep a borderless maximized client area inside the monitor work area."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.IsZoomed.argtypes = (wintypes.HWND,)
         user32.IsZoomed.restype = wintypes.BOOL
         if not user32.IsZoomed(wintypes.HWND(hwnd)):
@@ -476,7 +480,7 @@ def screen_position_from_l_param(l_param: int) -> tuple[int, int]:
 def _cursor_screen_position() -> tuple[int, int] | None:
     """Return full-width cursor coordinates when Win32 is available."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.GetCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
         user32.GetCursorPos.restype = wintypes.BOOL
         position = wintypes.POINT()
@@ -507,7 +511,7 @@ def screen_position_from_client(
 
 def _client_metrics(hwnd: int) -> tuple[int, int, int, int] | None:
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.GetClientRect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
         user32.GetClientRect.restype = wintypes.BOOL
         user32.ClientToScreen.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.POINT))
@@ -543,7 +547,7 @@ def set_native_frame(
 ) -> bool:
     """Synchronize the native frame styles that drive Windows window behavior."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.GetWindowLongPtrW.argtypes = (wintypes.HWND, ctypes.c_int)
         user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
         user32.SetWindowLongPtrW.argtypes = (
@@ -589,9 +593,9 @@ def set_native_frame(
             return True
 
         if updated_style != style:
-            ctypes.set_last_error(0)
+            ctypes.set_last_error(0)  # type: ignore[attr-defined]
             previous_style = user32.SetWindowLongPtrW(window_handle, GWL_STYLE, updated_style)
-            if not previous_style and ctypes.get_last_error():
+            if not previous_style and ctypes.get_last_error():  # type: ignore[attr-defined]
                 return False
 
         swp_nomove = 0x0002
@@ -617,7 +621,7 @@ def set_native_frame(
 def redraw_native_window(hwnd: int) -> None:
     """Invalidate a complete Win32 window after DPI or display metric changes."""
     try:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32 = _load_win_dll("user32")
         user32.RedrawWindow.argtypes = (
             wintypes.HWND,
             ctypes.c_void_p,

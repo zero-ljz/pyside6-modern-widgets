@@ -9,6 +9,12 @@ import pytest
 from pyside6_modern_widgets import _windows_window
 
 
+@pytest.fixture(autouse=True)
+def portable_windll(monkeypatch):
+    if not hasattr(ctypes, "WinDLL"):
+        monkeypatch.setattr(ctypes, "WinDLL", None, raising=False)
+
+
 class _NativeFunction:
     def __init__(self, callback) -> None:
         self._callback = callback

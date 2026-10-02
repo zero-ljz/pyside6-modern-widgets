@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import QPoint, QSize, Qt
+from PySide6.QtCore import QAbstractAnimation, QPoint, QSize, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
@@ -86,6 +86,10 @@ def test_theme_inheritance_hover_width_and_rtl():
     idle_width = sum(idle.pixelColor(sample_x, y) == QColor("#345678") for y in range(bar.height()))
     QTest.mouseMove(bar, QPoint(120, 7))
     QTest.qWait(150)
+    for _ in range(50):
+        if bar._hover_animation.state() == QAbstractAnimation.State.Stopped:
+            break
+        QTest.qWait(10)
     assert bar._hover_progress == pytest.approx(1.0)
     hovered = bar.grab().toImage()
     hover_width = sum(
@@ -97,6 +101,10 @@ def test_theme_inheritance_hover_width_and_rtl():
     bar.show()
     QTest.mouseMove(bar, QPoint(-10, -10))
     QTest.qWait(150)
+    for _ in range(50):
+        if bar._hover_animation.state() == QAbstractAnimation.State.Stopped:
+            break
+        QTest.qWait(10)
     assert bar._hover_progress == pytest.approx(0.0)
     owner.close()
 

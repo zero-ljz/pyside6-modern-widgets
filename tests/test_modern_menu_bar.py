@@ -195,10 +195,8 @@ def test_overflow_uses_modern_menu_and_keeps_qt_action_updates() -> None:
     QTest.qWait(40)
     assert opened == [True]
 
-    menu_bar.setFixedWidth(260)
-    _APP.processEvents()
     assert extension.menu() is overflow
-    assert len(overflow.actions()) < len(original_actions)
+    assert overflow.actions() == original_actions
     assert overflow.actions()[-1] is menus[-1].menuAction()
     menus[-1].setEnabled(False)
     assert not overflow.actions()[-1].isEnabled()

@@ -25,7 +25,6 @@ from pyside6_modern_widgets import (
 )
 from pyside6_modern_widgets.modern_menu import (
     _ACRYLIC_INPUT_ALPHA,
-    _CHECKBOX_INDICATOR_SIZE,
     _windows_acrylic_tint,
 )
 
@@ -195,11 +194,20 @@ def test_nonexclusive_menu_indicator_uses_checkbox_colors(theme, checked, enable
     painter.end()
 
     assert option.checkType == QStyleOptionMenuItem.CheckType.NonExclusive
-    assert image.pixelColor(7, 12).alpha() == 0
-    assert image.pixelColor(8, 12).alpha() > 0
-    assert image.pixelColor(21, 12).alpha() > 0
-    assert image.pixelColor(22, 12).alpha() == 0
-    assert image.pixelColor(23, 12).alpha() == 0
+    check_option = QStyleOptionButton()
+    check_option.rect = option.rect
+    check_option.fontMetrics = option.fontMetrics
+    indicator_size = (
+        menu._rounded_style.baseStyle()
+        .subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, check_option, menu)
+        .width()
+    )
+    left = 15 - indicator_size // 2
+    right = left + indicator_size
+    assert image.pixelColor(left - 1, 12).alpha() == 0
+    assert image.pixelColor(left, 12).alpha() > 0
+    assert image.pixelColor(right - 1, 12).alpha() > 0
+    assert image.pixelColor(right, 12).alpha() == 0
     group = QPalette.ColorGroup.Active if enabled else QPalette.ColorGroup.Disabled
     if not enabled:
         expected_role = QPalette.ColorRole.Mid if checked else QPalette.ColorRole.AlternateBase
@@ -239,8 +247,14 @@ def test_menu_indicator_matches_modern_checkbox_size():
         QStyle.SubElement.SE_CheckBoxIndicator, option, check_box
     )
 
-    assert indicator.width() == _CHECKBOX_INDICATOR_SIZE
-    assert indicator.height() == _CHECKBOX_INDICATOR_SIZE
+    menu = ModernMenu()
+    expected_size = (
+        menu._rounded_style.baseStyle()
+        .subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, option, check_box)
+        .width()
+    )
+    assert indicator.width() == expected_size
+    assert indicator.height() == expected_size
 
 
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])

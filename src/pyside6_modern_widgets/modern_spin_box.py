@@ -115,6 +115,23 @@ class _SpinBoxStyle(QProxyStyle):
             field.setRight(up.left() - 2)
         return field
 
+    def hitTestComplexControl(self, control, option, position, widget=None):
+        if (
+            control == QStyle.ComplexControl.CC_SpinBox
+            and widget is self._editor
+            and isinstance(option, QStyleOptionSpinBox)
+            and cast(_SpinOption, option).frame
+            and option.buttonSymbols != QAbstractSpinBox.ButtonSymbols.NoButtons
+        ):
+            for sub_control in (
+                QStyle.SubControl.SC_SpinBoxUp,
+                QStyle.SubControl.SC_SpinBoxDown,
+            ):
+                if self.subControlRect(control, option, sub_control, widget).contains(position):
+                    return sub_control
+            return QStyle.SubControl.SC_SpinBoxEditField
+        return super().hitTestComplexControl(control, option, position, widget)
+
     def drawComplexControl(self, control, option, painter, widget=None) -> None:
         if (
             control == QStyle.ComplexControl.CC_ComboBox

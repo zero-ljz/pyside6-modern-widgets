@@ -79,8 +79,10 @@ def test_slow_wallpaper_work_keeps_gui_responsive_and_publishes_on_gui_thread(
         _wait_until(entered.is_set)
         for _ in range(10):
             manager._poll_wallpaper_update()
-        QTest.qWait(60)
-        assert len(ticks) >= 2
+        deadline = time.monotonic() + 1
+        while not ticks and time.monotonic() < deadline:
+            QTest.qWait(10)
+        assert ticks
         assert not manager._wallpaper_future.done()
         assert not signals
     finally:

@@ -112,7 +112,9 @@ def _windows_wallpaper_path() -> str | None:
         import ctypes
 
         buffer = ctypes.create_unicode_buffer(32768)
-        succeeded = ctypes.windll.user32.SystemParametersInfoW(0x0073, len(buffer), buffer, 0)
+        succeeded = ctypes.windll.user32.SystemParametersInfoW(  # type: ignore[attr-defined]
+            0x0073, len(buffer), buffer, 0
+        )
         return buffer.value if succeeded else None
     except (AttributeError, OSError):
         return None

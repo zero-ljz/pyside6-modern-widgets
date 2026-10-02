@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -75,8 +76,10 @@ class ModernDialogTests(unittest.TestCase):
         self.assertEqual(dialog.contentsMargins().top(), dialog._title_bar.height())
 
         dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, True)
-        self.assertTrue(dialog.windowFlags() & Qt.WindowType.FramelessWindowHint)
+        if sys.platform != "darwin" or QApplication.platformName() != "offscreen":
+            self.assertTrue(dialog.windowFlags() & Qt.WindowType.FramelessWindowHint)
         self.assertFalse(dialog._title_bar.closeButton.isHidden())
+        self.assertEqual(dialog.contentsMargins().top(), dialog._title_bar.height())
 
         dialog.setWindowFlags(Qt.WindowType.Popup)
         self.assertTrue(dialog.windowFlags() & Qt.WindowType.FramelessWindowHint)

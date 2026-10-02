@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -12,6 +13,8 @@ from pyside6_modern_widgets import ThemeManager
 from pyside6_modern_widgets import theme as theme_module
 
 _APP = QApplication.instance() or QApplication([])
+if sys.platform == "darwin" and QApplication.platformName() == "offscreen":
+    _APP.setStyle("Fusion")
 _ORIGINAL_THEME_MANAGER = theme_module.theme_manager()
 # Component tests use isolated managers; avoid querying the host wallpaper between tests.
 _ORIGINAL_THEME_MANAGER.setWallpaperEnabled(False)

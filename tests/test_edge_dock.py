@@ -628,7 +628,10 @@ def test_auto_hide_timer_rechecks_pointer_before_collapsing(docked, monkeypatch)
     assert not controller.isCollapsed()
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
     controller._check_auto_hide()
-    QTest.qWait(50)
+    for _ in range(50):
+        if controller.isCollapsed():
+            break
+        QTest.qWait(10)
     assert controller.isCollapsed()
     assert not window.isVisible()
     assert controller._handle.isVisible()

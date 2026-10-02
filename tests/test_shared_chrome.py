@@ -68,6 +68,7 @@ def test_child_edge_drag_fallback_constrains_geometry_and_finishes(monkeypatch, 
         if isinstance(window, ModernWindow):
             assert not window._system_resize_active
     finally:
+        monkeypatch.undo()
         dispose(window)
 
 

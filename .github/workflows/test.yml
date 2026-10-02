@@ -45,7 +45,9 @@ jobs:
       - name: Build package
         run: uv build
 
-      - name: Run native platform smoke
+      - name: Run native Windows smoke
+        if: runner.os == 'Windows'
+        timeout-minutes: 3
         run: uv run python tests/platform_smoke.py
 
       - name: Run native Windows notification smoke

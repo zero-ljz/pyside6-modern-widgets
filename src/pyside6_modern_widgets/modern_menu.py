@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QProxyStyle,
     QStyle,
+    QStyleOptionButton,
     QStyleOptionMenuItem,
     QWidget,
 )
@@ -25,7 +26,6 @@ _WINDOWS_ACRYLIC_MAX_TINT_LIGHTNESS = 240
 _ACRYLIC_INPUT_ALPHA = 1
 _MENU_ITEM_EXTRA_HEIGHT = 4
 _MENU_VERTICAL_MARGIN = 2
-_CHECKBOX_INDICATOR_SIZE = 14
 _OUTLINE_ALPHA = 30
 _SEPARATOR_ALPHA = 20
 
@@ -133,7 +133,8 @@ def _set_windows_acrylic(menu: QWidget, enabled: bool) -> bool:
             ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p),
             ctypes.sizeof(accent),
         )
-        set_window_composition_attribute = ctypes.windll.user32.SetWindowCompositionAttribute
+        windows_api = ctypes.windll  # type: ignore[attr-defined]
+        set_window_composition_attribute = windows_api.user32.SetWindowCompositionAttribute
         set_window_composition_attribute.argtypes = [
             wintypes.HWND,
             ctypes.POINTER(WindowCompositionAttributeData),
@@ -216,18 +217,26 @@ class _RoundedMenuStyle(QProxyStyle):
         painter.drawPath(path)
         painter.restore()
 
-    def drawNonExclusiveCheck(self, option, painter) -> None:
+    def drawNonExclusiveCheck(self, option, painter, widget=None) -> None:
         column_width = max(option.maxIconWidth, 20)
         center_x = option.rect.left() + 5 + column_width / 2
         if option.direction == Qt.LayoutDirection.RightToLeft:
             center_x = option.rect.right() - 5 - column_width / 2
         center = QPointF(center_x, QRectF(option.rect).center().y())
-        half_size = _CHECKBOX_INDICATOR_SIZE / 2
+        check_option = QStyleOptionButton()
+        check_option.rect = option.rect  # type: ignore[attr-defined]
+        check_option.fontMetrics = option.fontMetrics  # type: ignore[attr-defined]
+        indicator_size = (
+            self.baseStyle()
+            .subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, check_option, widget)
+            .width()
+        )
+        half_size = indicator_size / 2
         indicator = QRectF(
             center.x() - half_size,
             center.y() - half_size,
-            _CHECKBOX_INDICATOR_SIZE,
-            _CHECKBOX_INDICATOR_SIZE,
+            indicator_size,
+            indicator_size,
         ).adjusted(0.5, 0.5, -0.5, -0.5)
         enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
         group = option.palette.currentColorGroup() if enabled else QPalette.ColorGroup.Disabled
@@ -408,7 +417,7 @@ class _RoundedMenuStyle(QProxyStyle):
             if exclusive_checked:
                 self.drawExclusiveCheck(option, painter, widget)
             if is_nonexclusive:
-                self.drawNonExclusiveCheck(option, painter)
+                self.drawNonExclusiveCheck(option, painter, widget)
             return
         super().drawControl(element, option, painter, widget)
 

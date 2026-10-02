@@ -8,6 +8,7 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QPushButton,
     QStyleFactory,
     QVBoxLayout,
@@ -203,14 +204,16 @@ def test_animation_reverses_and_blocked_signals_still_update(switch):
     switch.show()
     _APP.processEvents()
     switch.setChecked(True)
-    QTest.qWait(90)
+    switch._animation.setCurrentTime(90)
     assert 0 < switch._position < 1
+    middle = switch._position
     switch.setChecked(False)
-    QTest.qWait(300)
+    assert switch._animation.startValue() == pytest.approx(middle)
+    switch._animation.setCurrentTime(switch._animation.duration())
     assert switch._position == 0
     switch.blockSignals(True)
     switch.setChecked(True)
-    QTest.qWait(300)
+    switch._animation.setCurrentTime(switch._animation.duration())
     assert switch._position == 1
     switch.hide()
     switch.setChecked(False)
@@ -240,6 +243,7 @@ def test_parent_and_text_constructors(switch):
     labeled = ModernSwitch("&Notifications", switch)
     assert labeled.parentWidget() is switch
     assert labeled.sizeHint().width() > child.sizeHint().width()
-    assert not labeled.shortcut().isEmpty()
+    native = QCheckBox("&Notifications", switch)
+    assert labeled.shortcut() == native.shortcut()
     with pytest.raises(TypeError, match="parent specified twice"):
         ModernSwitch(switch, switch)

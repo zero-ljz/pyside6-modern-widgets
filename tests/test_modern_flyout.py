@@ -128,7 +128,7 @@ def test_open_keyboard_focus_escape_and_reuse(panel):
     QTest.keyClick(combo, Qt.Key.Key_Tab)
     assert button.hasFocus()
     QTest.keyClick(button, Qt.Key.Key_Escape)
-    _APP.processEvents()
+    QTest.qWait(30)
     assert not flyout.isVisible()
     assert anchor.hasFocus()
     flyout.close()
