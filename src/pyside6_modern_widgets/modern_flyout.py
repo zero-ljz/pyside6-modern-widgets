@@ -269,7 +269,7 @@ class ModernFlyout(QWidget):
         self.show()
         self.setFocus(Qt.FocusReason.PopupFocusReason)
         candidate = self.nextInFocusChain()
-        while candidate is not self:
+        while candidate is not None and candidate is not self:
             if (
                 candidate.window() is self
                 and candidate.isVisible()
