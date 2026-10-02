@@ -50,7 +50,10 @@ class _TextEditStyle(QProxyStyle):
         painter.setPen(QPen(option.palette.color(QPalette.ColorRole.Mid), 1))
         painter.setBrush(QBrush(option.palette.color(QPalette.ColorRole.Base)))
         painter.drawRoundedRect(rect, radius, radius)
-        if option.state & QStyle.StateFlag.State_HasFocus and option.state & QStyle.StateFlag.State_Enabled:
+        if (
+            option.state & QStyle.StateFlag.State_HasFocus
+            and option.state & QStyle.StateFlag.State_Enabled
+        ):
             accent = (
                 QColor(theme.accent)
                 if theme.accent is not None
@@ -117,12 +120,18 @@ class _TextAppearance(_TextBase):
         themed = palette_for_theme(theme, owner.palette())
         palette = self._palette_override.resolve(themed)
         palette.setResolveMask(self._palette_override.resolveMask() | themed.resolveMask())
-        fills = _CONTROL_FILLS_DARK if QColor(theme.surface).lightness() < 128 else _CONTROL_FILLS_LIGHT
-        if not self._palette_override.isBrushSet(QPalette.ColorGroup.Active, QPalette.ColorRole.Base):
+        fills = (
+            _CONTROL_FILLS_DARK if QColor(theme.surface).lightness() < 128 else _CONTROL_FILLS_LIGHT
+        )
+        if not self._palette_override.isBrushSet(
+            QPalette.ColorGroup.Active, QPalette.ColorRole.Base
+        ):
             fill_index = (
                 2
                 if not owner.isEnabled() or owner.isReadOnly()
-                else 1 if owner.underMouse() and not owner.hasFocus() else 0
+                else 1
+                if owner.underMouse() and not owner.hasFocus()
+                else 0
             )
             palette.setColor(QPalette.ColorRole.Base, QColor(fills[fill_index]))
         return palette

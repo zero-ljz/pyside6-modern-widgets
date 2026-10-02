@@ -49,7 +49,9 @@ _APP = QApplication.instance() or QApplication([])
         (QFontComboBox, ModernFontComboBox),
     ],
 )
-def test_variants_keep_qt_types_and_theme_contract(theme_manager_instance, native_type, modern_type):
+def test_variants_keep_qt_types_and_theme_contract(
+    theme_manager_instance, native_type, modern_type
+):
     parent = QWidget()
     widget = modern_type(parent)
     try:

@@ -116,7 +116,8 @@ def test_grouped_pages_keep_page_indices_and_selection_in_sync():
 
     assert view.count() == sidebar.count() == 4
     assert [top.itemLayout.itemAt(i).widget() for i in (1, 2)] == [
-        sidebar.button(1), sidebar.button(3)
+        sidebar.button(1),
+        sidebar.button(3),
     ]
     assert top.header.text() == bottom.header.text() == "Tools"
     sidebar.button(3).click()

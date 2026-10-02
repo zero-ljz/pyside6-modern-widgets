@@ -105,18 +105,26 @@ def test_live_handle_updates_preserve_collapse_and_allow_strip_fallback(docked):
 @pytest.mark.parametrize("width", [0, 0.5, 1, 2])
 def test_handle_border_is_inset_and_live_updates_keep_placement(docked, icon, width):
     _, controller, _, _ = docked
-    controller.setConfig(replace(
-        controller.config(), handle_mode=DockHandleMode.CLICK,
-        handle_icon=_two_color_icon() if icon else QIcon(),
-        handle_color=QColor("white"), handle_hover_color=QColor("white"),
-    ))
+    controller.setConfig(
+        replace(
+            controller.config(),
+            handle_mode=DockHandleMode.CLICK,
+            handle_icon=_two_color_icon() if icon else QIcon(),
+            handle_color=QColor("white"),
+            handle_hover_color=QColor("white"),
+        )
+    )
     controller.dock(DockSide.LEFT)
     controller.collapse()
     size = controller._handle.size()
     placement = controller.placement()
-    controller.setConfig(replace(
-        controller.config(), handle_border_color=QColor("#808080"), handle_border_width=width,
-    ))
+    controller.setConfig(
+        replace(
+            controller.config(),
+            handle_border_color=QColor("#808080"),
+            handle_border_width=width,
+        )
+    )
     assert controller.isCollapsed()
     assert controller.placement() == placement
     assert controller._handle.size() == size
@@ -144,23 +152,38 @@ def test_invalid_border_width_is_rejected(width):
 
 
 @pytest.mark.parametrize("side", list(DockSide)[1:])
-@pytest.mark.parametrize("shape, radius, corner_opaque", [
-    (DockHandleShape.ROUNDED_RECT, 0, True),
-    (DockHandleShape.ROUNDED_RECT, 8, True),
-    (DockHandleShape.ROUNDED_RECT, 100, False),
-    (DockHandleShape.CIRCLE, 0, False),
-])
+@pytest.mark.parametrize(
+    "shape, radius, corner_opaque",
+    [
+        (DockHandleShape.ROUNDED_RECT, 0, True),
+        (DockHandleShape.ROUNDED_RECT, 8, True),
+        (DockHandleShape.ROUNDED_RECT, 100, False),
+        (DockHandleShape.CIRCLE, 0, False),
+    ],
+)
 def test_icon_shapes_keep_padding_and_upright_icons_on_each_edge(
-    docked, side, shape, radius, corner_opaque,
+    docked,
+    side,
+    shape,
+    radius,
+    corner_opaque,
 ):
     window, controller, _, _ = docked
-    controller.setConfig(replace(
-        controller.config(), sides=tuple(list(DockSide)[1:]),
-        handle_icon=_two_color_icon(), handle_mode=DockHandleMode.CLICK,
-        handle_padding=10, handle_shape=shape, handle_corner_radius=radius,
-        handle_color=QColor("white"), handle_hover_color=QColor("white"),
-        handle_border_width=1, handle_border_color=QColor("#808080"),
-    ))
+    controller.setConfig(
+        replace(
+            controller.config(),
+            sides=tuple(list(DockSide)[1:]),
+            handle_icon=_two_color_icon(),
+            handle_mode=DockHandleMode.CLICK,
+            handle_padding=10,
+            handle_shape=shape,
+            handle_corner_radius=radius,
+            handle_color=QColor("white"),
+            handle_hover_color=QColor("white"),
+            handle_border_width=1,
+            handle_border_color=QColor("#808080"),
+        )
+    )
     controller.dock(side)
     controller.collapse()
     handle = controller._handle
@@ -172,8 +195,12 @@ def test_icon_shapes_keep_padding_and_upright_icons_on_each_edge(
     ratio = image.devicePixelRatio()
     corner = image.pixelColor(int(3 * ratio), int(3 * ratio))
     assert corner.alpha() == (255 if corner_opaque else 0)
-    for x, y in ((0, image.height() // 2), (image.width() - 1, image.height() // 2),
-                 (image.width() // 2, 0), (image.width() // 2, image.height() - 1)):
+    for x, y in (
+        (0, image.height() // 2),
+        (image.width() - 1, image.height() // 2),
+        (image.width() // 2, 0),
+        (image.width() // 2, image.height() - 1),
+    ):
         # Curved antialiased strokes can mix a few levels of the white fill.
         color = image.pixelColor(x, y)
         assert 128 <= color.red() <= 132
@@ -187,11 +214,17 @@ def test_icon_shapes_keep_padding_and_upright_icons_on_each_edge(
 @pytest.mark.parametrize("border_width", [0, 1])
 def test_unpadded_icons_are_clipped_inside_shape_and_border(docked, shape, border_width):
     _, controller, _, _ = docked
-    controller.setConfig(replace(
-        controller.config(), handle_icon=_two_color_icon(), handle_padding=0,
-        handle_mode=DockHandleMode.CLICK, handle_shape=shape,
-        handle_border_width=border_width, handle_border_color=QColor("#808080"),
-    ))
+    controller.setConfig(
+        replace(
+            controller.config(),
+            handle_icon=_two_color_icon(),
+            handle_padding=0,
+            handle_mode=DockHandleMode.CLICK,
+            handle_shape=shape,
+            handle_border_width=border_width,
+            handle_border_color=QColor("#808080"),
+        )
+    )
     controller.dock(DockSide.LEFT)
     controller.collapse()
     image = controller._handle.grab().toImage()
@@ -209,10 +242,15 @@ def test_unpadded_icons_are_clipped_inside_shape_and_border(docked, shape, borde
 @pytest.mark.parametrize("width, height", [(28, 160), (160, 28)])
 def test_circle_stays_square_when_work_area_constrains_one_dimension(docked, width, height):
     window, controller, _, _ = docked
-    controller.setConfig(replace(
-        controller.config(), handle_icon=_two_color_icon(), handle_padding=10,
-        handle_shape=DockHandleShape.CIRCLE, handle_mode=DockHandleMode.CLICK,
-    ))
+    controller.setConfig(
+        replace(
+            controller.config(),
+            handle_icon=_two_color_icon(),
+            handle_padding=10,
+            handle_shape=DockHandleShape.CIRCLE,
+            handle_mode=DockHandleMode.CLICK,
+        )
+    )
     controller.dock(DockSide.LEFT)
     controller.collapse()
     area = QRect(0, 0, width, height)

@@ -62,8 +62,7 @@ sidebar is collapsed or the group becomes empty.
 navigation.addPage(home_page, "Home")
 navigation.addPage(editor_page, "Editor", group="Workspace")
 navigation.addPage(files_page, "Files", group="Workspace")
-navigation.addPage(settings_page, "Settings", position=NavigationPosition.BOTTOM,
-                   group="System")
+navigation.addPage(settings_page, "Settings", position=NavigationPosition.BOTTOM, group="System")
 ```
 
 ## Supported environment
@@ -500,7 +499,12 @@ use Qt's spin-box hit testing. The extra button column adds 18 pixels to the
 default Fusion width while preserving its height.
 
 ```python
-from pyside6_modern_widgets import ModernDateEdit, ModernDateTimeEdit, ModernDoubleSpinBox, ModernSpinBox
+from pyside6_modern_widgets import (
+    ModernDateEdit,
+    ModernDateTimeEdit,
+    ModernDoubleSpinBox,
+    ModernSpinBox,
+)
 
 number = ModernSpinBox()
 number.setRange(0, 100)
@@ -524,7 +528,10 @@ themes and accept `theme` and `metrics` like the other modern inputs.
 
 ```python
 from pyside6_modern_widgets import (
-    ModernFontComboBox, ModernKeySequenceEdit, ModernPlainTextEdit, ModernTextEdit,
+    ModernFontComboBox,
+    ModernKeySequenceEdit,
+    ModernPlainTextEdit,
+    ModernTextEdit,
 )
 
 notes = ModernPlainTextEdit("Notes")

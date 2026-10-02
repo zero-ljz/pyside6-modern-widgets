@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Add `ModernCheckBox` and `ModernRadioButton` with themed indicators, plus
+  `ModernSlider` and `ModernScrollBar` with native Qt interaction.
+- Add themed `ModernLineEdit`, integer/decimal spin boxes, and date/time editors.
+  Add `ModernPlainTextEdit`, `ModernTextEdit`, `ModernKeySequenceEdit`, and
+  `ModernFontComboBox` for multiline, shortcut, and font input.
 - Add `ModernToolButton`, with native Fusion sizing, action synchronization,
   popup modes and RTL hit regions, plus themed checked, hover, press, focus and
   disabled states. Add native/modern tool-button comparisons to the gallery.
@@ -14,6 +19,12 @@ All notable changes to this project are documented in this file.
 - Add `ModernPushButton`, retaining native `QPushButton` behavior and Fusion
   geometry with themed hover, press, focus, disabled, default and checked states.
   Add a native/modern comparison page to the navigation example.
+- Add per-component `acrylic` controls for Windows 11 menus, combo popups,
+  flyouts, notifications, menu bars, and toolbars, with an opaque fallback on
+  other platforms.
+- Add `watercolor` controls for `ModernWindow`, `ModernDialog`, and
+  `NavigationSidebar` overlays. The navigation gallery exposes separate
+  watercolor and wallpaper color settings.
 
 ### Changed
 
@@ -24,6 +35,12 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Restore the `ModernKeySequenceEdit` palette after theme changes and align
+  `ModernScrollBar` arrows with its thumb.
+- Keep compact `ModernFlyout` content sized correctly and match menu check
+  indicators to the modern choice controls.
+- Restore themed palettes after stylesheet repolishing and appearance changes;
+  avoid a translucent `ModernMessageBox` surface on Linux.
 - Paint `ModernToolButton` direction and menu arrows as outlined, round-ended
   chevrons consistent with the other modern controls, retaining native geometry.
 - Match Qt tab behavior when inserting at a negative index (append) and when

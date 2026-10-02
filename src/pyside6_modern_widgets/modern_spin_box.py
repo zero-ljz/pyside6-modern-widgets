@@ -277,7 +277,11 @@ class _SpinAppearance:
         self._theme_binding = ThemeBinding(owner, self.theme, self._apply_theme)
         self._theme_binding.changed.connect(
             cast(
-                ModernSpinBox | ModernDoubleSpinBox | ModernDateTimeEdit | ModernDateEdit | ModernTimeEdit,
+                ModernSpinBox
+                | ModernDoubleSpinBox
+                | ModernDateTimeEdit
+                | ModernDateEdit
+                | ModernTimeEdit,
                 owner,
             ).themeChanged.emit
         )

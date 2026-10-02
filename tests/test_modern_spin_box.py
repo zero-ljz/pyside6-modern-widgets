@@ -189,7 +189,12 @@ def test_idle_step_buttons_share_field_background(theme_manager_instance, widget
 def test_gallery_keeps_editor_and_buttons_on_one_surface(theme_manager_instance):
     window = ExampleWindow()
     try:
-        window.navigation.setCurrentIndex(10)
+        spin_index = next(
+            index
+            for index in range(window.navigation.count())
+            if window.navigation.sidebar.itemText(index) == window.tr("Spin editors")
+        )
+        window.navigation.setCurrentIndex(spin_index)
         window.show()
         _APP.processEvents()
         image = window.grab().toImage()
