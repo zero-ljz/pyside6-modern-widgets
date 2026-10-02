@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QCoreApplication, QDate, QDateTime, QSize, Qt, QTime, QTimer
+from PySide6.QtCore import QCoreApplication, QDate, QDateTime, QObject, QSize, Qt, QTime, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -80,6 +80,7 @@ from pyside6_modern_widgets import (
     ThemeMode,
     theme_manager,
 )
+from pyside6_modern_widgets.modern_menu import _supports_windows_acrylic
 
 if __package__:
     from ._example_i18n import example_locale, install_translators
@@ -102,6 +103,7 @@ class ExampleWindow(ModernWindow):
         self.setWindowIcon(QIcon(":/pyside6_modern_widgets/icons/application.png"))
         self.resize(1000, 640)
         self.edge_dock_example: EdgeDockExample | None = None
+        self._acrylic_enabled = True
 
         self.navigation = NavigationView()
         self.setCentralWidget(self.navigation)
@@ -1352,8 +1354,28 @@ class ExampleWindow(ModernWindow):
         self.wallpaper_checkbox.toggled.connect(manager.setWallpaperEnabled)
         manager.wallpaperEnabledChanged.connect(self.wallpaper_checkbox.setChecked)
         layout.addWidget(self.wallpaper_checkbox)
+        self.acrylic_switch = ModernSwitch(self.tr("Enable acrylic background"))
+        self.acrylic_switch.setChecked(self._acrylic_enabled)
+        self.acrylic_switch.toggled.connect(self._set_acrylic_enabled)
+        layout.addWidget(self.acrylic_switch)
+        self.acrylic_switch.setVisible(_supports_windows_acrylic())
         layout.addStretch()
         return page
+
+    def _set_acrylic_enabled(self, enabled: bool) -> None:
+        self._acrylic_enabled = enabled
+        acrylic_widgets = (
+            ModernMenu,
+            ModernMenuBar,
+            ModernToolBar,
+            ModernComboBox,
+            ModernFontComboBox,
+            ModernFlyout,
+            NotificationManager,
+        )
+        for widget in self.findChildren(QObject):
+            if isinstance(widget, acrylic_widgets):
+                widget.setAcrylicEnabled(enabled)
 
     def _set_theme_mode(self, _index: int) -> None:
         theme_manager().setMode(ThemeMode(self.theme_mode_combo.currentData()))

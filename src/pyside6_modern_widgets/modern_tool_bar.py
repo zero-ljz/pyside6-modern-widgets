@@ -100,6 +100,7 @@ class ModernToolBar(QToolBar):
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        acrylic: bool = True,
     ) -> None:
         if isinstance(title, QWidget):
             if parent is not None:
@@ -112,6 +113,7 @@ class ModernToolBar(QToolBar):
         else:
             super().__init__(title, parent)
         self._metrics = metrics
+        self._acrylic_enabled = bool(acrylic)
         self._theme_override = theme
         self._styled_theme: ModernTheme | None = None
         self._applying_theme = False
@@ -124,7 +126,9 @@ class ModernToolBar(QToolBar):
         self._retranslate_ui()
         # A toolbar stylesheet would intercept ModernMenu's proxy-style drawing.
         # Own the popup through the window, and also clean it up with the toolbar.
-        self._overflow: ModernMenu = ModernMenu(self._menu_owner(), metrics=metrics)
+        self._overflow: ModernMenu = ModernMenu(
+            self._menu_owner(), metrics=metrics, acrylic=acrylic
+        )
         self.destroyed.connect(self._overflow.deleteLater)
         self._extension.setMenu(self._overflow)
         self._extension.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -137,6 +141,13 @@ class ModernToolBar(QToolBar):
         self._apply_theme()
         self._theme_binding: ThemeBinding = ThemeBinding(self, self.theme, self._apply_theme)
         self._theme_binding.changed.connect(self.themeChanged.emit)
+
+    def isAcrylicEnabled(self) -> bool:
+        return self._acrylic_enabled
+
+    def setAcrylicEnabled(self, enabled: bool) -> None:
+        self._acrylic_enabled = bool(enabled)
+        self._overflow.setAcrylicEnabled(enabled)
 
     def _retranslate_ui(self) -> None:
         text = self.tr("More actions")

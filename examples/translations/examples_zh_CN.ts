@@ -1166,6 +1166,10 @@
         <translation>使用桌面壁纸颜色</translation>
     </message>
     <message>
+        <source>Enable acrylic background</source>
+        <translation>启用亚克力背景</translation>
+    </message>
+    <message>
         <location filename="../navigation_view_example.py" line="1369"/>
         <source>Toolbars</source>
         <translation>工具栏</translation>

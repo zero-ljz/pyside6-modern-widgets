@@ -26,6 +26,7 @@ from .modern_menu import (
     _MENU_ITEM_EXTRA_HEIGHT,
     _MENU_VERTICAL_MARGIN,
     _base_style_name,
+    _disable_windows_acrylic,
     _enable_windows_acrylic,
     _enable_windows_rounded_corners,
     _RoundedMenuStyle,
@@ -347,9 +348,11 @@ class _ComboAppearance(_ComboBase):
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        acrylic: bool = True,
     ) -> None:
         super().__init__(parent)
         self._metrics = metrics
+        self._acrylic_enabled = bool(acrylic)
         self._theme_override = theme
         self._styled_theme: ModernTheme | None = None
         self._applying_theme = False
@@ -372,7 +375,9 @@ class _ComboAppearance(_ComboBase):
         view_palette.setColor(QPalette.ColorRole.Window, Qt.GlobalColor.transparent)
         view.setPalette(view_palette)
         self.setItemDelegate(
-            _FontComboBoxDelegate(self) if isinstance(self, QFontComboBox) else _ComboBoxDelegate(self)
+            _FontComboBoxDelegate(self)
+            if isinstance(self, QFontComboBox)
+            else _ComboBoxDelegate(self)
         )
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self._apply_theme()
@@ -383,6 +388,17 @@ class _ComboAppearance(_ComboBase):
 
     def theme(self) -> ModernTheme:
         return self._theme_override if self._theme_override is not None else inherited_theme(self)
+
+    def isAcrylicEnabled(self) -> bool:
+        return self._acrylic_enabled
+
+    def setAcrylicEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._acrylic_enabled:
+            return
+        self._acrylic_enabled = enabled
+        if self._popup is not None and self._popup.isVisible():
+            self._refresh_popup_acrylic()
 
     def setTheme(self, theme: ModernTheme | None) -> None:
         """Override locally; None restores owner/ancestor/global inheritance."""
@@ -465,10 +481,13 @@ class _ComboAppearance(_ComboBase):
     def _refresh_popup_acrylic(self) -> None:
         if self._popup is None:
             return
+        if not self._acrylic_enabled:
+            _disable_windows_acrylic(self._popup)
         self._modern_style.setNativeAcrylic(
             _enable_windows_rounded_corners(
                 self._popup, self._metrics.control_radius, square=self.isEditable()
             )
+            and self._acrylic_enabled
             and _enable_windows_acrylic(self._popup)
         )
         self._popup.update()

@@ -91,7 +91,7 @@ def _windows_acrylic_tint(palette: QPalette, widget: QWidget | None = None) -> Q
     return tint
 
 
-def _enable_windows_acrylic(menu: QWidget) -> bool:
+def _set_windows_acrylic(menu: QWidget, enabled: bool) -> bool:
     if not _supports_windows_acrylic():
         return False
     try:
@@ -113,16 +113,18 @@ def _enable_windows_acrylic(menu: QWidget) -> bool:
                 ("size", ctypes.c_size_t),
             ]
 
-        tint = _windows_acrylic_tint(menu.palette(), menu)
-        gradient_color = (
-            (_WINDOWS_ACRYLIC_TINT_ALPHA << 24)
-            | (tint.blue() << 16)
-            | (tint.green() << 8)
-            | tint.red()
-        )
+        gradient_color = 0
+        if enabled:
+            tint = _windows_acrylic_tint(menu.palette(), menu)
+            gradient_color = (
+                (_WINDOWS_ACRYLIC_TINT_ALPHA << 24)
+                | (tint.blue() << 16)
+                | (tint.green() << 8)
+                | tint.red()
+            )
         accent = AccentPolicy(
-            4,  # ACCENT_ENABLE_ACRYLICBLURBEHIND
-            2,
+            4 if enabled else 0,  # ACCENT_ENABLE_ACRYLICBLURBEHIND / ACCENT_DISABLED
+            2 if enabled else 0,
             gradient_color,
             0,
         )
@@ -145,6 +147,14 @@ def _enable_windows_acrylic(menu: QWidget) -> bool:
         )
     except (AttributeError, OSError, ValueError):
         return False
+
+
+def _enable_windows_acrylic(menu: QWidget) -> bool:
+    return _set_windows_acrylic(menu, True)
+
+
+def _disable_windows_acrylic(menu: QWidget) -> bool:
+    return _set_windows_acrylic(menu, False)
 
 
 class _RoundedMenuStyle(QProxyStyle):
@@ -412,6 +422,7 @@ class ModernMenu(QMenu):
         parent: QWidget | None = None,
         *,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        acrylic: bool = True,
     ) -> None:
         if isinstance(title, QWidget):
             if parent is not None:
@@ -427,6 +438,7 @@ class ModernMenu(QMenu):
             super().__init__(title, parent)
 
         self._metrics = metrics
+        self._acrylic_enabled = bool(acrylic)
         theme_manager().theme()
         self.setAttribute(Qt.WidgetAttribute.WA_WindowPropagation, True)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
@@ -434,6 +446,30 @@ class ModernMenu(QMenu):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._rounded_style = _RoundedMenuStyle(metrics.control_radius, _base_style_name(self))
         self.setStyle(self._rounded_style)
+
+    def isAcrylicEnabled(self) -> bool:
+        return self._acrylic_enabled
+
+    def setAcrylicEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._acrylic_enabled:
+            return
+        self._acrylic_enabled = enabled
+        if self.isVisible():
+            self._refresh_acrylic()
+        for action in self.actions():
+            submenu = action.menu()
+            if isinstance(submenu, ModernMenu) and submenu.parentWidget() is self:
+                submenu.setAcrylicEnabled(enabled)
+
+    def _refresh_acrylic(self) -> None:
+        corners = _enable_windows_rounded_corners(self, self._metrics.control_radius)
+        if not self._acrylic_enabled:
+            _disable_windows_acrylic(self)
+        self._rounded_style.setNativeAcrylic(
+            corners and self._acrylic_enabled and _enable_windows_acrylic(self)
+        )
+        self.update()
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
@@ -443,20 +479,11 @@ class ModernMenu(QMenu):
             and hasattr(self, "_rounded_style")
         ):
             # An open Windows popup must refresh its native tint as well as Qt colors.
-            self._rounded_style.setNativeAcrylic(
-                _enable_windows_rounded_corners(self, self._metrics.control_radius)
-                and _enable_windows_acrylic(self)
-            )
-            self.update()
+            self._refresh_acrylic()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        has_native_corners = _enable_windows_rounded_corners(
-            self,
-            self._metrics.control_radius,
-        )
-        self._rounded_style.setNativeAcrylic(has_native_corners and _enable_windows_acrylic(self))
-        self.update()
+        self._refresh_acrylic()
 
     @overload
     def addMenu(self, menu: QMenu, /) -> QAction: ...
@@ -480,4 +507,4 @@ class ModernMenu(QMenu):
         return super().addMenu(*args)
 
     def _create_submenu(self, title: str) -> ModernMenu:
-        return ModernMenu(title, self, metrics=self._metrics)
+        return ModernMenu(title, self, metrics=self._metrics, acrylic=self._acrylic_enabled)

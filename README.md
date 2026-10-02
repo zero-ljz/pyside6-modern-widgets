@@ -1222,6 +1222,23 @@ is open. Very light native acrylic tints are limited to lightness 240 so a pure
 white theme surface does not wash out the backdrop. This leaves the Qt surface
 palette and opaque fallback unchanged.
 
+Windows 11 acrylic is optional per component. `ModernMenu`, `ModernComboBox`,
+`ModernFontComboBox`, `ModernFlyout`, `ModernNotification`, `NotificationManager`,
+`ModernMenuBar`, and `ModernToolBar` accept `acrylic=False` at construction and
+expose `setAcrylicEnabled(bool)` / `isAcrylicEnabled()`. The default is `True` to
+preserve existing behavior; unsupported platforms use an opaque surface. Changes
+take effect on visible popups and notifications immediately. Menus created by a
+menu bar, nested menus created by `addMenu()`, toolbar overflow menus, and cards
+created by a notification manager inherit their owner's setting.
+The navigation gallery shows its acrylic setting only on Windows 11.
+
+```python
+menu = ModernMenu(acrylic=False)
+combo = ModernComboBox(acrylic=False)
+manager = NotificationManager(window, acrylic=False)
+menu.setAcrylicEnabled(True)  # Enable acrylic on Windows 11.
+```
+
 ### Local overrides and application pages
 
 Every component exposing `theme()` / `setTheme()` uses the same priority:

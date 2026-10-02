@@ -12,6 +12,7 @@ from shiboken6 import isValid
 
 from ._theme_binding import ThemeBinding
 from .modern_menu import (
+    _disable_windows_acrylic,
     _enable_windows_acrylic,
     _enable_windows_rounded_corners,
     _soft_line_color,
@@ -99,10 +100,12 @@ class ModernFlyout(QWidget):
         *,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        acrylic: bool = True,
     ) -> None:
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self._theme_override = theme
         self._metrics = metrics
+        self._acrylic_enabled = bool(acrylic)
         self._native_acrylic = False
         self._applying_theme = False
         self._anchor: weakref.ReferenceType[QWidget] | None = None
@@ -136,6 +139,17 @@ class ModernFlyout(QWidget):
 
     def contentWidget(self) -> QWidget | None:
         return self._scroll.widget()
+
+    def isAcrylicEnabled(self) -> bool:
+        return self._acrylic_enabled
+
+    def setAcrylicEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._acrylic_enabled:
+            return
+        self._acrylic_enabled = enabled
+        if self.isVisible():
+            self._refresh_surface()
 
     def setContentWidget(self, widget: QWidget) -> None:
         """Take ownership of widget, deleting any previous content like QScrollArea."""
@@ -318,9 +332,13 @@ class ModernFlyout(QWidget):
         return super().eventFilter(watched, event)
 
     def _refresh_surface(self) -> None:
-        self._native_acrylic = _enable_windows_rounded_corners(
-            self, self._metrics.corner_radius
-        ) and _enable_windows_acrylic(self)
+        if not self._acrylic_enabled:
+            _disable_windows_acrylic(self)
+        self._native_acrylic = (
+            _enable_windows_rounded_corners(self, self._metrics.corner_radius)
+            and self._acrylic_enabled
+            and _enable_windows_acrylic(self)
+        )
         self.update()
 
     def changeEvent(self, event) -> None:

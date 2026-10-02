@@ -43,9 +43,11 @@ class ModernMenuBar(QMenuBar):
         parent: QWidget | None = None,
         *,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        acrylic: bool = True,
     ) -> None:
         super().__init__(parent)
         self._metrics = metrics
+        self._acrylic_enabled = bool(acrylic)
         self._styled_theme: ModernTheme | None = None
         theme_manager().themeChanged.connect(self._on_theme_changed)
         self._apply_theme()
@@ -53,7 +55,23 @@ class ModernMenuBar(QMenuBar):
         # modern menu before the first layout instead of letting Qt create QMenu.
         extension: QToolButton | None = self.findChild(QToolButton, "qt_menubar_ext_button")
         if extension is not None:
-            extension.setMenu(ModernMenu(self, metrics=metrics))
+            extension.setMenu(ModernMenu(self, metrics=metrics, acrylic=acrylic))
+
+    def isAcrylicEnabled(self) -> bool:
+        return self._acrylic_enabled
+
+    def setAcrylicEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._acrylic_enabled:
+            return
+        self._acrylic_enabled = enabled
+        for action in self.actions():
+            menu = action.menu()
+            if isinstance(menu, ModernMenu) and menu.parentWidget() is self:
+                menu.setAcrylicEnabled(enabled)
+        extension = self.findChild(QToolButton, "qt_menubar_ext_button")
+        if extension is not None and isinstance(extension.menu(), ModernMenu):
+            extension.menu().setAcrylicEnabled(enabled)
 
     def _inherited_theme(self) -> ModernTheme:
         return inherited_theme(self)
@@ -88,11 +106,11 @@ class ModernMenuBar(QMenuBar):
 
     def addMenu(self, *args):
         if len(args) == 1 and isinstance(args[0], str):
-            menu = ModernMenu(args[0], self, metrics=self._metrics)
+            menu = ModernMenu(args[0], self, metrics=self._metrics, acrylic=self._acrylic_enabled)
             super().addMenu(menu)
             return menu
         if len(args) == 2 and isinstance(args[0], (QIcon, QPixmap)) and isinstance(args[1], str):
-            menu = ModernMenu(args[1], self, metrics=self._metrics)
+            menu = ModernMenu(args[1], self, metrics=self._metrics, acrylic=self._acrylic_enabled)
             menu.setIcon(QIcon(args[0]))
             super().addMenu(menu)
             return menu

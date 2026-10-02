@@ -286,6 +286,7 @@ class NotificationManager(QObject):
         desktop: bool | None = None,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        acrylic: bool = True,
     ) -> None:
         app = QApplication.instance()
         if not isinstance(app, QApplication) or QThread.currentThread() != app.thread():
@@ -315,6 +316,7 @@ class NotificationManager(QObject):
         self._width, self._margin, self._spacing = width, margin, spacing
         self._theme_override = theme
         self._metrics = metrics
+        self._acrylic_enabled = bool(acrylic)
         self._records: dict[NotificationHandle, _Notification] = {}
         self._screen: QScreen | None = None
         self._counts = (0, 0, 0)
@@ -351,6 +353,18 @@ class NotificationManager(QObject):
 
     def isDesktop(self) -> bool:
         return self._desktop
+
+    def isAcrylicEnabled(self) -> bool:
+        return self._acrylic_enabled
+
+    def setAcrylicEnabled(self, enabled: bool) -> None:
+        self._check_thread()
+        enabled = bool(enabled)
+        if enabled == self._acrylic_enabled:
+            return
+        self._acrylic_enabled = enabled
+        for record in self._records.values():
+            record.card.setAcrylicEnabled(enabled)
 
     def position(self) -> NotificationPosition:
         return self._position
@@ -576,7 +590,11 @@ class NotificationManager(QObject):
         record = self._records.get(handle)
         if record is None:
             host = self._host()
-            card = ModernNotification(parent=None if self._desktop else host, metrics=self._metrics)
+            card = ModernNotification(
+                parent=None if self._desktop else host,
+                metrics=self._metrics,
+                acrylic=self._acrylic_enabled,
+            )
             if self._desktop:
                 card._configure_desktop()
             if host is not None:

@@ -35,6 +35,7 @@ from ._theme_binding import ThemeBinding
 from ._window_chrome import WindowDpiState, uses_windows_window_state
 from ._windows_window import redraw_native_window
 from .modern_menu import (
+    _disable_windows_acrylic,
     _enable_windows_acrylic,
     _enable_windows_rounded_corners,
     _soft_line_color,
@@ -88,6 +89,7 @@ class ModernNotification(QWidget):
         kind: NotificationKind | str = NotificationKind.INFO,
         theme: ModernTheme | None = None,
         metrics: ModernMetrics = DEFAULT_METRICS,
+        acrylic: bool = True,
     ) -> None:
         kind = NotificationKind(kind)
         super().__init__(parent)
@@ -97,6 +99,7 @@ class ModernNotification(QWidget):
         self._theme_override = theme
         self._inherited_theme: ModernTheme | None = None
         self._metrics = metrics
+        self._acrylic_enabled = bool(acrylic)
         self._kind = kind
         self._icon_override: QIcon | None = None
         self._progress: int | None = None
@@ -288,6 +291,17 @@ class ModernNotification(QWidget):
     def dismiss(self, reason: str = "dismissed") -> None:
         self._close_reason = reason
         self.close()
+
+    def isAcrylicEnabled(self) -> bool:
+        return self._acrylic_enabled
+
+    def setAcrylicEnabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._acrylic_enabled:
+            return
+        self._acrylic_enabled = enabled
+        if self.isVisible():
+            self._refresh_surface()
 
     def theme(self) -> ModernTheme:
         if self._theme_override is not None:
@@ -636,10 +650,14 @@ class ModernNotification(QWidget):
         self.contentChanged.emit()
 
     def _refresh_surface(self) -> None:
+        if self._desktop and not self._acrylic_enabled:
+            _disable_windows_acrylic(self)
         self._native_corners = self._desktop and _enable_windows_rounded_corners(
             self, self._metrics.corner_radius
         )
-        self._native_acrylic = self._native_corners and _enable_windows_acrylic(self)
+        self._native_acrylic = (
+            self._native_corners and self._acrylic_enabled and _enable_windows_acrylic(self)
+        )
         self.repaint()
         window_handle = self.windowHandle()
         if window_handle is not None:

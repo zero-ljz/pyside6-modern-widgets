@@ -6,13 +6,20 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QTranslator
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton, QTabWidget
 
+from examples import navigation_view_example
 from examples.navigation_view_example import ExampleWindow
 from pyside6_modern_widgets import (
+    ModernComboBox,
     ModernDialog,
+    ModernFlyout,
+    ModernMenu,
+    ModernMenuBar,
     ModernMessageBox,
     ModernSegmentedControl,
     ModernTabWidget,
+    ModernToolBar,
     NavigationPosition,
+    NotificationManager,
 )
 
 _APP = QApplication.instance() or QApplication([])
@@ -51,6 +58,9 @@ def test_gallery_navigation_groups(language, native_title, custom_title, segment
         assert sidebar.button(19) not in sidebar._item_groups
         assert sidebar.button(14).text() == segmented_title
         assert sidebar.currentIndex() == window.navigation.currentIndex() == 0
+        assert window.acrylic_switch.text() == (
+            "启用亚克力背景" if language == "zh_CN" else "Enable acrylic background"
+        )
     finally:
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
@@ -108,6 +118,39 @@ def test_gallery_native_comparison_pages_have_both_working_controls(monkeypatch)
             label.text() == "More details in a separate section."
             for label in segmented_page.findChildren(QLabel)
         )
+    finally:
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_settings_acrylic_switch_updates_gallery_components():
+    window = ExampleWindow()
+    try:
+        components = [
+            *window.findChildren(ModernMenu),
+            *window.findChildren(ModernMenuBar),
+            *window.findChildren(ModernToolBar),
+            *window.findChildren(ModernComboBox),
+            *window.findChildren(ModernFlyout),
+            *window.findChildren(NotificationManager),
+        ]
+        assert components
+        assert window.acrylic_switch.isChecked()
+        window.acrylic_switch.setChecked(False)
+        assert all(not component.isAcrylicEnabled() for component in components)
+        window.acrylic_switch.setChecked(True)
+        assert all(component.isAcrylicEnabled() for component in components)
+    finally:
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("supported", [False, True])
+def test_settings_acrylic_switch_is_only_shown_on_windows_11(monkeypatch, supported):
+    monkeypatch.setattr(navigation_view_example, "_supports_windows_acrylic", lambda: supported)
+    window = ExampleWindow()
+    try:
+        assert window.acrylic_switch.isHidden() is not supported
     finally:
         window.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
