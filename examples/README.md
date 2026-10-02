@@ -125,9 +125,8 @@ with a Cancel action and completion update. Hover pauses expiry. The pause switc
 suspends delivery without discarding cards, and Clear all cancels displayed and
 pending notifications. The download keeps a `NotificationHandle` and updates
 only its progress/message until completion; actions use `NotificationAction`.
-Native desktop
-notifications stay visible after minimizing the main window; Wayland defaults to
-window delivery. Use the title-bar theme button to see visible cards update immediately.
+Native desktop notifications stay visible after minimizing the main window. Use
+the title-bar theme button to see visible cards update immediately.
 
 The **Flyout** page opens quick settings at each side of a button. Try text input,
 Tab navigation, nested combo popups, and switching appearance inside the panel.
@@ -139,8 +138,8 @@ The **Combo box** page compares `ModernComboBox` and native `QComboBox` side by 
 separators, placeholders, editing, disabled controls, long lists and right-to-left
 layout. Switch the title-bar theme button and try the mouse, arrow keys, typing,
 Enter and Escape. Modern popups use `ModernMenu`'s acrylic styling
-on Windows 11, with an opaque fallback elsewhere. Editable controls and popups
-have four square corners; non-editable combos remain rounded. The status line
+on Windows 11, with an opaque fallback on Windows 10 and macOS. Editable controls
+and popups have four square corners; non-editable combos remain rounded. The status line
 displays Qt's `activated` signal.
 
 The **Switch** page shows enabled, disabled, and right-to-left `ModernSwitch`

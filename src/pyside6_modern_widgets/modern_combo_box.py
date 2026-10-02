@@ -532,7 +532,7 @@ class _ComboAppearance(_ComboBase):
             )
         popup_children = cast(list[QWidget], popup.findChildren(QWidget))
         for child in popup_children:
-            if child.metaObject().className() == "QComboBoxPrivateScroller":
+            if child.inherits("QComboBoxPrivateScroller"):
                 child.setStyle(self._scroller_style)
         # Qt's editable-combo animation uses a QRollEffect screenshot window,
         # which cannot capture DWM acrylic and shows black on repeated opens.

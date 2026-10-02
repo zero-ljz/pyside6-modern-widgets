@@ -42,7 +42,7 @@ def collapsed(monkeypatch, theme_manager_instance, request):
     pointer = [QPoint(100000, 100000)]
     held = [False]
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: pointer[0]))
-    monkeypatch.setattr(controller, "_buttons_pressed", lambda **_kwargs: held[0])
+    monkeypatch.setattr(EdgeDockController, "_buttons_pressed", lambda self, **_kwargs: held[0])
     window.show()
     _APP.processEvents()
     controller.dock(DockSide.LEFT)

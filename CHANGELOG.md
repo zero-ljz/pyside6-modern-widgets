@@ -25,7 +25,7 @@ are retained.
   `NavigationView.addPage()`, with headings that hide in collapsed mode.
 - Add per-component `acrylic` controls for Windows 11 menus, combo popups,
   flyouts, notifications, menu bars, and toolbars, with an opaque fallback on
-  other platforms.
+  Windows 10 and macOS.
 - Add `watercolor` controls for `ModernWindow`, `ModernDialog`, and
   `NavigationSidebar` overlays. The navigation gallery exposes separate
   watercolor and wallpaper color settings.
@@ -54,6 +54,7 @@ are retained.
 
 ### Changed
 
+- Support Windows and macOS only; remove Linux from the test CI matrix.
 - Make `NavigationSidebar.removeItem()` retain Qt ownership and return None.
   Add `takeItem()` to return the hidden button and transfer ownership to the
   caller, matching page container removal.

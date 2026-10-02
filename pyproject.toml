@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pyside6-modern-widgets"
 version = "0.6.0"
-description = "Cross-platform modern frameless windows, navigation, and tabs for PySide6"
+description = "Modern frameless windows, navigation, and tabs for PySide6 on Windows and macOS"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = "MIT"
@@ -15,7 +15,8 @@ dependencies = ["PySide6==6.8.3"]
 
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Operating System :: OS Independent",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

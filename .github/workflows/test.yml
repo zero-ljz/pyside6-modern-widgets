@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -45,14 +45,7 @@ jobs:
       - name: Build package
         run: uv build
 
-      - name: Run Linux platform smoke
-        if: runner.os == 'Linux'
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: uv run python tests/platform_smoke.py
-
       - name: Run native platform smoke
-        if: runner.os != 'Linux'
         run: uv run python tests/platform_smoke.py
 
       - name: Run native Windows notification smoke

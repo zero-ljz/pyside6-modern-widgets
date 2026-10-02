@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-Cross-platform desktop widgets for PySide6. The package provides frameless
+Desktop widgets for PySide6 on Windows and macOS. The package provides frameless
 window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 
 - `ModernWindow`: a modern-chrome replacement for top-level `QWidget` windows
@@ -11,7 +11,7 @@ window chrome, navigation, and tabs while retaining familiar Qt widget APIs.
 - `ModernMessageBox`: a `QMessageBox` subclass with themed frameless chrome,
   native buttons, keyboard handling, and convenience methods.
 - `ModernMenu`: a native `QMenu` with Windows 11 system acrylic (and an
-  opaque fallback elsewhere) plus rounded outer and selected-item
+  opaque fallback on Windows 10 and macOS) plus rounded outer and selected-item
   backgrounds.
 - `ModernMenuBar`: a `QMenuBar` that creates `ModernMenu` drop-down menus.
 - `ModernToolBar`: a `QToolBar` with modern controls and an accessible overflow
@@ -69,16 +69,14 @@ navigation.addPage(settings_page, "Settings", position=NavigationPosition.BOTTOM
 
 ## Supported environment
 
-Supports Windows, macOS, and Linux with Python 3.10-3.12, PySide6 6.8.3, and
+Supports only Windows and macOS with Python 3.10-3.12, PySide6 6.8.3, and
 the Fusion style. Window backgrounds and title content use the same Qt-painted,
-wallpaper-colored theme behavior on every platform.
+wallpaper-colored theme behavior on both systems.
 
 On Windows, the custom chrome retains native activation, moving, resizing,
 minimize/maximize/restore transitions, Aero Snap, shadows, and the system menu.
 Windows 11 additionally provides DWM-rounded corners and Snap Layouts from the
-custom maximize button; Windows 10 uses an opaque square-corner surface. On
-platforms without equivalent frameless-window APIs, Qt supplies system moving,
-resizing, and a menu with the available window commands.
+custom maximize button; Windows 10 uses an opaque square-corner surface.
 
 On macOS, `ModernWindow` keeps the native `NSWindow` frame and traffic-light
 controls, with themed content extended into the transparent title bar. The
@@ -275,8 +273,7 @@ interaction: `HOVER_OR_CLICK`, `CLICK`, or `DRAG_OR_CLICK`. Switch directly betw
 modes using `setHandleMode()`; there are no conflicting flags or implicit changes
 to another preference. String values are `hover_or_click`, `click`, and `drag_or_click`.
 
-The desktop platform must permit global positioning and mouse capture. Wayland
-restrictions also apply to this optional interaction.
+Screen-edge docking requires global positioning and mouse capture.
 
 `DockConfig` controls the snap distance, margin, handle dimensions and colors, animation
 duration, hide delay, and enabled `sides`. The default `dock_distance` is 24 logical
@@ -381,8 +378,7 @@ The drag widget delegates to `ModernWindow.startSystemMove()` (or the Qt window
 handle for ordinary widgets), preserving the existing native mixed-DPI handling.
 Snapping is deferred until system dragging ends, including when the OS consumes
 the mouse release. Manual movement is used only when system movement is unavailable.
-This behavior requires a desktop platform that permits global window placement
-and pointer queries; Wayland compositors may restrict those operations.
+This behavior requires global window placement and pointer queries.
 The controller does not change application quit policy or the target's window flags.
 
 Run `python examples/edge_dock_example.py` for a floating tool with a separate
@@ -401,7 +397,7 @@ from pyside6_modern_widgets import ModernComboBox
 
 combo = ModernComboBox(parent)
 combo.addItem("Windows 11", userData="win11")
-combo.addItem("Linux", userData="linux")
+combo.addItem("macOS", userData="macos")
 combo.setPlaceholderText("Choose a platform")
 combo.setCurrentIndex(-1)
 combo.currentIndexChanged.connect(lambda index: print(index, combo.currentData()))
@@ -418,8 +414,8 @@ The control uses a full focus border with Qt Fusion's focus timing and system
 highlight-derived color: keyboard focus for non-editable combos, and input focus
 for editable combos. Its popup shares `ModernMenu`'s
 surface, subtle outline, row spacing and selection background, including Windows
-11 system acrylic and an opaque fallback elsewhere. It retains Qt's popup
-container, keyboard/mouse/wheel input, models, separators, icons and signals.
+11 system acrylic and an opaque fallback when acrylic is unavailable. It retains
+Qt's popup container, keyboard/mouse/wheel input, models, separators, icons and signals.
 The default item delegate keeps rows transparent under application style sheets,
 so they do not cover the acrylic surface.
 `setView()` and `setItemDelegate()` remain
@@ -704,8 +700,8 @@ opaque content can cover it.
 The panel follows its anchor's theme, or its parent/global theme before the first
 opening. `setTheme(DARK_THEME)` overrides it and `setTheme(None)` restores
 inheritance. Windows 11 uses the same native acrylic surface as `ModernMenu`;
-other platforms use an opaque rounded surface. Optional `metrics=ModernMetrics(...)`
-controls the outer corner radius.
+Windows 10 and macOS use an opaque rounded surface. Optional
+`metrics=ModernMetrics(...)` controls the outer corner radius.
 
 Run `python examples/navigation_view_example.py` and open **Flyout** to try all
 four placements, editable settings, nested combo popups, live appearance changes,
@@ -771,7 +767,7 @@ and keyboard focus. Supplied action lists and icons are copied on acceptance.
 | `capacity` | 100 accepted lifetimes across all screens, including pending posts, queued, visible, suspended, and closing notifications awaiting GUI cleanup. Must be positive. |
 | `width`, `margin`, `spacing` | 360, 16, 12 logical pixels. Cards fit the available area and are at most 360 pixels tall. |
 | `default_timeout_ms` | 5000 milliseconds; `None` makes notifications persistent by default. |
-| `desktop` | Automatic desktop delivery on Windows/macOS/X11; in-window delivery on Wayland. `False` explicitly selects in-window delivery. |
+| `desktop` | Automatic desktop delivery on Windows and macOS. `False` explicitly selects in-window delivery. |
 | `theme`, `metrics` | Inherited theme and `ModernMetrics()`; set `animation_duration_ms=0` to disable entry and stack movement animations. |
 
 Full capacity raises `OverflowError` on the submitting caller without discarding
@@ -864,9 +860,8 @@ deleted does not destroy a manager—call `clear()` when that is desired.
 Custom desktop notifications exist only while the application runs, do not enter
 the OS notification center, and do not automatically follow do-not-disturb settings.
 Desktop action buttons accept mouse input without activating the card; use in-window
-delivery for Tab/Space/Enter/Escape keyboard interaction. Wayland requires a host
-QWidget and uses the in-window fallback; `desktop=True` there raises `ValueError`.
-Desktop positioning/stacking elsewhere remains subject to window-manager policy.
+delivery for Tab/Space/Enter/Escape keyboard interaction. Desktop positioning and
+stacking remain subject to OS window-management policy.
 
 Run `python examples/navigation_view_example.py` and open **Notifications** for
 severity samples, placement, queued delivery, persistent cards, long messages,
@@ -947,7 +942,7 @@ adding padding or enlarging the extension button. Overflow actions retain their 
 enabled/checked states, submenus and `actionTriggered` connections. Resizing or
 changing actions updates the popup; leading, trailing and repeated separators
 are removed. Windows 11 uses the same acrylic surface as `ModernMenu`, with an
-opaque fallback on other platforms.
+opaque fallback on Windows 10 and macOS.
 
 Colors follow the containing modern window or global theme; use
 `toolbar.setTheme(custom_theme)` for an override and `setTheme(None)` to restore
@@ -1082,7 +1077,7 @@ answer = ModernMessageBox.question(
 Message text, details, checkboxes, button ownership, default and escape buttons,
 return values, and completion signals are handled by `QMessageBox` itself.
 The component customizes its palette, background, and title bar. It uses Qt's
-widget message box on every platform so this appearance remains available.
+widget message box on Windows and macOS so this appearance remains available.
 
 `ModernMenu` accepts the same common constructor forms as `QMenu` and works
 with ordinary `QAction` instances, separators, checkable actions, and submenus:
@@ -1102,7 +1097,7 @@ menu.addMenu("Recent")
 
 The process-wide manager defaults to **System mode with wallpaper colors enabled**.
 Select a mode after creating `QApplication`, before creating windows. Use the Fusion
-style for consistent palette support across platforms; the library does not change
+style for consistent palette support on Windows and macOS; the library does not change
 the application's style. Existing widgets update when the theme changes.
 
 ```python
@@ -1212,8 +1207,8 @@ Windows 11 acrylic is optional per component. `ModernMenu`, `ModernComboBox`,
 `ModernFontComboBox`, `ModernFlyout`, `ModernNotification`, `NotificationManager`,
 `ModernMenuBar`, and `ModernToolBar` accept `acrylic=False` at construction and
 expose `setAcrylicEnabled(bool)` / `isAcrylicEnabled()`. The default is `True` to
-preserve existing behavior; unsupported platforms use an opaque surface. Changes
-take effect on visible popups and notifications immediately. Menus created by a
+preserve existing behavior; an opaque surface is used when native acrylic is
+unavailable. Changes take effect on visible popups and notifications immediately. Menus created by a
 menu bar, nested menus created by `addMenu()`, toolbar overflow menus, and cards
 created by a notification manager inherit their owner's setting.
 The navigation gallery shows its acrylic setting only on Windows 11.

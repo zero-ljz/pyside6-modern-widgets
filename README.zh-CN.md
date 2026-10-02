@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-适用于 PySide6 的跨平台桌面控件库。它提供现代窗口标题栏、导航、标签页和常用输入控件，同时尽量保留 Qt 原有的构造方式、信号和交互行为。
+适用于 Windows 和 macOS 的 PySide6 桌面控件库。它提供现代窗口标题栏、导航、标签页和常用输入控件，同时尽量保留 Qt 原有的构造方式、信号和交互行为。
 
 - `ModernWindow`、`ModernDialog`、`ModernMessageBox`：带主题外观的窗口、对话框和消息框。
 - `ModernMenu`、`ModernMenuBar`、`ModernToolBar`、`ModernToolButton`、`ModernPushButton`：菜单和按钮；Windows 11 上的菜单可使用系统 acrylic 效果。
@@ -26,9 +26,9 @@ navigation.addPage(settings_page, "Settings", position=NavigationPosition.BOTTOM
 
 ## 支持环境
 
-支持 Windows、macOS 和 Linux，要求 Python 3.10-3.12、PySide6 6.8.3 和 Fusion 样式。主题背景由 Qt 绘制，并可从桌面壁纸提取颜色。
+仅支持 Windows 和 macOS，要求 Python 3.10-3.12、PySide6 6.8.3 和 Fusion 样式。主题背景由 Qt 绘制，并可从桌面壁纸提取颜色。
 
-Windows 上的自定义标题栏保留原生窗口激活、移动、缩放、最小化、最大化、Aero Snap、阴影和系统菜单。Windows 11 还支持 DWM 圆角及最大化按钮的 Snap Layouts；Windows 10 使用方角不透明表面。在没有等效无边框窗口接口的平台上，移动、缩放和可用窗口命令由 Qt 提供。
+Windows 上的自定义标题栏保留原生窗口激活、移动、缩放、最小化、最大化、Aero Snap、阴影和系统菜单。Windows 11 还支持 DWM 圆角及最大化按钮的 Snap Layouts；Windows 10 使用方角不透明表面。
 
 macOS 上的 `ModernWindow` 保留原生 `NSWindow` 边框和红黄绿窗口按钮，将主题内容延伸到透明标题栏；不显示 Windows 风格按钮和窗口图标。标题栏双击遵循系统偏好。`ModernMessageBox` 使用原生标题栏拖动，并保留 Qt 的 macOS 内容边距。
 
@@ -99,7 +99,7 @@ from pyside6_modern_widgets import DockHandleMode
 dock.setHandleMode(DockHandleMode.DRAG_OR_CLICK)
 ```
 
-点击会恢复窗口；拖动超过 Qt 的系统阈值后，手柄可跨边缘和显示器移动。放到允许的屏幕边缘附近会保持折叠并重新停靠，放到屏幕内部会展开并取消停靠。按 Escape、失去鼠标捕获或改变屏幕配置会取消正在进行的拖动。该功能需要桌面环境允许全局定位和鼠标捕获；Wayland 的限制同样适用。
+点击会恢复窗口；拖动超过 Qt 的系统阈值后，手柄可跨边缘和显示器移动。放到允许的屏幕边缘附近会保持折叠并重新停靠，放到屏幕内部会展开并取消停靠。按 Escape、失去鼠标捕获或改变屏幕配置会取消正在进行的拖动。该功能需要全局定位和鼠标捕获。
 
 `DockConfig` 控制吸附距离、边距、手柄尺寸与颜色、动画时长、隐藏延迟和允许的边缘。默认 `dock_distance` 为 24 逻辑像素，默认启用左、右、上三边；需要底边时加入 `DockSide.BOTTOM`。`config()` 返回快照，`setConfig()` 原子更新配置。`setAutoHide(False)` 只关闭自动隐藏，不会自动展开已折叠窗口。
 
@@ -109,14 +109,14 @@ dock.setHandleMode(DockHandleMode.DRAG_OR_CLICK)
 
 ## 组合框与输入控件
 
-`ModernComboBox` 保留 `QComboBox` 的模型、编辑、验证、补全、选择信号和键盘/鼠标操作。弹出列表沿用 Qt 容器，使用现代菜单的行距、选中背景和外框；Windows 11 上可使用 acrylic，其余平台使用不透明表面。调用者设置的视图、委托或显式 palette 仍由调用者控制。
+`ModernComboBox` 保留 `QComboBox` 的模型、编辑、验证、补全、选择信号和键盘/鼠标操作。弹出列表沿用 Qt 容器，使用现代菜单的行距、选中背景和外框；Windows 11 上可使用 acrylic，Windows 10 和 macOS 使用不透明表面。调用者设置的视图、委托或显式 palette 仍由调用者控制。
 
 ```python
 from pyside6_modern_widgets import ModernComboBox
 
 combo = ModernComboBox(parent)
 combo.addItem("Windows 11", userData="win11")
-combo.addItem("Linux", userData="linux")
+combo.addItem("macOS", userData="macos")
 combo.setPlaceholderText("Choose a platform")
 combo.setCurrentIndex(-1)
 combo.currentIndexChanged.connect(lambda index: print(index, combo.currentData()))
@@ -236,7 +236,7 @@ button.clicked.connect(lambda: flyout.popup(button))
 
 `popup(anchor, placement="bottom", gap=8)` 要求锚点可见。方向可选 `bottom`、`top`、`left`、`right` 或 `FlyoutPlacement` 枚举；空间不足时会尝试其他方向，并保持在锚点屏幕的可用区域内。过长内容会出现滚动条。锚点移动或缩放时面板重新定位；锚点隐藏、销毁或重新挂接时面板关闭。嵌套菜单或组合框的 Escape 会先关闭内部弹出层。
 
-`setContentWidget()` 接管内容所有权并删除旧内容；`takeContentWidget()` 移出内容并将所有权交还调用者。`opened` / `closed` 报告可见性变化。面板优先继承锚点主题；Windows 11 上可使用 acrylic，其他平台使用不透明圆角表面。
+`setContentWidget()` 接管内容所有权并删除旧内容；`takeContentWidget()` 移出内容并将所有权交还调用者。`opened` / `closed` 报告可见性变化。面板优先继承锚点主题；Windows 11 上可使用 acrylic，Windows 10 和 macOS 使用不透明圆角表面。
 
 ## 通知
 
@@ -278,7 +278,7 @@ notifications.actionTriggered.connect(lambda handle, action_id: print(handle.id(
 | `capacity` | 最多接受 100 个生命周期，包括待投递、排队、可见、暂停及待 GUI 清理的通知。 |
 | `width`、`margin`、`spacing` | 分别为 360、16、12 逻辑像素；卡片最高 360 像素。 |
 | `default_timeout_ms` | 5000 毫秒；设为 `None` 可让默认通知常驻。 |
-| `desktop` | Windows、macOS、X11 默认桌面投递；Wayland 默认窗口内投递。传 `False` 强制窗口内投递。 |
+| `desktop` | Windows 和 macOS 默认桌面投递；传 `False` 强制窗口内投递。 |
 | `theme`、`metrics` | 继承主题与默认 `ModernMetrics()`；动画时长可设为 0。 |
 
 超过 `capacity` 时，提交方收到 `OverflowError`，已有通知不会被逐出。每个屏幕按先进先出投递，最早可见的卡片靠近所选角。`setScreen()` 指定默认目标屏幕，`notify(screen=...)` 可固定单条通知的屏幕；屏幕移除或 DPI/几何变化时会重新排列。`setPosition()`、`setMaxVisible()` 和 `setDeliveryPaused()` 可在运行时改变布局与投递。暂停投递或窗口隐藏时，已接受通知及倒计时都会保留。
@@ -296,7 +296,7 @@ notifications.actionTriggered.connect(lambda handle, action_id: print(handle.id(
 | `countChanged(visible, waiting, suspended)` | 数量变化；`waiting` 包括待投递和排队。 |
 | `deliveryFailed(handle, message)` | 投递失败，handle 以 `failed` 关闭。 |
 
-`handle.widget()` 仅借用已创建的 `ModernNotification` 视图；内容修改应使用 `handle.update()`，不要重新挂接或手动显示、隐藏受管理的卡片。单独创建的 `ModernNotification` 仍保留自身 setter 和 `addActionButton()`。桌面通知只在应用运行时存在，不进入系统通知中心，也不会自动遵循勿扰设置。Wayland 需要宿主 `QWidget` 并使用窗口内投递；在 Wayland 强制 `desktop=True` 会抛出 `ValueError`。
+`handle.widget()` 仅借用已创建的 `ModernNotification` 视图；内容修改应使用 `handle.update()`，不要重新挂接或手动显示、隐藏受管理的卡片。单独创建的 `ModernNotification` 仍保留自身 setter 和 `addActionButton()`。桌面通知只在应用运行时存在，不进入系统通知中心，也不会自动遵循勿扰设置。
 
 导航示例的 **Notifications** 页面展示类型、角落、队列、进度、操作和暂停投递。旧 ID API 到 Handle API 的对照见[0.6.0 迁移指南](docs/migration-0.6.md)。
 
@@ -357,7 +357,7 @@ answer = ModernMessageBox.question(
 
 ## 主题
 
-全局 `theme_manager()` 默认使用 **System 模式并启用壁纸颜色**。在创建 `QApplication` 后、创建窗口前选择模式。库不会修改应用的 Qt 样式；推荐设置 Fusion 以获得跨平台一致的 palette 行为：
+全局 `theme_manager()` 默认使用 **System 模式并启用壁纸颜色**。在创建 `QApplication` 后、创建窗口前选择模式。库不会修改应用的 Qt 样式；推荐设置 Fusion 以在 Windows 和 macOS 上获得一致的 palette 行为：
 
 ```python
 from PySide6.QtWidgets import QApplication
@@ -388,7 +388,7 @@ System 模式监听 `QApplication.styleHints().colorScheme()`；未知系统明�
 
 `ModernWindow`、`ModernDialog` 和 `NavigationSidebar` 覆盖层接受 `watercolor=False`，也可通过 `setWatercolorEnabled()` / `isWatercolorEnabled()` 切换为主题的纯色 `surface_alternate`。这与壁纸颜色采样是两项不同设置；导航示例只在启用水彩背景时允许修改壁纸颜色开关。窗口失活时使用纯色背景，重新激活后以 250 毫秒渐变恢复效果。
 
-Windows 11 的 acrylic 可按组件关闭。`ModernMenu`、`ModernComboBox`、`ModernFontComboBox`、`ModernFlyout`、`ModernNotification`、`NotificationManager`、`ModernMenuBar` 和 `ModernToolBar` 接受 `acrylic=False`，并提供 `setAcrylicEnabled()` / `isAcrylicEnabled()`。默认启用；其他平台退回不透明表面。已有可见弹出层和通知会立即更新，子菜单、工具栏溢出菜单和受管理通知继承所有者设置。
+Windows 11 的 acrylic 可按组件关闭。`ModernMenu`、`ModernComboBox`、`ModernFontComboBox`、`ModernFlyout`、`ModernNotification`、`NotificationManager`、`ModernMenuBar` 和 `ModernToolBar` 接受 `acrylic=False`，并提供 `setAcrylicEnabled()` / `isAcrylicEnabled()`。默认启用；原生 acrylic 不可用时使用不透明表面。已有可见弹出层和通知会立即更新，子菜单、工具栏溢出菜单和受管理通知继承所有者设置。
 
 ```python
 menu = ModernMenu(acrylic=False)

@@ -1110,7 +1110,7 @@ class ExampleWindow(ModernWindow):
             for column, widget_type in enumerate((QComboBox, ModernComboBox), start=1):
                 combo = widget_type()
                 combo.setMinimumWidth(230)
-                combo.addItems(["Windows 11", "Windows 10", "Linux", "macOS"])
+                combo.addItems(["Windows 11", "Windows 10", "macOS"])
                 if example_type == "icons":
                     combo.setItemIcon(0, QIcon(":/pyside6_modern_widgets/icons/settings.png"))
                     combo.setItemIcon(1, QIcon(":/pyside6_modern_widgets/icons/application.png"))

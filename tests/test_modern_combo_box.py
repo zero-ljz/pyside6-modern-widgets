@@ -90,7 +90,7 @@ def test_long_popup_scrollers_use_outlined_chevrons(element, tip_y, empty_y):
         scrollers = [
             child
             for child in combo.view().window().findChildren(QWidget)
-            if child.metaObject().className() == "QComboBoxPrivateScroller"
+            if child.inherits("QComboBoxPrivateScroller")
         ]
         assert len(scrollers) == 2
         assert all(scroller.style() is combo._scroller_style for scroller in scrollers)

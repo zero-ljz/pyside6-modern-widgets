@@ -383,6 +383,7 @@ def docked(monkeypatch, theme_manager_instance):
     _APP.processEvents()
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(10000, 10000)))
     yield window, controller, strip, field
+    monkeypatch.undo()
     window.close()
     window.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
@@ -716,6 +717,7 @@ def test_restore_rechecks_native_occlusion_at_cursor(docked, monkeypatch):
 
     window, controller, _, _ = docked
     calls = []
+    monkeypatch.setattr(controller, "_buttons_pressed", lambda **_: False)
     monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
     monkeypatch.setattr(edge_dock, "window_is_at_cursor", lambda _hwnd: False)
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: window.frameGeometry().center()))
@@ -735,6 +737,7 @@ def test_foreground_settling_retries_late_occlusion_with_a_fixed_budget(docked, 
     from pyside6_modern_widgets import edge_dock
 
     window, controller, _, _ = docked
+    monkeypatch.setattr(controller, "_buttons_pressed", lambda **_: False)
     monkeypatch.setattr(edge_dock, "uses_windows_window_state", lambda: True)
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: window.frameGeometry().center()))
     occluded = [False]
@@ -925,35 +928,38 @@ def test_system_drag_survives_ungrab_and_snaps_after_native_finish(
     original_pos = window.pos()
     calls = []
     handle = window.windowHandle()
-    monkeypatch.setattr(handle, "startSystemMove", lambda: calls.append(True) or True)
-    monkeypatch.setattr(QApplication, "mouseButtons", staticmethod(lambda: Qt.LeftButton))
-    local = surface.rect().center()
-    pointer = surface.mapToGlobal(local)
     try:
-        _mouse(surface, QEvent.Type.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton)
-        _mouse(
-            surface,
-            QEvent.Type.MouseMove,
-            local,
-            pointer + QPoint(20, 0),
-            Qt.NoButton,
-            Qt.LeftButton,
-        )
-        assert calls == [True]
-        assert controller._system_move
-        assert window.pos() == original_pos  # The controller must not also move it.
-        QApplication.sendEvent(surface, QEvent(QEvent.Type.UngrabMouse))
-        assert controller._system_move
-        area = window.screen().availableGeometry()
-        window.move(area.left() + 12, area.top() + 150)
-        # No Qt MouseButtonRelease arrives after the native move loop.
-        window._finish_system_move()
-        assert not controller._system_move
-        assert controller.dockSide() == DockSide.NONE  # Deferred past the native event.
-        _APP.processEvents()
-        assert controller.dockSide() == DockSide.LEFT
-        assert window.frameGeometry().left() == area.left() + 2
-        assert window.size() == original_size
+        with monkeypatch.context() as handle_patch:
+            handle_patch.setattr(handle, "startSystemMove", lambda: calls.append(True) or True)
+            monkeypatch.setattr(QApplication, "mouseButtons", staticmethod(lambda: Qt.LeftButton))
+            local = surface.rect().center()
+            pointer = surface.mapToGlobal(local)
+            _mouse(
+                surface, QEvent.Type.MouseButtonPress, local, pointer, Qt.LeftButton, Qt.LeftButton
+            )
+            _mouse(
+                surface,
+                QEvent.Type.MouseMove,
+                local,
+                pointer + QPoint(20, 0),
+                Qt.NoButton,
+                Qt.LeftButton,
+            )
+            assert calls == [True]
+            assert controller._system_move
+            assert window.pos() == original_pos  # The controller must not also move it.
+            QApplication.sendEvent(surface, QEvent(QEvent.Type.UngrabMouse))
+            assert controller._system_move
+            area = window.screen().availableGeometry()
+            window.move(area.left() + 12, area.top() + 150)
+            # No Qt MouseButtonRelease arrives after the native move loop.
+            window._finish_system_move()
+            assert not controller._system_move
+            assert controller.dockSide() == DockSide.NONE  # Deferred past the native event.
+            _APP.processEvents()
+            assert controller.dockSide() == DockSide.LEFT
+            assert window.frameGeometry().left() == area.left() + 2
+            assert window.size() == original_size
     finally:
         window.close()
         window.deleteLater()
@@ -1272,9 +1278,10 @@ def test_target_destruction_during_system_drag_does_not_call_dead_window(
     controller = EdgeDockController(window, drag_widget=strip)
     window.show()
     _APP.processEvents()
-    monkeypatch.setattr(window, "_uses_windows_window_state", lambda: False)
-    monkeypatch.setattr(window.windowHandle(), "startSystemMove", lambda: True)
-    assert controller._start_system_drag(window.pos())
+    with monkeypatch.context() as window_patch:
+        window_patch.setattr(window, "_uses_windows_window_state", lambda: False)
+        window_patch.setattr(window.windowHandle(), "startSystemMove", lambda: True)
+        assert controller._start_system_drag(window.pos())
     window.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     _APP.processEvents()

@@ -298,7 +298,7 @@ class CustomTitleBar(WindowTitleBar["ModernWindow"]):
 
 
 class ModernWindow(QWidget):
-    """Cross-platform frameless shell with themeable modern chrome."""
+    """Themeable modern window shell for Windows and macOS."""
 
     themeChanged = Signal(object)
 
