@@ -60,10 +60,13 @@ def test_gallery_navigation_groups(language, native_title, custom_title, segment
         assert sidebar.button(14).text() == segmented_title
         assert sidebar.currentIndex() == window.navigation.currentIndex() == 0
         assert window.acrylic_switch.text() == (
-            "启用亚克力背景" if language == "zh_CN" else "Enable acrylic background"
+            "启用亚克力材质" if language == "zh_CN" else "Enable acrylic material"
         )
         assert window.watercolor_switch.text() == (
-            "启用水彩背景" if language == "zh_CN" else "Enable watercolor background"
+            "启用水彩背景效果" if language == "zh_CN" else "Enable watercolor background effect"
+        )
+        assert window.wallpaper_switch.text() == (
+            "使用桌面壁纸配色" if language == "zh_CN" else "Use desktop wallpaper palette"
         )
     finally:
         window.deleteLater()

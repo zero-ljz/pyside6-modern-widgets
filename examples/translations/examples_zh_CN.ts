@@ -1162,16 +1162,16 @@
     </message>
     <message>
         <location filename="../navigation_view_example.py" line="1352"/>
-        <source>Use desktop wallpaper colors</source>
-        <translation>使用桌面壁纸颜色</translation>
+        <source>Use desktop wallpaper palette</source>
+        <translation>使用桌面壁纸配色</translation>
     </message>
     <message>
-        <source>Enable acrylic background</source>
-        <translation>启用亚克力背景</translation>
+        <source>Enable acrylic material</source>
+        <translation>启用亚克力材质</translation>
     </message>
     <message>
-        <source>Enable watercolor background</source>
-        <translation>启用水彩背景</translation>
+        <source>Enable watercolor background effect</source>
+        <translation>启用水彩背景效果</translation>
     </message>
     <message>
         <location filename="../navigation_view_example.py" line="1369"/>
