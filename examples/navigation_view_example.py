@@ -1608,6 +1608,13 @@ class ExampleWindow(ModernWindow):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
+        if isinstance(dialog, ModernDialog):
+            for button in buttons.buttons():
+                role = buttons.buttonRole(button)
+                modern_button = ModernPushButton(button.icon(), button.text(), dialog)
+                buttons.removeButton(button)
+                button.deleteLater()
+                buttons.addButton(modern_button, role)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)

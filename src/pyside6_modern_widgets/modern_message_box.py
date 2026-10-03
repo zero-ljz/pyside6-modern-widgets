@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QMessageBox, QWidget
+from PySide6.QtWidgets import QDialogButtonBox, QMessageBox, QWidget
 
 from . import _system_menu
+from ._button_style import ButtonStyleBinding
 from ._macos_window import (
     set_macos_window_appearance,
     uses_macos_native_title_bar,
@@ -31,7 +32,7 @@ from .theme import (
 
 
 class ModernMessageBox(QMessageBox):
-    """Keep QMessageBox content and behavior, adding only themed window chrome."""
+    """Keep QMessageBox content and behavior with themed chrome and button painting."""
 
     themeChanged = Signal(object)
 
@@ -75,6 +76,10 @@ class ModernMessageBox(QMessageBox):
         self._theme_override = theme
         self._theme = theme if theme is not None else inherited_theme(self)
         self._metrics = metrics
+        button_box = self.findChild(QDialogButtonBox)
+        self._button_style_binding = (
+            ButtonStyleBinding(button_box, metrics) if button_box is not None else None
+        )
         self._corner_radius = metrics.corner_radius
         self._surface_policy = current_window_surface_policy(
             native_macos_title_bar=self._uses_native_macos_title_bar
@@ -144,6 +149,8 @@ class ModernMessageBox(QMessageBox):
 
     def _apply_window_style(self) -> None:
         self._theme = self.theme()
+        if self._button_style_binding is not None:
+            self._button_style_binding.refresh()
         self._chrome.apply(self._theme, self._corner_radius)
         if self._uses_native_macos_title_bar:
             self._title_bar.hide()

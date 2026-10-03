@@ -9,6 +9,7 @@ from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QDialogButtonBox,
     QLineEdit,
     QMenu,
     QPushButton,
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ModernPushButton
+from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ModernDialog, ModernPushButton
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -300,3 +301,33 @@ def test_example_has_native_and_modern_button_pairs(widgets):
         assert a.isDefault() == b.isDefault()
         assert a.isFlat() == b.isFlat()
         assert (a.menu() is None) == (b.menu() is None)
+
+
+@pytest.mark.parametrize("dialog_type", [QDialog, ModernDialog])
+def test_dialog_example_button_roles_and_appearance(widgets, monkeypatch, dialog_type):
+    from examples.navigation_view_example import ExampleWindow
+
+    observed = []
+
+    def inspect(dialog):
+        button_box = dialog.findChild(QDialogButtonBox)
+        buttons = button_box.buttons()
+        expected_type = ModernPushButton if dialog_type is ModernDialog else QPushButton
+        assert len(buttons) == 2
+        assert all(type(button) is expected_type for button in buttons)
+        roles = {button_box.buttonRole(button): button for button in buttons}
+        assert set(roles) == {
+            QDialogButtonBox.ButtonRole.AcceptRole,
+            QDialogButtonBox.ButtonRole.RejectRole,
+        }
+        roles[QDialogButtonBox.ButtonRole.AcceptRole].click()
+        assert dialog.result() == QDialog.DialogCode.Accepted
+        roles[QDialogButtonBox.ButtonRole.RejectRole].click()
+        assert dialog.result() == QDialog.DialogCode.Rejected
+        observed.append(dialog)
+        return dialog.result()
+
+    monkeypatch.setattr(QDialog, "exec", inspect)
+    window = widgets(ExampleWindow)
+    window._show_dialog(dialog_type)
+    assert len(observed) == 1

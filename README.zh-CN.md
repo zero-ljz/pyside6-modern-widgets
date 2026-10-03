@@ -339,6 +339,8 @@ app.exec()
 
 `ModernDialog` 保留 `QDialog` 的布局、`exec()`、`accept()`、`reject()` 和结果代码。`ModernMessageBox` 保留 `QMessageBox` 的标准按钮、详细文本、复选框、默认/退出按钮、返回值和完成信号，同时使用主题外观：
 
+`ModernDialog` 的内容按钮可使用 `ModernPushButton`，通过 `QDialogButtonBox.addButton()` 指定按钮角色。`ModernMessageBox` 的标准、自定义和详情按钮共用现代按钮的绘制逻辑，保留原有 Qt 按钮对象及标准按钮映射。
+
 ```python
 from pyside6_modern_widgets import ModernMessageBox
 

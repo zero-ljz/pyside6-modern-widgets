@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -8,9 +9,10 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QMessageBox, QPushButton
 
-from pyside6_modern_widgets import LIGHT_THEME, ModernMessageBox
+from pyside6_modern_widgets import DARK_THEME, LIGHT_THEME, ModernMessageBox, ModernPushButton
+from pyside6_modern_widgets.theme import DEFAULT_METRICS
 
 _APP = QApplication.instance() or QApplication([])
 Button = QMessageBox.StandardButton
@@ -64,6 +66,97 @@ def test_standard_button_results_and_signal_order_match_qt(button):
         assert box.clickedButton() is box.button(button)
         _dispose(box)
     assert outcomes[0] == outcomes[1]
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+@pytest.mark.parametrize("default", [False, True])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_standard_buttons_use_modern_painting_and_follow_theme(theme, default, enabled):
+    theme = replace(theme, accent="#197F64")
+    box = ModernMessageBox(buttons=Button.Save | Button.Cancel, theme=theme)
+    button = box.button(Button.Save)
+    reference = ModernPushButton(theme=theme)
+    try:
+        assert type(button) is QPushButton
+        for widget in (button, reference):
+            widget.setText("")
+            widget.setDefault(default)
+            widget.setEnabled(enabled)
+            widget.setFixedSize(100, 32)
+        expected = theme.accent if default else theme.surface
+        if not enabled:
+            expected = theme.border if default else theme.surface_alternate
+        for widget in (button, reference):
+            assert widget.grab().toImage().pixelColor(50, 24) == QColor(expected)
+        box.setTheme(replace(theme, surface="#A6C8BD", accent="#894A66"))
+        if enabled:
+            assert button.grab().toImage().pixelColor(50, 24) == QColor(
+                "#894A66" if default else "#A6C8BD"
+            )
+        assert box.button(Button.Save) is button
+        assert box.standardButton(button) == Button.Save
+    finally:
+        reference.deleteLater()
+        _dispose(box)
+
+
+def test_lazily_created_standard_custom_and_details_buttons_use_modern_painting():
+    box = ModernMessageBox(theme=LIGHT_THEME)
+    box.show()
+    _APP.processEvents()
+    try:
+        box.setStandardButtons(Button.Save | Button.Cancel)
+        custom = QPushButton("Custom")
+        box.addButton(custom, Role.ActionRole)
+        box.setDetailedText("Diagnostic information")
+        _APP.processEvents()
+        details = next(
+            button
+            for button in box.buttons()
+            if button is not custom and box.standardButton(button) == Button.NoButton
+        )
+        for button in (box.button(Button.Save), box.button(Button.Cancel), custom, details):
+            button.setEnabled(False)
+            button.resize(100, 32)
+            assert button.grab().toImage().pixelColor(50, 24) == QColor(
+                LIGHT_THEME.border if button.isDefault() else LIGHT_THEME.surface_alternate
+            )
+            button.setEnabled(True)
+        assert box.buttonRole(custom) == Role.ActionRole
+        details.click()
+        assert box.isVisible()
+        details.click()
+        assert box.isVisible()
+        box.removeButton(custom)
+        assert custom not in box.buttons()
+        box.setStandardButtons(Button.Yes | Button.No)
+        _APP.processEvents()
+        yes = box.button(Button.Yes)
+        box.setDefaultButton(yes)
+        QTest.keyClick(yes, Qt.Key.Key_Return)
+        assert box.clickedButton() is yes
+        assert box.result() == Button.Yes.value
+    finally:
+        _dispose(box)
+
+
+def test_message_button_preserves_custom_modern_button_theme_and_metrics():
+    box = ModernMessageBox(theme=LIGHT_THEME, metrics=replace(DEFAULT_METRICS, control_radius=0))
+    custom = ModernPushButton("Custom", theme=DARK_THEME)
+    original_style = custom.style()
+    box.addButton(custom, Role.ActionRole)
+    try:
+        box.setStandardButtons(Button.Save | Button.Cancel)
+        button = box.button(Button.Cancel)
+        button.setEnabled(False)
+        button.resize(100, 32)
+        image = button.grab().toImage()
+        assert image.pixelColor(1, 1) == QColor(LIGHT_THEME.surface_alternate)
+        custom.ensurePolished()
+        assert custom.style() is original_style
+        assert custom.theme() == DARK_THEME
+    finally:
+        _dispose(box)
 
 
 @pytest.mark.parametrize(

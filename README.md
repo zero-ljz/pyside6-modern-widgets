@@ -1044,15 +1044,15 @@ before taking ownership.
 ```python
 from PySide6.QtWidgets import QDialogButtonBox, QLabel, QVBoxLayout
 
-from pyside6_modern_widgets import ModernDialog
+from pyside6_modern_widgets import ModernDialog, ModernPushButton
 
 dialog = ModernDialog(window)
 dialog.setWindowTitle("Settings")
 layout = QVBoxLayout(dialog)
 layout.addWidget(QLabel("Dialog content"))
-buttons = QDialogButtonBox(
-    QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-)
+buttons = QDialogButtonBox(dialog)
+buttons.addButton(ModernPushButton("OK", dialog), QDialogButtonBox.ButtonRole.AcceptRole)
+buttons.addButton(ModernPushButton("Cancel", dialog), QDialogButtonBox.ButtonRole.RejectRole)
 buttons.accepted.connect(dialog.accept)
 buttons.rejected.connect(dialog.reject)
 layout.addWidget(buttons)
@@ -1076,6 +1076,8 @@ answer = ModernMessageBox.question(
 
 Message text, details, checkboxes, button ownership, default and escape buttons,
 return values, and completion signals are handled by `QMessageBox` itself.
+Standard, custom, and details buttons share `ModernPushButton` painting while
+remaining the original Qt button objects, including their standard-button mappings.
 The component customizes its palette, background, and title bar. It uses Qt's
 widget message box on Windows and macOS so this appearance remains available.
 

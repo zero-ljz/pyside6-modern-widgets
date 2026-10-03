@@ -65,95 +65,104 @@ class ModernPushButton(QPushButton):
     def paintEvent(self, event) -> None:
         option = _ButtonOption()
         self.initStyleOption(option)
-        theme = self.theme()
-        state = QStyle.StateFlag
-        feature = QStyleOptionButton.ButtonFeature
-        enabled = bool(option.state & state.State_Enabled)
-        pressed = bool(option.state & state.State_Sunken)
-        hovered = bool(option.state & state.State_MouseOver)
-        accented = bool(option.state & state.State_On or option.features & feature.DefaultButton)
-        flat = bool(option.features & feature.Flat)
-        accent = (
-            QColor(theme.accent)
-            if theme.accent is not None
-            else option.palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Accent)
-        )
-        foreground = QColor(theme.text)
-        fill = QColor(theme.surface)
-        border = QColor(theme.border)
-        if accented:
-            fill = border = accent
-            foreground = (
-                QColor(theme.on_accent)
-                if theme.on_accent is not None
-                else QColor("#FFFFFF" if accent.lightnessF() < 0.6 else "#202020")
-            )
-        if not enabled:
-            fill = QColor(theme.border if accented else theme.surface_alternate)
-            border = QColor(theme.border)
-            foreground = QColor(theme.text_disabled)
-
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)
-        radius = max(0, min(self._metrics.control_radius, rect.height() / 2, rect.width() / 2))
-        if not flat or accented or pressed:
-            painter.setPen(QPen(border, 1))
-            painter.setBrush(fill)
-            painter.drawRoundedRect(rect, radius, radius)
-        if enabled and (pressed or hovered):
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(theme.control_pressed if pressed else theme.control_hover))
-            painter.drawRoundedRect(rect, radius, radius)
-
-        # Delegate the complete label to Qt: icon modes/states, iconSize, mnemonic
-        # visibility, RTL, and the menu-indicator space stay native.
-        for group in (
-            QPalette.ColorGroup.Active,
-            QPalette.ColorGroup.Inactive,
-            QPalette.ColorGroup.Disabled,
-        ):
-            option.palette.setColor(group, QPalette.ColorRole.ButtonText, foreground)
-        label = _ButtonOption(option)
-        label.rect = self.style().subElementRect(
-            QStyle.SubElement.SE_PushButtonContents, option, self
-        )
-        self.style().drawControl(QStyle.ControlElement.CE_PushButtonLabel, label, painter, self)
-
-        if option.features & feature.HasMenu:
-            # QCommonStyle's push-button menu indicator rectangle (also used by
-            # Fusion); only the glyph changes. QPushButton still opens the menu.
-            mbi = self.style().pixelMetric(QStyle.PixelMetric.PM_MenuButtonIndicator, option, self)
-            arrow = QRect(
-                option.rect.right() - mbi - 2,
-                option.rect.height() // 2 - mbi // 2 + 3,
-                mbi - 6,
-                mbi - 6,
-            )
-            arrow = QStyle.visualRect(option.direction, option.rect, arrow)
-            center = QRectF(arrow).center()
-            half_width = max(0, (arrow.width() - 1) / 2)
-            painter.setPen(
-                QPen(
-                    foreground,
-                    1.2,
-                    Qt.PenStyle.SolidLine,
-                    Qt.PenCapStyle.RoundCap,
-                    Qt.PenJoinStyle.RoundJoin,
-                )
-            )
-            painter.drawLine(center + QPointF(-half_width, -1), center + QPointF(0, 1.5))
-            painter.drawLine(center + QPointF(0, 1.5), center + QPointF(half_width, -1))
-
-        if (
-            enabled
-            and option.state & state.State_HasFocus
-            and (option.state & state.State_KeyboardFocusChange)
-        ):
-            focus_rect = QRectF(
-                self.style().subElementRect(QStyle.SubElement.SE_PushButtonFocusRect, option, self)
-            ).adjusted(0.5, 0.5, -0.5, -0.5)
-            painter.setPen(QPen(foreground if accented else accent, 1))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(focus_rect, max(0, radius - 1), max(0, radius - 1))
+        _paint_modern_button(self, option, painter, self.theme(), self._metrics)
         painter.end()
+
+
+def _paint_modern_button(
+    widget: QPushButton,
+    option: _ButtonOption,
+    painter: QPainter,
+    theme: ModernTheme,
+    metrics: ModernMetrics,
+) -> None:
+    state = QStyle.StateFlag
+    feature = QStyleOptionButton.ButtonFeature
+    enabled = bool(option.state & state.State_Enabled)
+    pressed = bool(option.state & state.State_Sunken)
+    hovered = bool(option.state & state.State_MouseOver)
+    accented = bool(option.state & state.State_On or option.features & feature.DefaultButton)
+    flat = bool(option.features & feature.Flat)
+    accent = (
+        QColor(theme.accent)
+        if theme.accent is not None
+        else option.palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Accent)
+    )
+    foreground = QColor(theme.text)
+    fill = QColor(theme.surface)
+    border = QColor(theme.border)
+    if accented:
+        fill = border = accent
+        foreground = (
+            QColor(theme.on_accent)
+            if theme.on_accent is not None
+            else QColor("#FFFFFF" if accent.lightnessF() < 0.6 else "#202020")
+        )
+    if not enabled:
+        fill = QColor(theme.border if accented else theme.surface_alternate)
+        border = QColor(theme.border)
+        foreground = QColor(theme.text_disabled)
+
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    rect = QRectF(option.rect).adjusted(0.5, 0.5, -0.5, -0.5)
+    radius = max(0, min(metrics.control_radius, rect.height() / 2, rect.width() / 2))
+    if not flat or accented or pressed:
+        painter.setPen(QPen(border, 1))
+        painter.setBrush(fill)
+        painter.drawRoundedRect(rect, radius, radius)
+    if enabled and (pressed or hovered):
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(theme.control_pressed if pressed else theme.control_hover))
+        painter.drawRoundedRect(rect, radius, radius)
+
+    # Delegate the complete label to Qt: icon modes/states, iconSize, mnemonic
+    # visibility, RTL, and the menu-indicator space stay native.
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        option.palette.setColor(group, QPalette.ColorRole.ButtonText, foreground)
+    label = _ButtonOption(option)
+    label.rect = widget.style().subElementRect(
+        QStyle.SubElement.SE_PushButtonContents, option, widget
+    )
+    widget.style().drawControl(QStyle.ControlElement.CE_PushButtonLabel, label, painter, widget)
+
+    if option.features & feature.HasMenu:
+        # QCommonStyle's push-button menu indicator rectangle (also used by
+        # Fusion); only the glyph changes. QPushButton still opens the menu.
+        mbi = widget.style().pixelMetric(QStyle.PixelMetric.PM_MenuButtonIndicator, option, widget)
+        arrow = QRect(
+            option.rect.right() - mbi - 2,
+            option.rect.height() // 2 - mbi // 2 + 3,
+            mbi - 6,
+            mbi - 6,
+        )
+        arrow = QStyle.visualRect(option.direction, option.rect, arrow)
+        center = QRectF(arrow).center()
+        half_width = max(0, (arrow.width() - 1) / 2)
+        painter.setPen(
+            QPen(
+                foreground,
+                1.2,
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
+        )
+        painter.drawLine(center + QPointF(-half_width, -1), center + QPointF(0, 1.5))
+        painter.drawLine(center + QPointF(0, 1.5), center + QPointF(half_width, -1))
+
+    if (
+        enabled
+        and option.state & state.State_HasFocus
+        and (option.state & state.State_KeyboardFocusChange)
+    ):
+        focus_rect = QRectF(
+            widget.style().subElementRect(QStyle.SubElement.SE_PushButtonFocusRect, option, widget)
+        ).adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.setPen(QPen(foreground if accented else accent, 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(focus_rect, max(0, radius - 1), max(0, radius - 1))
